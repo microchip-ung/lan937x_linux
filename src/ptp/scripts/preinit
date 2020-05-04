@@ -1,0 +1,182 @@
+#!/bin/sh
+
+
+. /etc/preinit.time /etc/timestamp
+
+mount proc /proc -t proc
+mount sysfs /sys -t sysfs
+
+size=$(awk '/MemTotal:/ {l=5242880;mt=($2*1024);print((s=mt/2)<l)&&(mt>l)?mt-l:s}' /proc/meminfo)
+mount tmpfs /tmp -t tmpfs -o size=$size,nosuid,nodev,mode=1777
+
+mount -t tmpfs tmpfs /dev -o size=512K
+mknod /dev/console c 5 1
+mknod /dev/null c 1 3
+mknod /dev/ttyS0 c 204 16
+mknod /dev/ttyS1 c 204 17
+mknod /dev/ttyS2 c 204 18
+mknod /dev/ttyS3 c 204 19
+echo "" > /proc/sys/kernel/hotplug
+echo "3" > /proc/cpu/alignment
+
+mkdir -p /dev/pts /dev/shm
+mount devpts /dev/pts -t devpts
+
+grep -q configfs /proc/filesystems && mount -t configfs configfs /sys/kernel/config
+
+grep -q debugfs /proc/filesystems && mount -t debugfs debugfs /sys/kernel/debug
+
+AUTOMNT=
+LAN_IP="192.168.1.1"
+WAN_IP="10.32.2.71"
+NFS_SERVER="10.32.3.56:/home/share/tftpboot/new_sys"
+
+ifconfig lo 127.0.0.1
+
+if [ "$BOOT" = "MMC" ]; then
+	AUTOMNT=/dev/mmcblk0p1
+fi
+
+if [ "$BOOT" = "SDA" ]; then
+	ROOTFS=/sys/block/sda/sda1
+	COUNTER=0
+	while [ $COUNTER -lt 5 ]; do
+		echo -n "."
+		sleep 1
+		[ -e $ROOTFS ] && COUNTER=10
+		COUNTER=$(expr $COUNTER + 1)
+	done
+	echo ""
+	AUTOMNT=/dev/sda1
+fi
+
+echo "Getting device information"
+/sbin/hotplug2 --no-persistent --set-coldplug-cmd /sbin/trigger --set-rules-file /etc/hotplug2.rules 1> /dev/null
+
+echo "Mounting config volume"
+mount -t jffs2 /dev/mtdblock3 /syscfg
+if [ -f /syscfg/sysconfig ]; then
+	if [ -f /etc/sysconfig ]; then
+		mv /etc/sysconfig /etc/sysconfig.org
+	fi
+	cp /syscfg/sysconfig /etc/
+fi
+if [ -f /syscfg/ptpProfile.txt ]; then
+	if [ -f /etc/ptpProfile.txt ]; then
+		mv /etc/ptpProfile.txt /etc/ptpProfile.org
+	fi
+	cp /syscfg/ptpProfile.txt /etc/
+fi
+if [ -f /syscfg/Config.txt ]; then
+	cp /syscfg/Config.txt /etc/
+	cp /syscfg/ClockRcvr.txt /etc/
+	cp /syscfg/FilterCfg.txt /etc/
+	cp /syscfg/TsLat.txt /etc/
+fi
+
+ETHDEV=/sys/class/net/eth0
+if [ ! -e $ETHDEV ]; then
+	COUNTER=0
+	while [ $COUNTER -lt 5 ]; do
+		echo -n "."
+		sleep 1
+		[ -e $ETHDEV ] && COUNTER=10
+		COUNTER=$(expr $COUNTER + 1)
+	done
+	echo ""
+fi
+sleep 2
+
+MAC0=$(grep "MAC0" /etc/sysconfig | cut -d":" -f2 | cut -d";" -f1)
+if [ ! -z "$MAC0" ]; then
+MAC_1=$(echo $MAC0 | cut -d"-" -f1)
+MAC_2=$(echo $MAC0 | cut -d"-" -f2)
+MAC_3=$(echo $MAC0 | cut -d"-" -f3)
+MAC_4=$(echo $MAC0 | cut -d"-" -f4)
+MAC_5=$(echo $MAC0 | cut -d"-" -f5)
+MAC_6=$(echo $MAC0 | cut -d"-" -f6)
+MAC_ADDR="$MAC_1:$MAC_2:$MAC_3:$MAC_4:$MAC_5:$MAC_6"
+IPV6_ADDR="bad:beef::$MAC_4:$MAC_5$MAC_6"
+fi
+WAN_IP=$(grep "WAN_IP" /etc/sysconfig | cut -d":" -f2 | cut -d";" -f1)
+if [ "$WAN_IP" = "" ]; then
+	WAN_IP="10.32.2.1"
+fi
+
+if [ -e /sys/class/net/eth0 ]; then
+	if [ ! -z "$MAC_ADDR" ]; then
+		ifconfig eth0 hw ether $MAC_ADDR
+		ip addr add $IPV6_ADDR/64 dev eth0
+	fi
+	ifconfig eth0 $WAN_IP
+	route add -net default gw $WAN_IP
+fi
+
+MAC1=$(grep "MAC1" /etc/sysconfig | cut -d":" -f2 | cut -d";" -f1)
+if [ ! -z "$MAC1" ]; then
+MAC_1=$(echo $MAC1 | cut -d"-" -f1)
+MAC_2=$(echo $MAC1 | cut -d"-" -f2)
+MAC_3=$(echo $MAC1 | cut -d"-" -f3)
+MAC_4=$(echo $MAC1 | cut -d"-" -f4)
+MAC_5=$(echo $MAC1 | cut -d"-" -f5)
+MAC_6=$(echo $MAC1 | cut -d"-" -f6)
+MAC_ADDR="$MAC_1:$MAC_2:$MAC_3:$MAC_4:$MAC_5:$MAC_6"
+IPV6_ADDR="bad:beef::$MAC_4:$MAC_5$MAC_6"
+fi
+LAN_IP=$(grep "LAN_IP" /etc/sysconfig | cut -d":" -f2 | cut -d";" -f1)
+if [ "$LAN_IP" = "" ]; then
+	LAN_IP="192.168.1.1"
+fi
+
+if [ -e /sys/class/net/eth1 ]; then
+	if [ ! -z "$MAC_ADDR" ]; then
+		ifconfig eth1 hw ether $MAC_ADDR
+		ip addr add $IPV6_ADDR/64 dev eth1
+	fi
+	ifconfig eth1 $LAN_IP
+fi
+
+if [ "$BOOT" = "NFS" ]; then
+	/usr/sbin/portmap
+	mount -o ro $NFS_SERVER /mnt 2> /dev/null
+	if [ "$?" = 0 ]; then
+		killall portmap
+	fi
+fi
+
+if [ "$AUTOMNT" != "" ]; then
+	if [ -e $AUTOMNT ]; then
+		mount $AUTOMNT /mnt
+	fi
+fi
+
+if [ -e /dev/rtc0 ]; then
+	ln -sf rtc0 /dev/rtc
+fi
+
+MNT=$(mount | grep "/mnt")
+if [ "$MNT" != "" ]; then
+	if [ ! -L /mnt/linuxrc ]; then
+		umount /mnt
+		MNT=
+	fi
+fi
+if [ "$MNT" != "" ]; then
+	cd /mnt
+	killall watchdog 2> /dev/null
+	mount -o move /proc /mnt/proc
+	pivot_root . mnt
+	mount -o move /mnt/dev /dev
+	mount -o move /mnt/tmp /tmp
+	mount -o move /mnt/sys /sys
+fi
+
+. /etc/preinit.time /etc/timestamp
+
+/sbin/syslogd > /dev/null
+
+SYSINIT=$(grep init=/etc/preinit /proc/cmdline)
+if [ "$SYSINIT" != "" ]; then
+	exec /sbin/init
+fi
+

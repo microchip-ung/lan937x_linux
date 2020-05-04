@@ -1,0 +1,37 @@
+#!/bin/sh
+
+if [ -n "$1" ] && [ -d $1 ]; then
+	cd $1
+	./ontime break $2
+	exit
+fi
+
+cd /etc
+DEV=$(grep "DEFAULT_DEVICE" ptpProfile.txt | cut -d":" -f2 | cut -d";" -f1)
+DEV=$(echo $DEV)
+VLAN=$(echo $DEV | cut -d"." -f2)
+if [ "$DEV" != "$VLAN" ]; then
+	if [ ! -e "/sys/class/net/$DEV" ]; then
+		BASE=$(echo $DEV | cut -d"." -f1)
+		vconfig add $BASE $VLAN
+		vconfig set_egress_map $DEV 0 4
+		MAC=$(ifconfig $BASE | grep HWaddr | cut -d":" -f7)
+		SUBNET=$(ifconfig $BASE | grep "inet addr" | cut -d":" -f2 | cut -d" " -f1)
+		if [ ! -z "$SUBNET" ]; then
+			SUBNET1=$(echo "$SUBNET" | cut -d"." -f1)
+			SUBNET2=$(echo "$SUBNET" | cut -d"." -f2)
+			SUBNET3=$(echo "$SUBNET" | cut -d"." -f3)
+		else
+			SUBNET1="10"
+			SUBNET2="1"
+			SUBNET3="157"
+		fi
+		MAC=$((0x$MAC))
+		ifconfig $DEV $SUBNET1.$SUBNET2.$VLAN.$MAC
+		if [ -e "/sys/class/net/$BASE/ptp/vid" ]; then
+			echo "$VLAN" > "/sys/class/net/$BASE/ptp/vid"
+		fi
+	fi
+fi 
+ontime break $1 $2
+

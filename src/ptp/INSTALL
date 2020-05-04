@@ -1,0 +1,37 @@
+
+
+System Setup
+
+The Micrel KSZ8463 1588 PTP evaluation system is consisted of a KSZ9692PB SoC
+control board and a KSZ8463 MLI demo board.
+
+A ribbon cable is connected to JP3 of the SoC board.  Connect the other end to
+J5 of the KSZ8463 MLI demo board, near the red LED.  A cable is connected to
+GPIO 2 of the SoC board.  Connect it to TP8 of the KSZ8463 MLI demo board.
+This is used for interrupt.  Connect both boards together.  Each board needs to
+have its own 5V power supply.
+
+The reset of each board is independent.  Occasionally it requires resetting the
+KSZ8463 MLI demo board using its reset button for the network to be
+operational.
+
+The Micrel KSZ8462 HLI system is a simpler setup.  Just connect the KSZ8462 HLI
+demo board to the JP2 connector on the SoC board.  Only the SoC board requires
+power.
+
+
+Software Setup
+
+The source code provided generates the kernel and root filesystem image,
+mImage.  It is located at system/release/KS8692P.  It can be downloaded in
+U-Boot for testing.  To burn this image to the flash memory use these commands:
+
+	tftpboot 800000 mImage
+	erase 1c040000 +400000
+	cp.b 800000 1c040000 ${filesize}
+
+
+The GPIO 6 is used for PPS.  On the KSZ8462 HLI board it is located at J15.
+
+The SoC GPIO pins are located at JP44 and counted up from the bottom left.
+

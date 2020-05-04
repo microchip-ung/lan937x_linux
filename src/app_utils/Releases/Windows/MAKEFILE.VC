@@ -1,0 +1,87 @@
+# Windows network programming samples VC++ makefile
+
+
+!ifdef DEBUG
+DEF     = -DDEBUG
+CLOPT   = -D_CRT_SECURE_NO_WARNINGS
+LINKOPT =
+
+!else
+DEF     = -DDEBUG
+CLOPT   = -D_CRT_SECURE_NO_WARNINGS -D_WINSOCK_DEPRECATED_NO_WARNINGS
+LINKOPT =
+!endif
+
+BINDIR  = i386
+
+SOCKDIR = ..\socket
+HEADERS = $(SOCKDIR)\wnp.h $(SOCKDIR)\inetfunc.h $(SOCKDIR)\iofunc.h \
+          $(SOCKDIR)\wrapsock.h $(SOCKDIR)\wrapstdio.h \
+          $(SOCKDIR)\ip_icmp.h
+
+INCDIR  = -I$(SOCKDIR)
+
+LIBS    = ws2_32.lib
+
+OBJS    = $(OBJS) \
+          error.obj inetfunc.obj iofunc.obj ip.obj sockntop.obj \
+          wrapsock.obj wrapstdio.obj unpifi.obj
+
+
+!message Variable DEF == $(DEF)
+
+CC      = cl -nologo -W3 -MT -O2 $(DEF) $(CLOPT)
+LINK    = link $(LINKOPT)
+
+.c.obj:
+    @$(CC) $(INCDIR) -c $*.c
+
+###################### goal ######################
+
+EXE = $(BINDIR)\cli.exe $(BINDIR)\serv.exe \
+        $(BINDIR)\daytimetcpclient.exe $(BINDIR)\hostent.exe \
+        $(BINDIR)\echoclient.exe $(BINDIR)\echoserver.exe \
+        $(BINDIR)\echoudpclient.exe $(BINDIR)\echoudpserver.exe \
+        $(BINDIR)\echotcpserver.exe $(BINDIR)\tbenchserver.exe \
+        $(BINDIR)\echoclient_1.exe $(BINDIR)\echoserver_1.exe \
+        $(BINDIR)\echoudpclient_1.exe $(BINDIR)\echoudpserver_1.exe \
+        $(BINDIR)\udplite.exe \
+        $(BINDIR)\ptp.exe $(BINDIR)\prifinfo.exe \
+        $(BINDIR)\echotcpserver_1.exe $(BINDIR)\udpsend_1.exe \
+        $(BINDIR)\rttudpclient.exe $(BINDIR)\rttudpserver.exe \
+        $(BINDIR)\icmptimereceiver.exe $(BINDIR)\icmptimesender.exe \
+        $(BINDIR)\icmpinfo.exe $(BINDIR)\icmpinfo_1.exe \
+        $(BINDIR)\icmptest.exe $(BINDIR)\snmpclient.exe
+
+goal    : $(EXE)
+
+error.obj       : $(SOCKDIR)\error.c
+        @$(CC) -c $(SOCKDIR)\$*.c
+inetfunc.obj    : $(SOCKDIR)\inetfunc.c $(HEADERS)
+        @$(CC) -c $(SOCKDIR)\$*.c
+iofunc.obj      : $(SOCKDIR)\iofunc.c $(HEADERS)
+        @$(CC) -c $(SOCKDIR)\$*.c
+wrapmcast.obj   : $(SOCKDIR)\wrapmcast.c $(HEADERS)
+        @$(CC) -c $(SOCKDIR)\$*.c
+wrapsock.obj    : $(SOCKDIR)\wrapsock.c $(HEADERS)
+        @$(CC) -c $(SOCKDIR)\$*.c
+wrapstdio.obj   : $(SOCKDIR)\wrapstdio.c $(HEADERS)
+        @$(CC) -c $(SOCKDIR)\$*.c
+ip.obj          : $(SOCKDIR)\ip.c $(HEADERS)
+        @$(CC) -c $(SOCKDIR)\$*.c
+sockntop.obj    : $(SOCKDIR)\sockntop.c $(HEADERS)
+        @$(CC) -c $(SOCKDIR)\$*.c
+unpifi.obj      : $(SOCKDIR)\unpifi.c $(HEADERS)
+        @$(CC) -c $(SOCKDIR)\$*.c
+
+
+$(EXE)  : $(*B).c $(HEADERS) $(OBJS)
+        @$(CC) $(INCDIR) $(*B).c $(OBJS) $(LIBS) -Fe$@
+
+
+clean:
+    @del /q *.obj 2> nul
+
+clean_all: clean
+    @del /q *.map 2> nul
+    @del /q $(BINDIR)\*.exe 2> nul

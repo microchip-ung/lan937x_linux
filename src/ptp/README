@@ -1,0 +1,121 @@
+
+Copyright (C) 2011 Micrel, Inc.
+
+January 22, 2014
+
+This base release of Micrel SoC evaluation system supports 1588 PTP function
+using KSZ9692B SoC and KSZ846x chips.
+
+
+The KSZ8463 MLI chip is connected to the LAN port of KSZ9692B.  The chip is
+accessed through SPI either using the built-in SPI controller of KSZ9692B or
+the USB FTDI chip.  The network driver is ksz8692.c.  The Configure menu
+selection is KSZ9692-FTDI.  The kernel configuration is
+ksz9692_1588_ftdi_defconfig.  The driver spi-ksz8463.c is the device driver
+accessing the chip through SPI and provides a PHY interface to ksz8692 so that
+the network driver can access the hardware.  The conditional PTP_SPI is defined
+to indicate hardware access is through SPI.
+
+The KSZ8462 HLI chip is connected to the external I/O bus of KSZ9692B and
+accessed through external I/O registers.  The network driver is ksz8462_h.c.
+The driver is included in the ksz9692_1588_ftdi_defconfig so that the same
+kernel can be used on both KSZ8463 and KSZ8462 board configurations.
+
+
+The main 1588 PTP code is in files ksz_ptp.c and ksz_ptp.h.  It is designed to
+be included in the main switch driver.  There are some defined functions that
+a network driver can call to start the PTP operation.  As most of the PTP work
+is done by the PTP stack, there are PTP APIs that can only be called by
+applications.  The header file ksz_ptp.h is all the network driver needs to
+access PTP functions.
+
+struct ptp_reg_ops {
+	void (*acquire)(struct ptp_info *ptp);
+	void (*release)(struct ptp_info *ptp);
+
+	u32 (*read)(struct ptp_info *ptp, int addr, u32 reg);
+	void (*write)(struct ptp_info *ptp, int addr, u32 reg, u32 val);
+
+	void (*get_time)(struct ptp_info *ptp, struct ptp_utime *t);
+	void (*set_time)(struct ptp_info *ptp, struct ptp_utime *t);
+	void (*adjust_time)(struct ptp_info *ptp, int add, u32 sec, u32 nsec,
+		int adj_hack);
+	void (*adjust_sync_time)(struct ptp_info *ptp, int diff, u32 interval,
+		u32 duration);
+
+	void (*rx_off)(struct ptp_info *ptp, u8 tsi);
+	void (*rx_restart)(struct ptp_info *ptp, u16 tsi_bit);
+	void (*rx_event)(struct ptp_info *ptp, u8 tsi, u8 gpi, u8 event,
+		int intr);
+	void (*rx_cascade_event)(struct ptp_info *ptp, u8 first, u8 total,
+		u8 gpi, u8 event, int intr);
+	void (*read_event)(struct ptp_info *ptp, u8 tsi);
+
+	void (*tx_off)(struct ptp_info *ptp, u8 tso);
+	void (*tx_event)(struct ptp_info *ptp, u8 tso, u8 gpo, u8 event,
+		u32 pulse, u32 cycle, u16 cnt, u32 sec, u32 nsec, u32 iterate,
+		int intr, int now, int opt);
+	void (*pps_event)(struct ptp_info *ptp, u8 gpo, u32 sec);
+	void (*ptp_10MHz)(struct ptp_info *ptp, u8 tso, u8 gpo, u32 sec);
+	int (*tx_cascade)(struct ptp_info *ptp, u8 first, u8 total,
+		u16 repeat, u32 sec, u32 nsec, int intr);
+
+	void (*start)(struct ptp_info *ptp, int init);
+};
+
+The ptp_acquire function should be called before accessing PTP hardware.
+Afterwards the ptp_release function should be called.
+
+
+struct ptp_ops {
+	void (*init)(struct ptp_info *ptp, u8 *mac_addr);
+	void (*exit)(struct ptp_info *ptp);
+	int (*stop)(struct ptp_info *ptp);
+	void (*set_identity)(struct ptp_info *ptp, u8 *addr);
+	struct ptp_msg *(*check_msg)(u8 *data, u16 **udp_check_ptr);
+	int (*update_msg)(u8 *data, u32 port, u32 overrides);
+	void (*get_rx_tstamp)(void *ptr, struct sk_buff *skb);
+	void (*get_tx_tstamp)(struct ptp_info *ptp, struct sk_buff *skb);
+	int (*hwtstamp_ioctl)(struct ptp_info *ptp, struct ifreq *ifr);
+	int (*ixxat_ioctl)(struct ptp_info *ptp, unsigned int cmd,
+		struct ifreq *ifr);
+	int (*dev_req)(struct ptp_info *ptp, char *arg,
+		struct ptp_dev_info *info);
+	void (*proc_intr)(struct ptp_info *ptp);
+
+	ssize_t (*sysfs_read)(struct ptp_info *ptp, int proc_num, ssize_t len,
+		char *buf);
+	void (*sysfs_write)(struct ptp_info *ptp, int proc_num, int num,
+		const char *buf);
+
+#ifdef CONFIG_KSZ_STP
+	int (*check_bcast_msg)(u8 *data, u8 port, u16 tx_ports);
+#endif
+	int (*drop_pkt)(struct ptp_info *ptp, struct sk_buff *skb, u32 vlan_id,
+		int *tag, int *ptp_tag);
+};
+
+The function ptp_init should be called during driver initialization.  When the
+device is opened the function ptp_start can be called to initiate PPS.  The
+function ptp_stop should be called when the device is being closed.  The
+function ptp_exit should be called when the driver is unloading.
+
+
+The function ptp_init_state should be called when PTP operation is initiated.
+It normally is triggered by application doing PTP stack work.  The function
+ptp_exit_state should be called when the application stops processing PTP
+messages.  This allows the driver to know the PTP messages are being processed
+so that it can monitor the messages if necessary.  These functions are normally
+invoked through the PTP APIs from the applications.
+
+
+The PTP APIs can be used through ioctl calls to character devices created by
+the PTP driver.  It can also be used on network socket device.  This is more
+convenient as applications use sockets to send and receive PTP messages.
+
+
+The KSZ8463 switch code is in files ksz_sw.c and ksz_sw.h.  It is designed to
+be included in the switch device driver.  Just like PTP the header file
+ksz_sw.h is all the network driver needs to access switch functions.  The
+switch usage is discussed in the switch README file.
+

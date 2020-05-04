@@ -1,0 +1,1 @@
+LINUX_OVERRIDE_SRCDIR = "$(KSZ_HOME)/kernels/masternet-next"
