@@ -3,6 +3,20 @@ config NET_DSA_MICROCHIP_KSZ_COMMON
 	select NET_DSA_TAG_KSZ
 	tristate
 
+menuconfig NET_DSA_MICROCHIP_LAN937X
+	tristate "Microchip LAN937X series switch support"
+	depends on NET_DSA
+	select NET_DSA_MICROCHIP_KSZ_COMMON
+	help
+	  This driver adds support for Microchip LAN937X switch chips.
+	  
+config NET_DSA_MICROCHIP_LAN937X_SPI
+	tristate "LAN937X series SPI connected switch driver"
+	depends on NET_DSA_MICROCHIP_LAN937X && SPI
+	select REGMAP_SPI
+	help
+	  Select to enable support for registering switches configured through SPI.
+	  
 menuconfig NET_DSA_MICROCHIP_KSZ9477
 	tristate "Microchip KSZ9477 series switch support"
 	depends on NET_DSA
