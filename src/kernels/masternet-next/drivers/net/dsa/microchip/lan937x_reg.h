@@ -1,0 +1,2304 @@
+/**
+ * Microchip LAN937X definition file
+ *
+ * Copyright (c) 2017-2020 Microchip Technology Inc.
+ *	Tristram Ha <Tristram.Ha@microchip.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+
+/* -------------------------------------------------------------------------- */
+
+#ifndef __LAN937X_REG_H
+#define __LAN937X_REG_H
+
+
+#define KS_PRIO_M			0x7
+#define KS_PRIO_S			4
+
+
+/* 0 - Operation */
+#define REG_CHIP_ID0__1			0x0000
+
+#define REG_CHIP_ID1__1			0x0001
+
+#define FAMILY_ID			0x93
+#define FAMILY_ID_93			0x93
+
+#define REG_CHIP_ID2__1			0x0002
+
+#define CHIP_ID_77			0x77
+#define CHIP_ID_74			0x74
+#define CHIP_ID_73			0x73
+#define CHIP_ID_72			0x72
+#define CHIP_ID_71			0x71
+#define CHIP_ID_70			0x70
+#define CHIP_ID_84			0x84
+
+#define REG_CHIP_ID3__1			0x0003
+
+#define SWITCH_REVISION_M		0xF0
+#define SWITCH_REVISION_S		4
+
+
+#define REG_GLOBAL_CTRL_0		0x0007
+
+#define SW_PHY_REG_BLOCK		BIT(7)
+#define SW_FAST_MODE			BIT(3)
+#define SW_FAST_MODE_OVERRIDE		BIT(2)
+
+#define REG_GLOBAL_OPTIONS		0x000F
+
+#define SW_9373				0x5
+#define SW_9370				0x4
+#define SW_9371				0x3
+#define SW_9372				0x2
+#define SW_9374				0x1
+
+#define REG_SW_INT_STATUS__4		0x0010
+#define REG_SW_INT_MASK__4		0x0014
+
+#define LUE_INT				BIT(31)
+#define TRIG_TS_INT			BIT(30)
+#define APB_TIMEOUT_INT			BIT(29)
+#define OVER_TEMP_INT			BIT(28)
+#define HSR_INT				BIT(27)
+#define PIO_INT				BIT(26)
+#define POR_READY_INT			BIT(25)
+
+#define SWITCH_INT_MASK			\
+	(LUE_INT | TRIG_TS_INT | APB_TIMEOUT_INT | OVER_TEMP_INT | HSR_INT | \
+	 PIO_INT | POR_READY_INT)
+
+#define REG_SW_PORT_INT_STATUS__4	0x0018
+#define REG_SW_PORT_INT_MASK__4		0x001C
+
+#define REG_SW_FPGA_MAJOR__4		0x0020
+#define REG_SW_FPGA_MINOR__4		0x0024
+
+#define REG_SW_CASCADE_MODE__4		0x0030
+
+#define SW_CASCADE_MODE			BIT(15)
+#define SW_CASCADE_DEV_ID		BIT(12)
+#define SW_CASCADE_PORT_M		0x7
+
+#define REG_SW_PART_NET_CFG__4		0x0034
+#define SW_PART_NET_M			0xf
+
+#define REG_SW_GLOBAL_SPARE_0__4	0x0050
+#define REG_SW_GLOBAL_SPARE_1__4	0x0054
+#define REG_SW_GLOBAL_SPARE_2__4	0x0058
+#define REG_SW_GLOBAL_SPARE_3__4	0x005C
+
+/* 1 - Global */
+#define REG_SW_GLOBAL_SERIAL_CTRL_0	0x0100
+#define SW_SPARE_REG_2			(1 << 7)
+#define SW_SPARE_REG_1			(1 << 6)
+#define SW_SPARE_REG_0			(1 << 5)
+#define SW_LITTLE_ENDIAN		BIT(4)
+#define SPI_AUTO_EDGE_DETECTION		BIT(1)
+#define SPI_CLOCK_OUT_RISING_EDGE	BIT(0)
+
+#define REG_SW_GLOBAL_OUTPUT_CTRL__1	0x0103
+#define SW_ENABLE_REFCLKO		(1 << 1)
+#define SW_REFCLKO_IS_125MHZ		(1 << 0)
+
+#define REG_SW_IBA__4			0x0104
+
+#define SW_IBA_ENABLE			BIT(31)
+#define SW_IBA_DA_MATCH			BIT(30)
+#define SW_IBA_INIT			BIT(29)
+#define SW_IBA_QID_M			0x7
+#define SW_IBA_QID_S			22
+#define SW_IBA_PORT_M			0x7
+#define SW_IBA_PORT_S			16
+#define SW_IBA_FRAME_TPID_M		0xFFFF
+
+#define REG_SW_APB_TIMEOUT_ADDR__4	0x0108
+
+#define APB_TIMEOUT_ACKNOWLEDGE		BIT(31)
+
+#if 0
+#define REG_SW_IBA_SYNC__1		0x010C
+#endif
+
+#define REG_SW_IO_STRENGTH__1		0x010D
+#define SW_DRIVE_STRENGTH_M		0x7
+#define SW_DRIVE_STRENGTH_2MA		0
+#define SW_DRIVE_STRENGTH_4MA		1
+#define SW_DRIVE_STRENGTH_8MA		2
+#define SW_DRIVE_STRENGTH_12MA		3
+#define SW_DRIVE_STRENGTH_16MA		4
+#define SW_DRIVE_STRENGTH_20MA		5
+#define SW_DRIVE_STRENGTH_24MA		6
+#define SW_DRIVE_STRENGTH_28MA		7
+#define SW_HI_SPEED_DRIVE_STRENGTH_S	4
+#define SW_LO_SPEED_DRIVE_STRENGTH_S	0
+
+#define REG_SW_IO_RGMII_SLEW__1		0x010F
+
+#define REG_SW_IBA_STATUS__4		0x0110
+
+#define SW_IBA_REQ			(1 << 31)
+#define SW_IBA_RESP			(1 << 30)
+#define SW_IBA_DA_MISMATCH		(1 << 14)
+#define SW_IBA_FMT_MISMATCH		(1 << 13)
+#define SW_IBA_CODE_ERROR		(1 << 12)
+#define SW_IBA_CMD_ERROR		(1 << 11)
+#define SW_IBA_CMD_LOC_M		((1 << 6) - 1)
+
+#define REG_SW_IBA_STATES__4		0x0114
+
+#define SW_IBA_BUF_STATE_S		30
+#define SW_IBA_CMD_STATE_S		28
+#define SW_IBA_RESP_STATE_S		26
+#define SW_IBA_STATE_M			0x3
+#define SW_IBA_PACKET_SIZE_M		0x7F
+#define SW_IBA_PACKET_SIZE_S		16
+#define SW_IBA_FMT_ID_M			0xFFFF
+
+#define REG_SW_IBA_RESULT__4		0x0118
+
+#define SW_IBA_SIZE_S			24
+
+#define SW_IBA_RETRY_CNT_M		((1 << 5) - 1)
+
+#define REG_SW_GLOBAL_LED_OVERRIDE__4	0x0120
+#define REG_SW_GLOBAL_LED_OUTPUT__4	0x0124
+#define REG_SW_GLOBAL_LED_SOURCE__4	0x0128
+
+#define LED_SRC_PTP_GPIO_2		BIT(3)
+#define LED_SRC_PTP_GPIO_1		BIT(2)
+
+#define REG_SW_GLOBAL_SGMII_CTRL__4	0x012C
+#define REG_SW_GLOBAL_VDDIO_PAD__4	0x0130
+#define REG_SW_GLOBAL_RGMII1_PAD__2	0x0134
+#define REG_SW_GLOBAL_RGMII2_PAD__2	0x0138
+
+#define REG_SW_GLOBAL_LED_T1_SEL__4	0x013C
+
+#define SW_LED_T1_SEL_M			0x7
+#define SW_LED_T1_SEL_S			3
+
+#define REG_SW_GLOBAL_LED_TX_SEL__4	0x0140
+
+
+/* 2 - PHY */
+#define REG_SW_POWER_MANAGEMENT_CTRL	0x0201
+
+#define SW_PLL_POWER_DOWN		(1 << 5)
+#define SW_POWER_DOWN_MODE		0x3
+#define SW_ENERGY_DETECTION		1
+#define SW_SOFT_POWER_DOWN		2
+#define SW_POWER_SAVING			3
+
+#define REG_SW_STRAP_SETTINGS__4	0x0210
+
+#define SW_CASCADE_ID_CFG		BIT(15)
+#define SW_CASCADE_MODE_CFG		BIT(14)
+#define SW_XMII_2_MODE_CFG_S		12
+#define SW_XMII_1_MODE_CFG_S		10
+#define SW_MII_2_MAC_MODE_CFG_		BIT(9)
+#define SW_MII_1_MAC_MODE_CFG_		BIT(8)
+#define SW_RGMII_2_SPEED_CFG		BIT(7)
+#define SW_RGMII_1_SPEED_CFG		BIT(6)
+#define SW_SGMII_FIBER_SEL_CFG		BIT(5)
+#define SW_IBA_PORT_RGMII_SEL_CFG	BIT(4)
+#define SW_IBA_DISABLE_CFG		BIT(3)
+#define SW_MDIO_ENABLE_CFG		BIT(2)
+#define SW_ENABLE_CFG			BIT(1)
+#define SW_VPHY_ADD_CFG			BIT(0)
+
+#define REG_SW_STRAP_OVERRIDE__4	0x0214
+
+#define SW_VPHY_DISABLE			BIT(31)
+#define SW_VPHY_ADD_CFG_OVR		BIT(2)
+#define SW_SGMII_FIBER_SEL_CFG_OVR	BIT(1)
+#define SW_MDIO_ENABLE_CFG_OVR		BIT(0)
+
+/* 3 - Operation Control */
+#define REG_SW_OPERATION		0x0300
+
+#define SW_DOUBLE_TAG			BIT(7)
+#define SW_OVER_TEMP_ENABLE		BIT(2)
+#define SW_RESET			BIT(1)
+#define SW_START			BIT(0)
+
+#define REG_SW_MAC_ADDR_0		0x0302
+#define REG_SW_MAC_ADDR_1		0x0303
+#define REG_SW_MAC_ADDR_2		0x0304
+#define REG_SW_MAC_ADDR_3		0x0305
+#define REG_SW_MAC_ADDR_4		0x0306
+#define REG_SW_MAC_ADDR_5		0x0307
+
+#define REG_SW_MTU__2			0x0308
+
+#define REG_SW_ISP_TPID__2		0x030A
+
+#define REG_SW_HSR_TPID__2		0x030C
+
+#define REG_AVB_STRATEGY__2		0x030E
+
+#define SW_SHAPING_CREDIT_ACCT		BIT(1)
+#define SW_POLICING_CREDIT_ACCT		BIT(0)
+
+#define REG_SW_LUE_CTRL_0		0x0310
+
+#define SW_VLAN_ENABLE			BIT(7)
+#define SW_DROP_INVALID_VID		BIT(6)
+#define SW_AGE_CNT_M			0x7
+#define SW_AGE_CNT_S			3
+#define SW_RESV_MCAST_ENABLE		BIT(2)
+#define SW_HASH_OPTION_M		0x03
+#define SW_HASH_OPTION_CRC		1
+#define SW_HASH_OPTION_XOR		2
+#define SW_HASH_OPTION_DIRECT		3
+
+#define REG_SW_LUE_CTRL_1		0x0311
+
+#define UNICAST_LEARN_DISABLE		BIT(7)
+#define SW_SRC_ADDR_FILTER		BIT(6)
+#define SW_FLUSH_STP_TABLE		BIT(5)
+#define SW_FLUSH_MSTP_TABLE		BIT(4)
+#define SW_FWD_MCAST_SRC_ADDR		BIT(3)
+#define SW_AGING_ENABLE			BIT(2)
+#define SW_FAST_AGING			BIT(1)
+#define SW_LINK_AUTO_AGING		BIT(0)
+
+#define REG_SW_LUE_CTRL_2		0x0312
+
+#define SW_MID_RANGE_AGE		BIT(7)
+#define SW_LINK_DOWN_FLUSH		BIT(6)
+#define SW_EGRESS_VLAN_FILTER_DYN	BIT(5)
+#define SW_EGRESS_VLAN_FILTER_STA	BIT(4)
+#define SW_FLUSH_OPTION_M		0x3
+#define SW_FLUSH_OPTION_S		2
+#define SW_FLUSH_OPTION_DYN_MAC		1
+#define SW_FLUSH_OPTION_STA_MAC		2
+#define SW_FLUSH_OPTION_BOTH		3
+#define SW_PRIO_M			0x3
+#define SW_PRIO_DA			0
+#define SW_PRIO_SA			1
+#define SW_PRIO_HIGHEST_DA_SA		2
+#define SW_PRIO_LOWEST_DA_SA		3
+
+#define REG_SW_LUE_CTRL_3		0x0313
+#define REG_SW_AGE_PERIOD__1		0x0313
+
+#define REG_SW_LUE_INT_STATUS__1	0x0314
+#define REG_SW_LUE_INT_MASK__1		0x0315
+
+#define LEARN_FAIL_INT			BIT(2)
+#define WRITE_FAIL_INT			BIT(0)
+
+#define LUE_INT_MASK			(LEARN_FAIL_INT | WRITE_FAIL_INT)
+
+#define REG_SW_LUE_INDEX_0__2		0x0316
+
+#define ENTRY_INDEX_M			0x0FFF
+
+#define REG_SW_LUE_INDEX_1__2		0x0318
+
+#define FAIL_INDEX_M			0x03FF
+
+#define REG_SW_LUE_INDEX_2__2		0x031A
+
+#define REG_SW_STATIC_AVAIL_ENTRY__4	0x031C
+
+#define SW_INGRESS_FILTERING_NO_LEARN	BIT(15)
+#define SW_STATIC_AVAIL_CNT		0x1FF
+
+#define REG_SW_AGE_PERIOD__2		0x0320
+#define SW_AGE_PERIOD_M			0xFFF
+
+#define REG_SW_LUE_UNK_UCAST_CTRL__2	0x0322
+#define REG_SW_LUE_UNK_CTRL_0__4	0x0322
+
+#define SW_UNK_UCAST_ENABLE		BIT(15)
+#define SW_UNK_PORTS_M			0xFF
+
+#define REG_SW_LUE_UNK_MCAST_CTRL__2	0x0324
+
+#define SW_UNK_MCAST_ENABLE		BIT(15)
+
+#define REG_SW_LUE_UNK_VID_CTRL__2	0x0326
+
+#define SW_UNK_VID_ENABLE		BIT(15)
+
+#define REG_SW_VLAN_FLUSH__4		0x0328
+
+#define SW_VLAN_FLUSH_FID		BIT(31)
+#define SW_VLAN_FLUSH_FID_M		0x7F
+#define SW_VLAN_FLUSH_FID_S		16
+#define SW_VLAN_FLUSH_PORTS_M		0xFF
+
+#define REG_SW_STATIC_ENTRY_LIMIT__4	0x032C
+
+#define REG_SW_MAC_CTRL_0		0x0330
+
+#define SW_NEW_BACKOFF			BIT(7)
+#define SW_PAUSE_UNH_MODE		BIT(1)
+#define SW_AGGR_BACKOFF			BIT(0)
+
+#define REG_SW_MAC_CTRL_1		0x0331
+
+#define SW_SHORT_IFG			BIT(7)
+#define MULTICAST_STORM_DISABLE		BIT(6)
+#define SW_BACK_PRESSURE		BIT(5)
+#define FAIR_FLOW_CTRL			BIT(4)
+#define NO_EXC_COLLISION_DROP		BIT(3)
+#define SW_LEGAL_PACKET_DISABLE		BIT(1)
+#define SW_PASS_SHORT_FRAME		BIT(0)
+
+#define REG_SW_MAC_CTRL_2		0x0332
+
+#define SW_REPLACE_VID			BIT(3)
+#define BROADCAST_STORM_RATE_HI		0x07
+
+#define REG_SW_MAC_CTRL_3		0x0333
+
+#define BROADCAST_STORM_RATE_LO		0xFF
+#define BROADCAST_STORM_RATE		0x07FF
+
+#define REG_SW_MAC_CTRL_4		0x0334
+
+#define SW_PASS_PAUSE			BIT(3)
+
+#define REG_SW_MAC_CTRL_5		0x0335
+
+#define SW_OUT_RATE_LIMIT_QUEUE_BASED	BIT(3)
+
+#define REG_SW_MAC_CTRL_6		0x0336
+
+#define SW_MIB_COUNTER_FLUSH		BIT(7)
+#define SW_MIB_COUNTER_FREEZE		BIT(6)
+#if 0
+#define SW_MIB_COUNTER_DONE		(1 << 0)
+#endif
+
+#define REG_SW_MAC_802_1P_MAP_0		0x0338
+#define REG_SW_MAC_802_1P_MAP_1		0x0339
+#define REG_SW_MAC_802_1P_MAP_2		0x033A
+#define REG_SW_MAC_802_1P_MAP_3		0x033B
+
+#define SW_802_1P_MAP_M			KS_PRIO_M
+#define SW_802_1P_MAP_S			KS_PRIO_S
+
+#if 0
+#define REG_SW_MAC_ISP_CTRL		0x033C
+#endif
+
+#define REG_SW_MAC_TOS_CTRL		0x033E
+
+#define SW_TOS_DSCP_REMAP		BIT(0)
+
+#define REG_SW_MAC_TOS_PRIO_0		0x0340
+#define REG_SW_MAC_TOS_PRIO_1		0x0341
+#define REG_SW_MAC_TOS_PRIO_2		0x0342
+#define REG_SW_MAC_TOS_PRIO_3		0x0343
+#define REG_SW_MAC_TOS_PRIO_4		0x0344
+#define REG_SW_MAC_TOS_PRIO_5		0x0345
+#define REG_SW_MAC_TOS_PRIO_6		0x0346
+#define REG_SW_MAC_TOS_PRIO_7		0x0347
+#define REG_SW_MAC_TOS_PRIO_8		0x0348
+#define REG_SW_MAC_TOS_PRIO_9		0x0349
+#define REG_SW_MAC_TOS_PRIO_10		0x034A
+#define REG_SW_MAC_TOS_PRIO_11		0x034B
+#define REG_SW_MAC_TOS_PRIO_12		0x034C
+#define REG_SW_MAC_TOS_PRIO_13		0x034D
+#define REG_SW_MAC_TOS_PRIO_14		0x034E
+#define REG_SW_MAC_TOS_PRIO_15		0x034F
+#define REG_SW_MAC_TOS_PRIO_16		0x0350
+#define REG_SW_MAC_TOS_PRIO_17		0x0351
+#define REG_SW_MAC_TOS_PRIO_18		0x0352
+#define REG_SW_MAC_TOS_PRIO_19		0x0353
+#define REG_SW_MAC_TOS_PRIO_20		0x0354
+#define REG_SW_MAC_TOS_PRIO_21		0x0355
+#define REG_SW_MAC_TOS_PRIO_22		0x0356
+#define REG_SW_MAC_TOS_PRIO_23		0x0357
+#define REG_SW_MAC_TOS_PRIO_24		0x0358
+#define REG_SW_MAC_TOS_PRIO_25		0x0359
+#define REG_SW_MAC_TOS_PRIO_26		0x035A
+#define REG_SW_MAC_TOS_PRIO_27		0x035B
+#define REG_SW_MAC_TOS_PRIO_28		0x035C
+#define REG_SW_MAC_TOS_PRIO_29		0x035D
+#define REG_SW_MAC_TOS_PRIO_30		0x035E
+#define REG_SW_MAC_TOS_PRIO_31		0x035F
+
+#define REG_SW_MRI_CTRL_0		0x0370
+
+#define SW_IGMP_SNOOP			BIT(6)
+#define SW_IPV6_MLD_OPTION		BIT(3)
+#define SW_IPV6_MLD_SNOOP		BIT(2)
+#define SW_MIRROR_RX_TX			BIT(0)
+
+#define REG_SW_MRI_CTRL_1__4		0x0374
+#define REG_SW_MRI_CTRL_2__4		0x0378
+#define REG_SW_CLASS_D_IP_CTRL__4	0x0374
+
+#define SW_CLASS_D_IP_ENABLE		BIT(31)
+
+#define REG_SW_MRI_CTRL_8		0x0378
+
+#if 0
+#define SW_NO_COLOR_S			6
+#endif
+#define SW_RED_COLOR_S			4
+#define SW_YELLOW_COLOR_S		2
+#define SW_GREEN_COLOR_S		0
+#define SW_COLOR_M			0x3
+
+#define REG_PTP_EVENT_PRIO_CTRL		0x037C
+#define REG_PTP_GENERAL_PRIO_CTRL	0x037D
+
+#define PTP_PRIO_ENABLE			BIT(7)
+
+#define REG_SW_QM_CTRL__4		0x0390
+
+#define PRIO_SCHEME_SELECT_M		KS_PRIO_M
+#define PRIO_SCHEME_SELECT_S		6
+#define PRIO_MAP_3_HI			0
+#define PRIO_MAP_2_HI			2
+#define PRIO_MAP_0_LO			3
+#define UNICAST_VLAN_BOUNDARY		BIT(1)
+
+#define REG_SW_EEE_QM_CTRL__2		0x03C0
+
+#define REG_SW_EEE_TXQ_WAIT_TIME__2	0x03C2
+
+/* 4 - */
+#define REG_SW_VLAN_ENTRY__4		0x0400
+
+#define VLAN_VALID			BIT(31)
+#define VLAN_FORWARD_OPTION		BIT(27)
+#define VLAN_PRIO_M			KS_PRIO_M
+#define VLAN_PRIO_S			24
+#define VLAN_MSTP_M			0x7
+#define VLAN_MSTP_S			12
+#define VLAN_FID_M			0x7F
+
+#define REG_SW_VLAN_ENTRY_UNTAG__4	0x0404
+#define REG_SW_VLAN_ENTRY_PORTS__4	0x0408
+
+#define REG_SW_VLAN_ENTRY_INDEX__2	0x040C
+
+#define VLAN_INDEX_M			0x0FFF
+
+#define REG_SW_VLAN_CTRL		0x040E
+
+#define VLAN_START			BIT(7)
+#define VLAN_ACTION			0x3
+#define VLAN_WRITE			1
+#define VLAN_READ			2
+#define VLAN_CLEAR			3
+
+#define REG_SW_ALU_INDEX_0		0x0410
+
+#define ALU_FID_INDEX_S			16
+#define ALU_MAC_ADDR_HI			0xFFFF
+
+#define REG_SW_ALU_INDEX_1		0x0414
+
+#define ALU_DIRECT_INDEX_M		(BIT(12) - 1)
+
+#define REG_SW_ALU_CTRL__4		0x0418
+
+#define ALU_VALID_CNT_M			(BIT(14) - 1)
+#define ALU_VALID_CNT_S			16
+#define ALU_START			BIT(7)
+#define ALU_VALID			BIT(6)
+#define ALU_VALID_OR_STOP		BIT(5)
+#define ALU_DIRECT			BIT(2)
+#define ALU_ACTION			0x3
+#define ALU_WRITE			1
+#define ALU_READ			2
+#define ALU_SEARCH			3
+
+#define REG_SW_ALU_STAT_CTRL__4		0x041C
+
+#define ALU_STAT_VALID_CNT_M		(BIT(9) - 1)
+#define ALU_STAT_VALID_CNT_S		20
+#define ALU_STAT_INDEX_M		(BIT(8) - 1)
+#define ALU_STAT_INDEX_S		8
+#define ALU_RESV_MCAST_INDEX_M		(BIT(6) - 1)
+#define ALU_STAT_START			BIT(7)
+#define ALU_STAT_VALID			BIT(6)
+#define ALU_STAT_VALID_OR_STOP		BIT(5)
+#define ALU_STAT_USE_FID		BIT(4)
+#define ALU_STAT_DIRECT			BIT(3)
+#define ALU_RESV_MCAST_ADDR		BIT(2)
+#define ALU_STAT_ACTION			0x3
+#define ALU_STAT_WRITE			1
+#define ALU_STAT_READ			2
+#define ALU_STAT_SEARCH			3
+
+#define REG_SW_ALU_VAL_A		0x0420
+
+#define ALU_V_STATIC_VALID		BIT(31)
+#define ALU_V_SRC_FILTER		BIT(30)
+#define ALU_V_DST_FILTER		BIT(29)
+#define ALU_V_PRIO_AGE_CNT_M		(BIT(3) - 1)
+#define ALU_V_PRIO_AGE_CNT_S		26
+#define ALU_V_MSTP_M			0x7
+
+#define REG_SW_ALU_VAL_B		0x0424
+
+#define ALU_V_OVERRIDE			BIT(31)
+#define ALU_V_USE_FID			BIT(30)
+#define ALU_V_PORT_MAP			(BIT(24) - 1)
+
+#define REG_SW_ALU_VAL_C		0x0428
+
+#define ALU_V_FID_M			(BIT(16) - 1)
+#define ALU_V_FID_S			16
+#define ALU_V_MAC_ADDR_HI		0xFFFF
+
+#define REG_SW_ALU_VAL_D		0x042C
+
+#define REG_HSR_ALU_INDEX_0		0x0440
+
+#define REG_HSR_ALU_INDEX_1		0x0444
+
+#define HSR_DST_MAC_INDEX_LO_S		16
+#define HSR_SRC_MAC_INDEX_HI		0xFFFF
+
+#define REG_HSR_ALU_INDEX_2		0x0448
+
+#define HSR_INDEX_MAX			BIT(9)
+#define HSR_DIRECT_INDEX_M		(HSR_INDEX_MAX - 1)
+
+#define REG_HSR_ALU_INDEX_3		0x044C
+
+#define HSR_PATH_INDEX_M		(BIT(4) - 1)
+
+#define REG_HSR_ALU_CTRL__4		0x0450
+
+#define HSR_VALID_CNT_M			(BIT(14) - 1)
+#define HSR_VALID_CNT_S			16
+#define HSR_START			BIT(7)
+#define HSR_VALID			BIT(6)
+#define HSR_SEARCH_END			BIT(5)
+#define HSR_DIRECT			BIT(2)
+#define HSR_ACTION			0x3
+#define HSR_WRITE			1
+#define HSR_READ			2
+#define HSR_SEARCH			3
+
+#define REG_HSR_ALU_VAL_A		0x0454
+
+#define HSR_V_STATIC_VALID		BIT(31)
+#define HSR_V_AGE_CNT_M			(BIT(3) - 1)
+#define HSR_V_AGE_CNT_S			26
+#define HSR_V_PATH_ID_M			(BIT(4) - 1)
+
+#define REG_HSR_ALU_VAL_B		0x0458
+
+#define REG_HSR_ALU_VAL_C		0x045C
+
+#define HSR_V_DST_MAC_ADDR_LO_S		16
+#define HSR_V_SRC_MAC_ADDR_HI		0xFFFF
+
+#define REG_HSR_ALU_VAL_D		0x0460
+
+#define REG_HSR_ALU_VAL_E		0x0464
+
+#define HSR_V_START_SEQ_1_S		16
+#define HSR_V_START_SEQ_2_S		0
+
+#define REG_HSR_ALU_VAL_F		0x0468
+
+#define HSR_V_EXP_SEQ_1_S		16
+#define HSR_V_EXP_SEQ_2_S		0
+
+#define REG_HSR_ALU_VAL_G		0x046C
+
+#define HSR_V_SEQ_CNT_1_S		16
+#define HSR_V_SEQ_CNT_2_S		0
+
+#define HSR_V_SEQ_M			(BIT(16) - 1)
+
+
+/* 5 - PTP Clock */
+#define REG_PTP_CLK_CTRL		0x0500
+
+#define PTP_DISABLE_ADJ			BIT(15)
+#define PTP_STEP_ADJ			BIT(6)
+#define PTP_STEP_DIR			BIT(5)
+#define PTP_READ_TIME			BIT(4)
+#define PTP_LOAD_TIME			BIT(3)
+#define PTP_CLK_ADJ_ENABLE		BIT(2)
+#define PTP_CLK_ENABLE			BIT(1)
+#define PTP_CLK_RESET			BIT(0)
+
+#define REG_PTP_RTC_SUB_NANOSEC__2	0x0502
+
+#define PTP_RTC_SUB_NANOSEC_M		0x0007
+
+#define REG_PTP_RTC_NANOSEC		0x0504
+#define REG_PTP_RTC_NANOSEC_H		0x0504
+#define REG_PTP_RTC_NANOSEC_L		0x0506
+
+#define REG_PTP_RTC_SEC			0x0508
+#define REG_PTP_RTC_SEC_H		0x0508
+#define REG_PTP_RTC_SEC_L		0x050A
+
+#define REG_PTP_SUBNANOSEC_RATE		0x050C
+#define REG_PTP_SUBNANOSEC_RATE_H	0x050C
+
+#define PTP_RATE_DIR			BIT(31)
+#define PTP_TMP_RATE_ENABLE		BIT(30)
+
+#define REG_PTP_SUBNANOSEC_RATE_L	0x050E
+
+#define REG_PTP_RATE_DURATION		0x0510
+#define REG_PTP_RATE_DURATION_H		0x0510
+#define REG_PTP_RATE_DURATION_L		0x0512
+
+#define REG_PTP_MSG_CONF1		0x0514
+
+#define PTP_802_1AS			(1 << 7)
+#define PTP_ENABLE			(1 << 6)
+#define PTP_ETH_ENABLE			(1 << 5)
+#define PTP_IPV4_UDP_ENABLE		(1 << 4)
+#define PTP_IPV6_UDP_ENABLE		(1 << 3)
+#define PTP_TC_P2P			(1 << 2)
+#define PTP_MASTER			(1 << 1)
+#define PTP_1STEP			(1 << 0)
+
+#define REG_PTP_MSG_CONF2		0x0516
+
+#define PTP_UNICAST_ENABLE		(1 << 12)
+#define PTP_ALTERNATE_MASTER		(1 << 11)
+#define PTP_ALL_HIGH_PRIO		(1 << 10)
+#define PTP_SYNC_CHECK			(1 << 9)
+#define PTP_DELAY_CHECK			(1 << 8)
+#define PTP_PDELAY_CHECK		(1 << 7)
+#define PTP_DROP_SYNC_DELAY_REQ		(1 << 5)
+#define PTP_DOMAIN_CHECK		(1 << 4)
+#define PTP_UDP_CHECKSUM		(1 << 2)
+
+#define REG_PTP_DOMAIN_VERSION		0x0518
+#define PTP_2_DOMAIN			BIT(15)
+#define PTP_1_STEP_DOMAIN		BIT(14)
+#define PTP_SDOID_MATCH			BIT(13)
+#define PTP_VERSION_M			0x0F00
+#define PTP_DOMAIN_M			0x00FF
+
+#define REG_PTP_UNIT_INDEX__4		0x0520
+
+#define PTP_UNIT_M			0xF
+
+#define PTP_GPIO_INDEX_S		16
+#define PTP_TSI_INDEX_S			8
+#define PTP_TOU_INDEX_S			0
+
+#define REG_PTP_TRIG_STATUS__4		0x0524
+
+#define TRIG_ERROR_S			16
+#define TRIG_DONE_S			0
+
+#define REG_PTP_INT_STATUS__4		0x0528
+
+#define TRIG_INT_S			16
+#define TS_INT_S			0
+
+#define TRIG_UNIT_M			0x7
+#define TS_UNIT_M			0x3
+
+#define REG_PTP_CTRL_STAT__4		0x052C
+
+#define GPIO_OUT_COMBINATION		BIT(8)
+#define GPIO_IN				BIT(7)
+#define GPIO_MODE_OUT			BIT(6)
+#define TS_INT_ENABLE			BIT(5)
+#define TRIG_ACTIVE			BIT(4)
+#define TRIG_ENABLE			BIT(3)
+#define TRIG_RESET			BIT(2)
+#define TS_ENABLE			BIT(1)
+#define TS_RESET			BIT(0)
+
+#define TRIG_CTRL_M			\
+	(TRIG_ACTIVE | TRIG_ENABLE | TRIG_RESET)
+
+#define TS_CTRL_M			\
+	(TS_INT_ENABLE | TS_ENABLE | TS_RESET)
+
+#define REG_TRIG_TARGET_NANOSEC		0x0530
+#define REG_TRIG_TARGET_SEC		0x0534
+
+#define REG_TRIG_CTRL__4		0x0538
+
+#define TRIG_CASCADE_ENABLE		(1 << 31)
+#define TRIG_CASCADE_TAIL		(1 << 30)
+#define TRIG_CASCADE_UPS_M		0xF
+#define TRIG_CASCADE_UPS_S		26
+#define TRIG_NOW			(1 << 25)
+#define TRIG_NOTIFY			(1 << 24)
+#define TRIG_EDGE			(1 << 23)
+#define TRIG_PATTERN_S			20
+#define TRIG_PATTERN_M			0x7
+#define TRIG_NEG_EDGE			0
+#define TRIG_POS_EDGE			1
+#define TRIG_NEG_PULSE			2
+#define TRIG_POS_PULSE			3
+#define TRIG_NEG_PERIOD			4
+#define TRIG_POS_PERIOD			5
+#define TRIG_REG_OUTPUT			6
+#define TRIG_GPO_S			16
+#define TRIG_GPO_M			0xF
+#define TRIG_CASCADE_ITERATE_CNT_M	0xFFFF
+
+#define REG_TRIG_CYCLE_WIDTH		0x053C
+
+#define REG_TRIG_CYCLE_CNT		0x0540
+
+#define TRIG_CYCLE_CNT_M		0xFFFF
+#define TRIG_CYCLE_CNT_S		16
+#define TRIG_BIT_PATTERN_M		0xFFFF
+
+#define REG_TRIG_ITERATE_TIME		0x0544
+
+#define REG_TRIG_PULSE_WIDTH__4		0x0548
+
+#define TRIG_PULSE_WIDTH_M		0x00FFFFFF
+
+#define REG_TS_CTRL_STAT__4		0x0550
+
+#define TS_EVENT_DETECT_M		0xF
+#define TS_EVENT_DETECT_S		17
+#define TS_EVENT_OVERFLOW		(1 << 16)
+#define TS_GPI_M			0xF
+#define TS_GPI_S			8
+#define TS_DETECT_RISE			(1 << 7)
+#define TS_DETECT_FALL			(1 << 6)
+#define TS_DETECT_S			6
+#define TS_CASCADE_TAIL			(1 << 5)
+#define TS_CASCADE_UPS_M		0xF
+#define TS_CASCADE_UPS_S		1
+#define TS_CASCADE_ENABLE		(1 << 0)
+
+#define DETECT_RISE			(TS_DETECT_RISE >> TS_DETECT_S)
+#define DETECT_FALL			(TS_DETECT_FALL >> TS_DETECT_S)
+
+#define REG_TS_EVENT_0_NANOSEC		0x0554
+#define REG_TS_EVENT_0_SEC		0x0558
+#define REG_TS_EVENT_0_SUB_NANOSEC	0x055C
+
+#define REG_TS_EVENT_1_NANOSEC		0x0560
+#define REG_TS_EVENT_1_SEC		0x0564
+#define REG_TS_EVENT_1_SUB_NANOSEC	0x0568
+
+#define REG_TS_EVENT_2_NANOSEC		0x056C
+#define REG_TS_EVENT_2_SEC		0x0570
+#define REG_TS_EVENT_2_SUB_NANOSEC	0x0574
+
+#define REG_TS_EVENT_3_NANOSEC		0x0578
+#define REG_TS_EVENT_3_SEC		0x057C
+#define REG_TS_EVENT_3_SUB_NANOSEC	0x0580
+
+#define REG_TS_EVENT_4_NANOSEC		0x0584
+#define REG_TS_EVENT_4_SEC		0x0588
+#define REG_TS_EVENT_4_SUB_NANOSEC	0x058C
+
+#define REG_TS_EVENT_5_NANOSEC		0x0590
+#define REG_TS_EVENT_5_SEC		0x0594
+#define REG_TS_EVENT_5_SUB_NANOSEC	0x0598
+
+#define REG_TS_EVENT_6_NANOSEC		0x059C
+#define REG_TS_EVENT_6_SEC		0x05A0
+#define REG_TS_EVENT_6_SUB_NANOSEC	0x05A4
+
+#define REG_TS_EVENT_7_NANOSEC		0x05A8
+#define REG_TS_EVENT_7_SEC		0x05AC
+#define REG_TS_EVENT_7_SUB_NANOSEC	0x05B0
+
+#define TS_EVENT_EDGE_M			0x1
+#define TS_EVENT_EDGE_S			30
+#define TS_EVENT_NANOSEC_M		((1 << 30) - 1)
+
+#define TS_EVENT_SUB_NANOSEC_M		0x7
+
+#define TS_EVENT_SAMPLE			\
+	(REG_TS_EVENT_1_NANOSEC - REG_TS_EVENT_0_NANOSEC)
+
+#define REG_PTP_SDOID__4		0x05B4
+#define PTP_1_STEP_PORTS_M		0xFF
+#define PTP_1_STEP_PORTS_S		24
+#define PTP_SDOID_MAJOR_M		0xF
+#define PTP_SDOID_MAJOR_S		20
+#define PTP_SDOID_MINOR_M		0xFF
+#define PTP_SDOID_MINOR_S		8
+#define PTP_P2P_PORTS_M			0xFF
+
+
+#define PORT_CTRL_ADDR(port, addr)	((addr) | (((port) + 1) << 12))
+
+#define REG_GLOBAL_RR_INDEX__1		0x0600
+
+/* HSR */
+#define REG_HSR_PORT_MAP__4		0x0640
+
+#define REG_HSR_ALU_CTRL_0__1		0x0644
+
+#define HSR_DUPLICATE_DISCARD		BIT(7)
+#define HSR_AGE_CNT_DEFAULT_M		0x7
+#define HSR_AGE_CNT_DEFAULT_S		3
+#define HSR_LEARN_MCAST_DISABLE		BIT(2)
+#define HSR_HASH_OPTION_M		0x3
+#define HSR_HASH_DISABLE		0
+#define HSR_HASH_UPPER_BITS		1
+#define HSR_HASH_LOWER_BITS		2
+#define HSR_HASH_XOR_BOTH_BITS		3
+
+#define REG_HSR_ALU_CTRL_1__1		0x0645
+
+#define HSR_LEARN_UCAST_DISABLE		(1 << 7)
+#define HSR_FLUSH_TABLE			(1 << 5)
+#define HSR_PROC_MCAST_SRC		(1 << 3)
+#define HSR_AGING_ENABLE		(1 << 2)
+
+#define REG_HSR_ALU_CTRL_2__2		0x0646
+
+#define REG_HSR_ALU_AGE_PERIOD__4	0x0648
+#define HSR_ALU_AGE_PERIOD_M		(BIT(24 + 1) - 1)
+
+#define REG_HSR_ALU_INT_STATUS__1	0x064C
+#define REG_HSR_ALU_INT_MASK__1		0x064D
+
+#define HSR_WINDOW_OVERFLOW_INT		(1 << 3)
+#define HSR_LEARN_FAIL_INT		(1 << 2)
+#define HSR_ALMOST_FULL_INT		(1 << 1)
+#define HSR_WRITE_FAIL_INT		(1 << 0)
+
+#define REG_HSR_ALU_ENTRY_0__2		0x0650
+
+#define HSR_ENTRY_INDEX_M		((1 << 10) - 1)
+#define HSR_FAIL_INDEX_M		((1 << 8) - 1)
+
+#define REG_HSR_ALU_ENTRY_1__2		0x0652
+
+#define HSR_FAIL_LEARN_INDEX_M		((1 << 8) - 1)
+
+#define REG_HSR_ALU_ENTRY_3__2		0x0654
+
+#define HSR_CPU_ACCESS_ENTRY_INDEX_M	((1 << 8) - 1)
+
+
+/* VPHY */
+#define REG_VPHY_CTRL__2		0x0700
+#define REG_VPHY_STAT__2		0x0704
+#define REG_VPHY_ID_HI__2		0x0708
+#define REG_VPHY_ID_LO__2		0x070C
+#define REG_VPHY_AUTO_NEG__2		0x0710
+#define REG_VPHY_REMOTE_CAP__2		0x0714
+
+#define REG_VPHY_EXPANSION__2		0x0718
+
+#define REG_VPHY_MASTER_CTRL__2		0x0724
+#define REG_VPHY_MASTER_STAT__2		0x0728
+
+#define REG_VPHY_EXT_STAT__2		0x073C
+
+#define VPHY_EXT_1000_X_FULL		BIT(15)
+#define VPHY_EXT_1000_X_HALF		BIT(14)
+#define VPHY_EXT_1000_T_FULL		BIT(13)
+#define VPHY_EXT_1000_T_HALF		BIT(12)
+
+#define REG_VPHY_DEVAD_0__2		0x0740
+#define REG_VPHY_DEVAD_1__2		0x0744
+#define REG_VPHY_DEVAD_2__2		0x0748
+#define REG_VPHY_DEVAD_3__2		0x074C
+
+#define VPHY_DEVAD_UPDATE		BIT(7)
+#define VPHY_DEVAD_M			0x1F
+#define VPHY_DEVAD_S			8
+
+#define REG_VPHY_SMI_ADDR__2		0x0750
+#define REG_VPHY_SMI_DATA_LO__2		0x0754
+#define REG_VPHY_SMI_DATA_HI__2		0x0758
+
+#define REG_VPHY_IND_ADDR__2		0x075C
+#define REG_VPHY_IND_DATA__2		0x0760
+#define REG_VPHY_IND_CTRL__2		0x0768
+
+#define VPHY_IND_WRITE			BIT(1)
+#define VPHY_IND_BUSY			BIT(0)
+
+#define REG_VPHY_SPECIAL_CTRL__2	0x077C
+
+#define VPHY_SMI_INDIRECT_ENABLE	BIT(15)
+#define VPHY_SW_LOOPBACK		BIT(14)
+#define VPHY_MDIO_INTERNAL_ENABLE	BIT(13)
+#define VPHY_SPI_INDIRECT_ENABLE	BIT(12)
+#define VPHY_PORT_MODE_M		0x3
+#define VPHY_PORT_MODE_S		8
+#define VPHY_MODE_RGMII			0
+#define VPHY_MODE_MII_PHY		1
+#define VPHY_MODE_SGMII			2
+#define VPHY_MODE_RMII_PHY		3
+#define VPHY_SW_COLLISION_TEST		BIT(7)
+#define VPHY_SPEED_DUPLEX_STAT_M	0x7
+#define VPHY_SPEED_DUPLEX_STAT_S	2
+#define VPHY_SPEED_1000			BIT(4)
+#define VPHY_SPEED_100			BIT(3)
+#define VPHY_FULL_DUPLEX		BIT(2)
+
+
+/* Packet Generator */
+#define REG_PKT_GEN_CTRL__1		0x0800
+#define PKT_GEN_ENABLE			BIT(7)
+#define PKT_GEN_START			BIT(6)
+#define PKT_GEN_LOOPBACK		BIT(5)
+
+#define REG_PKT_GEN_CRC_CTRL__2		0x0802
+#define PKT_GEN_CRC_ERR_ENABLE		BIT(15)
+#define PKT_GEN_CRC_ERR_FREQ_M		0xF
+
+#define REG_PKT_GEN_LEN_CTRL__4		0x0804
+#define PKT_GEN_LEN_M			0x3FFF
+#define PKT_GEN_LEN_S			16
+#define PKT_GEN_LEN_INC_M		0xF
+
+#define REG_PKT_GEN_NUM_CTRL__4		0x0808
+
+#define REG_PKT_GEN_IFG_CTRL__4		0x080C
+#define PKT_GEN_IFG_SEL_M		0x3
+#define PKT_GEN_IFG_SEL_S		30
+#define PKT_GEN_IFG_INC_M		0xFF
+#define PKT_GEN_IFG_INC_S		16
+#define PKT_GEN_IFG_LEN_M		0xFFFF
+
+#define REG_PKT_GEN_DST_ADDR_0		0x0810
+#define REG_PKT_GEN_DST_ADDR_1		0x0814
+#define PKT_GEN_INC_M			0xFFFF
+
+#define REG_PKT_GEN_SRC_ADDR_0		0x0818
+#define REG_PKT_GEN_SRC_ADDR_1		0x081C
+
+#define REG_PKT_GEN_VLAN_CTRL__4	0x0820
+#define PKT_GEN_VLAN_ENABLE		BIT(31)
+#define PKT_GEN_VLAN_ID_S		16
+#define PKT_GEN_VLAN_ID_INC_M		0xFF
+#define PKT_GEN_VLAN_ID_INC_S		8
+#define PKT_GEN_VLAN_PRIO_S		3
+#define PKT_GEN_VLAN_PRIO_INC_M		0x7
+
+#define REG_PKT_GEN_TYPE_LEN_CTRL__4	0x0824
+#define PKT_GEN_TYPE_LEN_M		0xFFFF
+#define PKT_GEN_TYPE_LEN_S		16
+#define PKT_GEN_TYPE_LEN_INC_M		0xFF
+#define PKT_GEN_TYPE_LEN_INC_S		8
+
+
+/* 0 - Operation */
+#define REG_PORT_DEFAULT_VID		0x0000
+
+#define REG_PORT_CUSTOM_VID		0x0002
+#define REG_PORT_AVB_SR_1_VID		0x0004
+#define REG_PORT_AVB_SR_2_VID		0x0006
+
+#define REG_PORT_AVB_SR_1_TYPE		0x0008
+#define REG_PORT_AVB_SR_2_TYPE		0x000A
+
+#define REG_PORT_PME_STATUS		0x0013
+#define REG_PORT_PME_CTRL		0x0017
+
+#define PME_WOL_MAGICPKT		(1 << 2)
+#define PME_WOL_LINKUP			(1 << 1)
+#define PME_WOL_ENERGY			(1 << 0)
+
+#define REG_PORT_INT_STATUS		0x001B
+#define REG_PORT_INT_MASK		0x001F
+
+#define PORT_TAS_INT			BIT(5)
+#define PORT_SGMII_INT			BIT(3)
+#define PORT_PTP_INT			BIT(2)
+#define PORT_PHY_INT			BIT(1)
+#define PORT_ACL_INT			BIT(0)
+
+#define PORT_INT_MASK			\
+	(				\
+	PORT_TAS_INT |			\
+	PORT_SGMII_INT | PORT_PTP_INT | PORT_PHY_INT | PORT_ACL_INT)
+
+#define REG_PORT_CTRL_0			0x0020
+
+#define PORT_MAC_LOOPBACK		BIT(7)
+#define PORT_MAC_REMOTE_LOOPBACK	BIT(6)
+#define PORT_K2L_INSERT_ENABLE		BIT(5)
+#define PORT_K2L_DEBUG_ENABLE		BIT(4)
+#define PORT_TAIL_TAG_ENABLE		(1 << 2)
+#define PORT_QUEUE_SPLIT_ENABLE		0x3
+
+#define REG_PORT_CTRL_1			0x0021
+
+#define PORT_SRP_ENABLE			0x3
+
+#define REG_PORT_STATUS_0		0x0030
+
+#define PORT_INTF_SPEED_M		0x3
+#define PORT_INTF_SPEED_S		3
+#define PORT_INTF_FULL_DUPLEX		(1 << 2)
+#define PORT_TX_FLOW_CTRL		(1 << 1)
+#define PORT_RX_FLOW_CTRL		(1 << 0)
+
+#define REG_PORT_STATUS_1		0x0034
+
+/* 1 - PHY */
+#define REG_VPHY_DEVAD_0		0x10
+#define REG_VPHY_DEVAD_1		0x11
+#define REG_VPHY_DEVAD_2		0x12
+#define REG_VPHY_DEVAD_3		0x13
+
+#define REG_VPHY_SMI_ADDR		0x14
+#define REG_VPHY_SMI_DATA_LO		0x15
+#define REG_VPHY_SMI_DATA_HI		0x16
+
+#define REG_VPHY_SPECIAL_CTRL_STAT	0x1F
+
+
+#define REG_PORT_T1_PHY_BASIC_CTRL	0x00
+
+#define PORT_T1_PHY_RESET		BIT(15)
+#define PORT_T1_PHY_LOOPBACK		BIT(14)
+#define PORT_T1_SPEED_100MBIT		BIT(13)
+#define PORT_T1_POWER_DOWN		BIT(11)
+#define PORT_T1_ISOLATE			BIT(10)
+#define PORT_T1_FULL_DUPLEX		BIT(8)
+
+#define REG_PORT_T1_PHY_BASIC_STATUS	0x01
+
+#define PORT_T1_MII_SUPPRESS_CAPABLE	BIT(6)
+#define PORT_T1_LINK_STATUS		BIT(2)
+#define PORT_T1_EXTENDED_CAPABILITY	BIT(0)
+
+#define REG_PORT_T1_PHY_ID_HI		0x02
+#define REG_PORT_T1_PHY_ID_LO		0x03
+
+#define LAN937X_T1_ID_HI		0x0007
+#define LAN937X_T1_ID_LO		0xC150
+
+#define REG_PORT_T1_PHY_MASTER_CTRL	0x09
+
+#define PORT_T1_MANUAL_CFG		BIT(12)
+#define PORT_T1_MASTER_CFG		BIT(11)
+
+#define REG_PORT_T1_PHY_MASTER_STATUS	0x0A
+
+#define PORT_T1_LOCAL_MASTER		BIT(14)
+#define PORT_T1_LOCAL_RX_OK		BIT(13)
+#define PORT_T1_REMOTE_RX_OK		BIT(12)
+#define PORT_T1_IDLE_ERR_CNT_M		0xFF
+
+#define REG_PORT_T1_MDIO_CTRL_1		0x0F
+
+#define T1_MDIO_WAKE_OUT_PIN_REQ	BIT(0)
+
+#define REG_PORT_T1_MDIO_CTRL_2		0x10
+
+#define T1_MDIO_MDPREBP			BIT(15)
+#define T1_MDIO_PHYADBP			BIT(14)
+#define T1_MDIO_WAKE_REQ		BIT(13)
+#define T1_MDIO_SLEEP_REQ		BIT(12)
+#define TI_MDIO_CTRL_CLOCK_SKEW		0x0C00
+#define T1_MDIO_TX_TERNARY_SYM		0x0300
+#define T1_MDIO_PCS_SC_RESET		BIT(7)
+#define T1_MDIO_ENERGY_DETECT_MASTER	BIT(6)
+#define T1_MDIO_IGNORE_IDLE		BIT(5)
+#define T1_MDIO_TIME_OUT_CNT		0x001E
+#define T1_MDIO_TIME_OUT_ENABLE		BIT(0)
+
+#define REG_PORT_T1_MODE_STAT		0x11
+#define REG_PORT_T1_LOOPBACK_CTRL	0x12
+
+#define REG_PORT_T1_RESET_CTRL		0x13
+
+#define T1_PHYADDR_S			11
+
+#define REG_PORT_T1_EXT_REG_CTRL	0x14
+
+#define T1_PCS_STS_CNT_RESET		BIT(15)
+#define T1_IND_DATA_READ		BIT(12)
+#define T1_IND_DATA_WRITE		BIT(11)
+#define T1_REG_BANK_SEL_M		0x7
+#define T1_REG_BANK_SEL_S		8
+#define T1_REG_BANK_SEL_INST		5
+#define T1_REG_BANK_SEL_DSP		4
+#define T1_REG_BANK_SEL_AFE		3
+#define T1_REG_BANK_SEL_PCS		2
+#define T1_REG_BANK_SEL_MISC		1
+#define T1_REG_ADDR_M			0xFF
+
+#define REG_PORT_T1_EXT_REG_RD_DATA	0x15
+#define REG_PORT_T1_EXT_REG_WR_DATA	0x16
+
+#define REG_PORT_T1_PCS_CTRL		0x17
+
+#define REG_PORT_T1_PHY_INT_STATUS	0x18
+#define REG_PORT_T1_PHY_INT_ENABLE	0x19
+
+#define T1_PHY_CTRL_MAXWAIT_TIMER_INT	BIT(8)
+#define T1_ZERO_TIMER_INT		BIT(7)
+#define T1_ENERGY_OFF_INT		BIT(6)
+#define T1_IDLE_ERR_THRESH_DET_INT	BIT(4)
+#define T1_LINK_UP_INT			BIT(2)
+#define T1_LINK_DOWN_INT		BIT(1)
+#define T1_ENERGY_ON_INT		BIT(0)
+
+#define REG_PORT_T1_POWER_DOWN_CTRL	0x1A
+
+#define T1_BIST_LINK_UP			BIT(15)
+#define T1_EMERGENCY_STOP		BIT(14)
+#define T1_PTP_ENABLE			BIT(13)
+#define T1_PCS_LINK_CTRL_ENABLE		BIT(12)
+#define T1_DSP_START_EQUALIZER		BIT(11)
+#define T1_START_ZQ_CAL			BIT(10)
+#define T1_FORCE_TX_ENABLE		BIT(9)
+#define T1_HW_INIT_SEQ_ENABLE		BIT(8)
+#define T1_WAKE_ENABLE			BIT(7)
+#define T1_LINK_UP_REQ			BIT(6)
+#define T1_AUTO_CLR_EPDWRDOWN		BIT(5)
+#define T1_ENERGY_DETECT_POWER_DOWN	BIT(4)
+#define T1_FORCE_ENERGY_DETECT		BIT(3)
+#define T1_AUTO_SLEEP_WAKEUP		BIT(2)
+#define T1_ENERGY_DETECT_HW_ENABLE	BIT(1)
+#define T1_ENERGY_DETECT_ENABLE		BIT(0)
+
+#define REG_PORT_T1_BIST_CTRL		0x1B
+#define REG_PORT_T1_BIST_STAT		0x1C
+#define REG_PORT_T1_BIST_ERR_CNT_STS	0x1D
+#define REG_PORT_T1_PCS_RX_ERR_CNT_STS	0x1E
+#define REG_PORT_T1_TS_CTRL_STAT	0x1F
+
+#define REG_PORT_T1_PCS_DESCRM_CTRL_0	0x00
+
+#define T1_PCS_SEND_IDLE_LOC_RCV_STS	BIT(15)
+#define T1_PCS_DESCR_RELOCK_ON_IDLE	BIT(14)
+#define T1_PCS_DESCR_RELOCK_ON_RCV	BIT(13)
+#define T1_PCS_DESCR_RELOCK_ON_EQ	BIT(12)
+#define T1_PCS_DESCR_LOCK_SYM_CNT	0x0FC0
+#define T1_PCS_DESCR_LOCK_CHK_WIN	0x003F
+
+#define REG_PORT_T1_PCS_DESCRM_CTRL_1	0x01
+
+#define T1_PCS_DESCR_PIPE_DELAY		0x0700
+#define T1_PCS_FEED_DESCR_LFSR_WIN	0x003F
+
+#define REG_PORT_T1_PCS_EQ_TIMER_CTRL	0x02
+
+#define REG_PORT_T1_PCS_RX_ERR_CNT	0x0E
+
+#define REG_PORT_T1_PCS_ED_STABILITY	0x26
+
+#define REG_PORT_T1_AFE_CENTRAL_CFG_0	0x00
+#define REG_PORT_T1_AFE_CENTRAL_CFG_1	0x01
+#define REG_PORT_T1_AFE_CENTRAL_CFG_2	0x02
+#define REG_PORT_T1_AFE_CENTRAL_CFG_3	0x03
+#define REG_PORT_T1_AFE_CENTRAL_CFG_4	0x04
+#define REG_PORT_T1_AFE_CENTRAL_CFG_5	0x05
+#define REG_PORT_T1_AFE_CENTRAL_CFG_6	0x06
+#define REG_PORT_T1_AFE_PORT_CFG_0	0x0A
+#define REG_PORT_T1_AFE_PORT_CFG_1	0x0B
+#define REG_PORT_T1_AFE_PORT_CFG_2	0x0C
+#define REG_PORT_T1_AFE_PORT_CFG_3	0x0D
+#define REG_PORT_T1_AFE_PORT_CFG_4	0x0E
+#define REG_PORT_T1_AFE_PORT_CFG_5	0x0F
+#define REG_PORT_T1_AFE_PORT_CFG_6	0x10
+#define REG_PORT_T1_AFE_PORT_CFG_7	0x11
+
+
+#define REG_PORT_TX_PHY_CTRL		0x00
+#define REG_PORT_TX_PHY_STATUS		0x01
+#define REG_PORT_TX_PHY_ID_HI		0x02
+#define REG_PORT_TX_PHY_ID_LO		0x03
+#define REG_PORT_TX_PHY_AUTO_NEG	0x04
+#define REG_PORT_TX_PHY_REMOTE_CAP	0x05
+
+#define REG_PORT_TX_6			0x06
+#define REG_PORT_TX_7			0x07
+#define REG_PORT_TX_10			0x10
+#define REG_PORT_TX_11			0x11
+
+#define REG_PORT_TX_SPECIAL_MODES	0x12
+
+#define TX_PHYADDR_M			0x1F
+
+#define REG_PORT_TX_13			0x13
+
+#define REG_PORT_TX_IND_CTRL		0x14
+
+#define TX_IND_DATA_READ		BIT(15)
+#define TX_IND_DATA_WRITE		BIT(14)
+#define TX_REG_BANK_SEL_M		0x7
+#define TX_REG_BANK_SEL_S		11
+#define TX_REG_BANK_SEL_VMDAC		7
+#define TX_REG_BANK_SEL_BIST		3
+#define TX_REG_BANK_SEL_WOL		1
+#define TX_REG_BANK_SEL_DSP		0
+#define TX_TEST_MODE			BIT(10)
+#define TX_READ_ADDR_M			0x1F
+#define TX_READ_ADDR_S			5
+#define TX_WRITE_ADDR_M			0x1F
+
+#define REG_PORT_TX_READ_DATA_LO	0x15
+#define REG_PORT_TX_READ_DATA_HI	0x16
+#define REG_PORT_TX_WRITE_DATA		0x17
+
+#define REG_PORT_TX_18			0x18
+#define REG_PORT_TX_19			0x19
+#define REG_PORT_TX_1A			0x1A
+#define REG_PORT_TX_1B			0x1B
+#define REG_PORT_TX_1C			0x1C
+
+#define REG_PORT_TX_PHY_INT_STATUS	0x1D
+#define REG_PORT_TX_PHY_INT_ENABLE	0x1E
+
+#define TX_ENERGY_ON_INT		BIT(7)
+#define TX_AUTO_NEG_COMPLETE_INT	BIT(6)
+#define TX_LINK_DOWN_INT		BIT(4)
+#define TX_AUTO_NEG_ACK_INT		BIT(3)
+#define TX_AUTO_NEG_PAGE_RCV_INT	BIT(1)
+
+#define REG_PORT_TX_1F			0x1F
+
+#define TX_DSP_DCBLW			0x00
+
+#define TX_DSP_DCBLW_VAL		0x9aa2
+
+#define TX_DSP_A5_CONFIG		0x16
+
+#define TX_A5_TXCLKPHSEL_M		0x7
+#define TX_A5_TXCLKPHSEL_S		12
+#define TX_A5_TXCLK_0_NS		0
+#define TX_A5_TXCLK_1_NS		1
+#define TX_A5_TXCLK_2_NS		2
+#define TX_A5_TXCLK_3_NS		3
+#define TX_A5_TXCLK_4_NS		4
+#define TX_A5_TXCLK_5_NS		5
+#define TX_A5_TXCLK_6_NS		6
+#define TX_A5_TXCLK_7_NS		7
+
+#define TX_DSP_A10_CONFIG		0x1C
+
+#define TX_DSP_A10_CONFIG_VAL		0x9000
+
+#define TX_DSP_A11_CONFIG		0x1D
+
+#define TX_DSP_A11_CONFIG_VAL		0x7600
+
+#define TX_BIST_FR_PLL_DIV0		0x1C
+#define TX_BIST_FR_PLL_DIV1		0x1D
+
+#define TX_FR_PLL_DIV0			0x0
+#define TX_FR_PLL_DIV1			0x1280
+
+#define TX_VMDAC_ZQ_CAL_CTRL		0x00
+
+#define TX_START_ZQ_CAL			BIT(0)
+#define TX_BYPASS_ZQ_CAL		BIT(1)
+
+#define TX_VMDAC_ZQ_CAL_STAT		0x01
+
+#define TX_VMDAC_CTRL0			0x02
+
+#define TX_VDVREF_EN			BIT(0)
+#define TX_VDVEXT_EN			BIT(1)
+#define TX_A_ZEN			BIT(11)
+#define TX_A_RXZEN			BIT(12)
+#define TX_VD_INTIR_EN			BIT(15)
+
+#define TX_VMDAC_CTRL0_VAL		0x9783
+
+#define TX_VMDAC_CTRL1			0x03
+
+#define TX_10BT_VD_EN			BIT(0)
+#define TX_B_ZEN			BIT(11)
+#define TX_B_RXZEN			BIT(12)
+#define TX_VD_PD			BIT(15)
+
+#define TX_VMDAC_CTRL1_VAL		0x7784
+
+#define TX_VMDAC_MISC_PCS_CTRL0		0x05
+
+#define TX_MISC_PCS_CTRL0_13		BIT(13)
+
+#define TX_VMDAC_MISC_PCS_CTRL1		0x06
+
+#define REG_PORT_T1_PHY_CTRL_BASE	0x0100
+#define REG_PORT_TX_PHY_CTRL_BASE	0x0280
+#define REG_TX_PHY_CTRL_BASE		0x0980
+
+#define REG_PORT_PHY_CTRL		0x0100
+
+#define PORT_PHY_RESET			(1 << 15)
+#define PORT_PHY_LOOPBACK		(1 << 14)
+#define PORT_SPEED_100MBIT		(1 << 13)
+#define PORT_AUTO_NEG_ENABLE		(1 << 12)
+#define PORT_POWER_DOWN			(1 << 11)
+#define PORT_ISOLATE			(1 << 10)
+#define PORT_AUTO_NEG_RESTART		(1 << 9)
+#define PORT_FULL_DUPLEX		(1 << 8)
+#define PORT_COLLISION_TEST		(1 << 7)
+#define PORT_SPEED_1000MBIT		(1 << 6)
+#if 0
+#define PHY_HP_MDIX			(1 << 5)
+#define PHY_REMOTE_FAULT_DISABLE	(1 << 2)
+#define PHY_LED_DISABLE			(1 << 0)
+#endif
+
+#define REG_PORT_PHY_STATUS		0x0102
+
+#define PORT_100BT4_CAPABLE		(1 << 15)
+#define PORT_100BTX_FD_CAPABLE		(1 << 14)
+#define PORT_100BTX_CAPABLE		(1 << 13)
+#define PORT_10BT_FD_CAPABLE		(1 << 12)
+#define PORT_10BT_CAPABLE		(1 << 11)
+#define PORT_EXTENDED_STATUS		(1 << 8)
+#define PORT_MII_SUPPRESS_CAPABLE	(1 << 6)
+#define PORT_AUTO_NEG_ACKNOWLEDGE	(1 << 5)
+#define PORT_REMOTE_FAULT		(1 << 4)
+#define PORT_AUTO_NEG_CAPABLE		(1 << 3)
+#define PORT_LINK_STATUS		(1 << 2)
+#define PORT_JABBER_DETECT		(1 << 1)
+#define PORT_EXTENDED_CAPABILITY	(1 << 0)
+
+#define REG_PORT_PHY_ID_HI		0x0104
+#define REG_PORT_PHY_ID_LO		0x0106
+
+#define LAN937X_ID_HI			0x0007
+#define LAN937X_ID_LO			0x1951
+
+#define REG_PORT_PHY_AUTO_NEGOTIATION	0x0108
+
+#define PORT_AUTO_NEG_NEXT_PAGE		(1 << 15)
+#define PORT_AUTO_NEG_REMOTE_FAULT	(1 << 13)
+#define PORT_AUTO_NEG_ASYM_PAUSE	(1 << 11)
+#define PORT_AUTO_NEG_SYM_PAUSE		(1 << 10)
+#define PORT_AUTO_NEG_100BT4		(1 << 9)
+#define PORT_AUTO_NEG_100BTX_FD		(1 << 8)
+#define PORT_AUTO_NEG_100BTX		(1 << 7)
+#define PORT_AUTO_NEG_10BT_FD		(1 << 6)
+#define PORT_AUTO_NEG_10BT		(1 << 5)
+#define PORT_AUTO_NEG_SELECTOR		0x001F
+#define PORT_AUTO_NEG_802_3		0x0001
+
+#define PORT_AUTO_NEG_PAUSE		\
+	(PORT_AUTO_NEG_ASYM_PAUSE | PORT_AUTO_NEG_SYM_PAUSE)
+
+#define REG_PORT_PHY_REMOTE_CAPABILITY	0x010A
+
+#define PORT_REMOTE_NEXT_PAGE		(1 << 15)
+#define PORT_REMOTE_ACKNOWLEDGE		(1 << 14)
+#define PORT_REMOTE_REMOTE_FAULT	(1 << 13)
+#define PORT_REMOTE_ASYM_PAUSE		(1 << 11)
+#define PORT_REMOTE_SYM_PAUSE		(1 << 10)
+#define PORT_REMOTE_100BTX_FD		(1 << 8)
+#define PORT_REMOTE_100BTX		(1 << 7)
+#define PORT_REMOTE_10BT_FD		(1 << 6)
+#define PORT_REMOTE_10BT		(1 << 5)
+
+#define REG_PORT_PHY_1000_CTRL		0x0112
+
+#define PORT_AUTO_NEG_MANUAL		(1 << 12)
+#define PORT_AUTO_NEG_MASTER		(1 << 11)
+#define PORT_AUTO_NEG_MASTER_PREFERRED	(1 << 10)
+#define PORT_AUTO_NEG_1000BT_FD		(1 << 9)
+#define PORT_AUTO_NEG_1000BT		(1 << 8)
+
+#define REG_PORT_PHY_1000_STATUS	0x0114
+
+#define PORT_MASTER_FAULT		(1 << 15)
+#define PORT_LOCAL_MASTER		(1 << 14)
+#define PORT_LOCAL_RX_OK		(1 << 13)
+#define PORT_REMOTE_RX_OK		(1 << 12)
+#define PORT_REMOTE_1000BT_FD		(1 << 11)
+#define PORT_REMOTE_1000BT		(1 << 10)
+#define PORT_REMOTE_IDLE_CNT_M		0x0F
+
+#define PORT_PHY_1000_STATIC_STATUS	\
+	(PORT_LOCAL_RX_OK |		\
+	PORT_REMOTE_RX_OK |		\
+	PORT_REMOTE_1000BT_FD |		\
+	PORT_REMOTE_1000BT)
+
+#define REG_PORT_PHY_MMD_SETUP		0x011A
+
+#define PORT_MMD_OP_MODE_M		0x3
+#define PORT_MMD_OP_MODE_S		14
+#define PORT_MMD_OP_INDEX		0
+#define PORT_MMD_OP_DATA_NO_INCR	1
+#define PORT_MMD_OP_DATA_INCR_RW	2
+#define PORT_MMD_OP_DATA_INCR_W		3
+#define PORT_MMD_DEVICE_ID_M		0x1F
+
+#define MMD_SETUP(mode, dev)		\
+	(((u16) mode << PORT_MMD_OP_MODE_S) | dev)
+
+#define REG_PORT_PHY_MMD_INDEX_DATA	0x011C
+
+#define MMD_DEVICE_ID_DSP		1
+
+#define MMD_DSP_SQI_CHAN_A		0xAC
+#define MMD_DSP_SQI_CHAN_B		0xAD
+#define MMD_DSP_SQI_CHAN_C		0xAE
+#define MMD_DSP_SQI_CHAN_D		0xAF
+
+#define DSP_SQI_ERR_DETECTED		(1 << 15)
+#define DSP_SQI_AVG_ERR			0x7FFF
+
+#define MMD_DEVICE_ID_COMMON		2
+
+#define MMD_DEVICE_ID_EEE_ADV		7
+
+#define MMD_EEE_ADV			0x3C
+#define EEE_ADV_100MBIT			(1 << 1)
+#define EEE_ADV_1GBIT			(1 << 2)
+
+#define MMD_EEE_LP_ADV			0x3D
+#define MMD_EEE_MSG_CODE		0x3F
+
+#define MMD_DEVICE_ID_AFED		0x1C
+
+#define REG_PORT_PHY_EXTENDED_STATUS	0x011E
+
+#define PORT_100BTX_FD_ABLE		(1 << 15)
+#define PORT_100BTX_ABLE		(1 << 14)
+#define PORT_10BT_FD_ABLE		(1 << 13)
+#define PORT_10BT_ABLE			(1 << 12)
+
+#define REG_PORT_SGMII_ADDR__4		0x0200
+#define PORT_SGMII_AUTO_INCR		(1 << 23)
+#define PORT_SGMII_DEVICE_ID_M		0x1F
+#define PORT_SGMII_DEVICE_ID_S		16
+#define PORT_SGMII_ADDR_M		((1 << 21) - 1)
+
+#define REG_PORT_SGMII_DATA__4		0x0204
+#define PORT_SGMII_DATA_M		((1 << 16) - 1)
+
+#define MMD_DEVICE_ID_PMA		0x01
+#define MMD_DEVICE_ID_PCS		0x03
+#define MMD_DEVICE_ID_PHY_XS		0x04
+#define MMD_DEVICE_ID_DTE_XS		0x05
+#define MMD_DEVICE_ID_AN		0x07
+#define MMD_DEVICE_ID_VENDOR_CTRL	0x1E
+#define MMD_DEVICE_ID_VENDOR_MII	0x1F
+
+#define SR_MII				MMD_DEVICE_ID_VENDOR_MII
+
+#define MMD_SR_MII_CTRL			0x0000
+
+#define SR_MII_RESET			(1 << 15)
+#define SR_MII_LOOPBACK			(1 << 14)
+#define SR_MII_SPEED_100MBIT		(1 << 13)
+#define SR_MII_AUTO_NEG_ENABLE		(1 << 12)
+#define SR_MII_POWER_DOWN		(1 << 11)
+#define SR_MII_AUTO_NEG_RESTART		(1 << 9)
+#define SR_MII_FULL_DUPLEX		(1 << 8)
+#define SR_MII_SPEED_1000MBIT		(1 << 6)
+
+#define MMD_SR_MII_STATUS		0x0001
+#define MMD_SR_MII_ID_1			0x0002
+#define MMD_SR_MII_ID_2			0x0003
+#define MMD_SR_MII_AUTO_NEGOTIATION	0x0004
+
+#define SR_MII_AUTO_NEG_NEXT_PAGE	BIT(15)
+#define SR_MII_AUTO_NEG_REMOTE_FAULT_M	0x3
+#define SR_MII_AUTO_NEG_REMOTE_FAULT_S	12
+#define SR_MII_AUTO_NEG_NO_ERROR	0
+#define SR_MII_AUTO_NEG_OFFLINE		1
+#define SR_MII_AUTO_NEG_LINK_FAILURE	2
+#define SR_MII_AUTO_NEG_ERROR		3
+#define SR_MII_AUTO_NEG_PAUSE_M		0x3
+#define SR_MII_AUTO_NEG_PAUSE_S		7
+#define SR_MII_AUTO_NEG_NO_PAUSE	0
+#define SR_MII_AUTO_NEG_ASYM_PAUSE_TX	1
+#define SR_MII_AUTO_NEG_SYM_PAUSE	2
+#define SR_MII_AUTO_NEG_ASYM_PAUSE_RX	3
+#define SR_MII_AUTO_NEG_HALF_DUPLEX	BIT(6)
+#define SR_MII_AUTO_NEG_FULL_DUPLEX	BIT(5)
+
+#define MMD_SR_MII_REMOTE_CAPABILITY	0x0005
+
+#define SR_MII_REMOTE_ACK		BIT(14)
+#define SR_MII_REMOTE_HALF_DUPLEX	BIT(6)
+#define SR_MII_REMOTE_FULL_DUPLEX	BIT(5)
+
+#define MMD_SR_MII_AUTO_NEG_EXP		0x0006
+#define MMD_SR_MII_AUTO_NEG_EXT		0x000F
+
+#define MMD_SR_MII_DIGITAL_CTRL_1	0x8000
+
+#define SR_MII_CTRL_BIT_13		BIT(13)
+#define SR_MII_CTRL_BIT_11		BIT(11)
+#define SR_MII_CTRL_BIT_10		BIT(10)
+#define SR_MII_MAC_AUTO_SW		BIT(9)
+#define SR_MII_PHY_MODE_CTRL		BIT(0)
+
+#define MMD_SR_MII_AUTO_NEG_CTRL	0x8001
+
+#define SR_MII_8_BIT			BIT(8)
+#define SR_MII_SGMII_LINK_UP		BIT(4)
+#define SR_MII_TX_CFG_PHY_MASTER	BIT(3)
+#define SR_MII_PCS_MODE_M		0x3
+#define SR_MII_PCS_MODE_S		1
+#define SR_MII_PCS_SGMII		2
+#define SR_MII_AUTO_NEG_COMPLETE_INTR	BIT(0)
+
+#define MMD_SR_MII_AUTO_NEG_STATUS	0x8002
+
+#define SR_MII_STAT_LINK_UP		BIT(4)
+#define SR_MII_STAT_M			0x3
+#define SR_MII_STAT_S			2
+#define SR_MII_STAT_10_MBPS		0
+#define SR_MII_STAT_100_MBPS		1
+#define SR_MII_STAT_1000_MBPS		2
+#define SR_MII_STAT_FULL_DUPLEX		BIT(1)
+
+#define MMD_SR_MII_PHY_CTRL		0x80A0
+
+#define SR_MII_PHY_LANE_SEL_M		0xF
+#define SR_MII_PHY_LANE_SEL_S		8
+#define SR_MII_PHY_WRITE		BIT(1)
+#define SR_MII_PHY_START_BUSY		BIT(0)
+
+#define MMD_SR_MII_PHY_ADDR		0x80A1
+
+#define SR_MII_PHY_ADDR_M		((1 << 16) - 1)
+
+#define MMD_SR_MII_PHY_DATA		0x80A2
+
+#define SR_MII_PHY_DATA_M		((1 << 16) - 1)
+
+#define SR_MII_PHY_JTAG_CHIP_ID_HI	0x000C
+#define SR_MII_PHY_JTAG_CHIP_ID_LO	0x000D
+
+
+/*
+ * 2016-05-31
+ * PHY registers greater than 15 needs to be written in 32-bit.
+ */
+#define REG_PORT_PHY_REMOTE_LB_LED	0x0122
+
+#define PORT_REMOTE_LOOPBACK		(1 << 8)
+#define PORT_LED_SELECT			(3 << 6)
+#define PORT_LED_CTRL			(3 << 4)
+#define PORT_LED_CTRL_TEST		(1 << 3)
+#define PORT_10BT_PREAMBLE		(1 << 2)
+#define PORT_LINK_MD_10BT_ENABLE	(1 << 1)
+#define PORT_LINK_MD_PASS		(1 << 0)
+
+#define REG_PORT_PHY_LINK_MD		0x0124
+
+#define PORT_START_CABLE_DIAG		(1 << 15)
+#define PORT_TX_DISABLE			(1 << 14)
+#define PORT_CABLE_DIAG_PAIR_M		0x3
+#define PORT_CABLE_DIAG_PAIR_S		12
+#define PORT_CABLE_DIAG_SELECT_M	0x3
+#define PORT_CABLE_DIAG_SELECT_S	10
+#define PORT_CABLE_DIAG_RESULT_M	0x3
+#define PORT_CABLE_DIAG_RESULT_S	8
+#define PORT_CABLE_STAT_NORMAL		0
+#define PORT_CABLE_STAT_OPEN		1
+#define PORT_CABLE_STAT_SHORT		2
+#define PORT_CABLE_STAT_FAILED		3
+#if 0
+#define PORT_CABLE_10M_SHORT		(1 << 12)
+#endif
+#define PORT_CABLE_FAULT_COUNTER	0x00FF
+
+#define REG_PORT_PHY_PMA_STATUS		0x0126
+
+#define PORT_1000_LINK_GOOD		(1 << 1)
+#define PORT_100_LINK_GOOD		(1 << 0)
+
+#define REG_PORT_PHY_DIGITAL_STATUS	0x0128
+
+#define PORT_LINK_DETECT		(1 << 14)
+#define PORT_SIGNAL_DETECT		(1 << 13)
+#define PORT_PHY_STAT_MDI		(1 << 12)
+#define PORT_PHY_STAT_MASTER		(1 << 11)
+
+#define REG_PORT_PHY_RXER_COUNTER	0x012A
+
+#define REG_PORT_PHY_INT_ENABLE		0x0136
+#define REG_PORT_PHY_INT_STATUS		0x0137
+
+#define JABBER_INT			(1 << 7)
+#define RX_ERR_INT			(1 << 6)
+#define PAGE_RX_INT			(1 << 5)
+#define PARALLEL_DETECT_FAULT_INT	(1 << 4)
+#define LINK_PARTNER_ACK_INT		(1 << 3)
+#define LINK_DOWN_INT			(1 << 2)
+#define REMOTE_FAULT_INT		(1 << 1)
+#define LINK_UP_INT			(1 << 0)
+
+#define REG_PORT_PHY_DIGITAL_DEBUG_1	0x0138
+
+#define PORT_REG_CLK_SPEED_25_MHZ	(1 << 14)
+#define PORT_PHY_FORCE_MDI		(1 << 7)
+#define PORT_PHY_AUTO_MDIX_DISABLE	(1 << 6)
+
+/* Same as PORT_PHY_LOOPBACK */
+#define PORT_PHY_PCS_LOOPBACK		(1 << 0)
+
+#define REG_PORT_PHY_DIGITAL_DEBUG_2	0x013A
+
+#define REG_PORT_PHY_DIGITAL_DEBUG_3	0x013C
+
+#define PORT_100BT_FIXED_LATENCY	(1 << 15)
+
+#define REG_PORT_PHY_PHY_CTRL		0x013E
+
+#define PORT_INT_PIN_HIGH		(1 << 14)
+#define PORT_ENABLE_JABBER		(1 << 9)
+#define PORT_STAT_SPEED_1000MBIT	(1 << 6)
+#define PORT_STAT_SPEED_100MBIT		(1 << 5)
+#define PORT_STAT_SPEED_10MBIT		(1 << 4)
+#define PORT_STAT_FULL_DUPLEX		(1 << 3)
+
+/* Same as PORT_PHY_STAT_MASTER */
+#define PORT_STAT_MASTER		(1 << 2)
+#define PORT_RESET			(1 << 1)
+#define PORT_LINK_STATUS_FAIL		(1 << 0)
+
+/* 3 - xMII */
+#define REG_PORT_XMII_CTRL_0		0x0300
+
+#define PORT_SGMII_SEL			(1 << 7)
+#define PORT_MII_FULL_DUPLEX		(1 << 6)
+#define PORT_MII_TX_FLOW_CTRL		(1 << 5)
+#define PORT_MII_100MBIT		(1 << 4)
+#define PORT_MII_RX_FLOW_CTRL		(1 << 3)
+#define PORT_GRXC_ENABLE		(1 << 0)
+
+#define REG_PORT_XMII_CTRL_1		0x0301
+
+#define PORT_MII_NOT_1GBIT		BIT(6)
+#define PORT_MII_SEL_EDGE		BIT(5)
+#define PORT_RGMII_ID_IG_ENABLE		BIT(4)
+#define PORT_RGMII_ID_EG_ENABLE		BIT(3)
+#define PORT_MII_MAC_MODE		BIT(2)
+#define PORT_MII_SEL_M			0x3
+#define PORT_RGMII_SEL			0x0
+#define PORT_RMII_SEL			0x1
+#define PORT_GMII_SEL			0x2
+#define PORT_MII_SEL			0x3
+
+#define REG_PORT_XMII_CTRL_2		0x0302
+
+#define PORT_RGMII_RX_STS_ENABLE	BIT(0)
+
+#define REG_PORT_XMII_CTRL_3		0x0303
+
+#define PORT_XMII_FULL_DUPLEX		BIT(3)
+#define PORT_XMII_CLK_M			0x3
+#define PORT_XMII_CLK_S			1
+#define PORT_XMII_2_5_MHZ		0
+#define PORT_XMII_25_MHZ		1
+#define PORT_XMII_125_MHZ		2
+#define PORT_XMII_LINK_STATUS		BIT(0)
+
+#define REG_PORT_XMII_CTRL_4		0x0304
+
+#define REG_PORT_XMII_CTRL_5		0x0305
+
+/* 4 - MAC */
+#define REG_PORT_MAC_CTRL_0		0x0400
+
+#define PORT_CHECK_LENGTH		BIT(2)
+#define PORT_BROADCAST_STORM		BIT(1)
+#define PORT_JUMBO_PACKET		BIT(0)
+
+
+
+#define REG_PORT_MAC_CTRL_1		0x0401
+
+#define PORT_BACK_PRESSURE		(1 << 3)
+#define PORT_PASS_ALL			(1 << 0)
+
+#define REG_PORT_MAC_CTRL_2		0x0402
+
+#define PORT_100BT_EEE_DISABLE		(1 << 7)
+#define PORT_1000BT_EEE_DISABLE		(1 << 6)
+
+#define REG_PORT_MAC_IN_RATE_LIMIT	0x0403
+
+#define PORT_IN_PORT_BASED_S		6
+#define PORT_RATE_PACKET_BASED_S	5
+#define PORT_IN_FLOW_CTRL_S		4
+#define PORT_COUNT_IFG_S		1
+#define PORT_COUNT_PREAMBLE_S		0
+#define PORT_IN_PORT_BASED		BIT(6)
+#define PORT_IN_PACKET_BASED		BIT(5)
+#define PORT_IN_FLOW_CTRL		BIT(4)
+#define PORT_IN_LIMIT_MODE_M		0x3
+#define PORT_IN_LIMIT_MODE_S		2
+#define PORT_IN_ALL			0
+#define PORT_IN_UNICAST			1
+#define PORT_IN_MULTICAST		2
+#define PORT_IN_BROADCAST		3
+#define PORT_COUNT_IFG			BIT(1)
+#define PORT_COUNT_PREAMBLE		BIT(0)
+
+#define REG_PORT_MTU__2			0x0404
+
+#define REG_PORT_IN_RATE_0		0x0410
+#define REG_PORT_IN_RATE_1		0x0411
+#define REG_PORT_IN_RATE_2		0x0412
+#define REG_PORT_IN_RATE_3		0x0413
+#define REG_PORT_IN_RATE_4		0x0414
+#define REG_PORT_IN_RATE_5		0x0415
+#define REG_PORT_IN_RATE_6		0x0416
+#define REG_PORT_IN_RATE_7		0x0417
+
+#define REG_PORT_OUT_RATE_0		0x0420
+#define REG_PORT_OUT_RATE_1		0x0421
+#define REG_PORT_OUT_RATE_2		0x0422
+#define REG_PORT_OUT_RATE_3		0x0423
+#define REG_PORT_OUT_RATE_4		0x0424
+#define REG_PORT_OUT_RATE_5		0x0425
+#define REG_PORT_OUT_RATE_6		0x0426
+#define REG_PORT_OUT_RATE_7		0x0427
+
+#define PORT_RATE_LIMIT_M		((1 << 7) - 1)
+
+/* 5 - MIB Counters */
+#define REG_PORT_MIB_CTRL_STAT__4	0x0500
+
+#define MIB_COUNTER_OVERFLOW		(1 << 31)
+#define MIB_COUNTER_VALID		(1 << 30)
+#define MIB_COUNTER_READ		(1 << 25)
+#define MIB_COUNTER_FLUSH_FREEZE	(1 << 24)
+#define MIB_COUNTER_INDEX_M		((1 << 8) - 1)
+#define MIB_COUNTER_INDEX_S		16
+#define MIB_COUNTER_DATA_HI_M		0xF
+
+#define REG_PORT_MIB_DATA		0x0504
+
+#define ACL_MODE_M			0x3
+#define ACL_MODE_S			4
+#define ACL_MODE_DISABLE		0
+#define ACL_MODE_LAYER_2		1
+#define ACL_MODE_LAYER_3		2
+#define ACL_MODE_LAYER_4		3
+#define ACL_ENABLE_M			0x3
+#define ACL_ENABLE_S			2
+#define ACL_ENABLE_2_COUNT		0
+#define ACL_ENABLE_2_TYPE		1
+#define ACL_ENABLE_2_MAC		2
+#define ACL_ENABLE_2_BOTH		3
+#define ACL_ENABLE_3_IP			1
+#define ACL_ENABLE_3_SRC_DST_COMP	2
+#define ACL_ENABLE_4_PROTOCOL		0
+#define ACL_ENABLE_4_TCP_PORT_COMP	1
+#define ACL_ENABLE_4_UDP_PORT_COMP	2
+#define ACL_ENABLE_4_TCP_SEQN_COMP	3
+#define ACL_SRC				(1 << 1)
+#define ACL_EQUAL			(1 << 0)
+
+/* 6 - TCAM */
+#define REG_PORT_TCAM_DATA_00		0x0600
+#define REG_PORT_TCAM_DATA_5F		0x065F
+
+#define REG_PORT_TCAM_ACTION__8		0x0660
+
+#define TCAM_ACTION_S			23
+
+#define TCAM_TIMESTAMP_ENABLE_S		(40 + TCAM_ACTION_S)
+#define TCAM_TIMESTAMP_ENABLE		BIT(TCAM_TIMESTAMP_ENABLE_S)
+#define TCAM_COUNT_ENABLE_S		(39 + TCAM_ACTION_S)
+#define TCAM_COUNT_ENABLE		BIT(TCAM_COUNT_ENABLE_S)
+#define TCAM_COUNT_SEL_M		0x3
+#define TCAM_COUNT_SEL_S		(37 + TCAM_ACTION_S)
+#define TCAM_STREAM_ENABLE_S		(36 + TCAM_ACTINO_S)
+#define TCAM_STREAM_ENABLE		BIT(TCAM_STREAM_ENABLE_S)
+#define TCAM_STREAM_ID_M		0x7
+#define TCAM_STREAM_ID_S		(33 + TCAM_ACTION_S)
+#define TCAM_VLAN_ID_REPLACE_S		(32 + TCAM_ACTION_S)
+#define TCAM_VLAN_ID_REPLACE		BIT(TCAM_VLAN_ID_REPLACE_S)
+#define TCAM_VLAN_ID_M			0x1FFF
+#define TCAM_VLAN_ID_S			(19 + TCAM_ACTION_S)
+#define TCAM_PRIO_MODE_M		0x3
+#define TCAM_PRIO_MODE_S		(17 + TCAM_ACTION_S)
+#define TCAM_PRIO_MODE_DISABLE		0
+#define TCAM_PRIO_MODE_HIGHER		1
+#define TCAM_PRIO_MODE_LOWER		2
+#define TCAM_PRIO_MODE_REPLACE		3
+#define TCAM_PRIO_M			KS_PRIO_M
+#define TCAM_PRIO_S			(14 + TCAM_ACTION_S)
+#define TCAM_VLAN_PRIO_REPLACE_S	(13 + TCAM_ACTION_S)
+#define TCAM_VLAN_PRIO_REPLACE		BIT(TCAM_VLAN_PRIO_REPLACE_S)
+#define TCAM_VLAN_PRIO_M		KS_PRIO_M
+#define TCAM_VLAN_PRIO_S		(10 + TCAM_ACTION_S)
+#define TCAM_MAP_MODE_M			0x3
+#define TCAM_MAP_MODE_S			(8 + TCAM_ACTION_S)
+#define TCAM_MAP_MODE_DISABLE		0
+#define TCAM_MAP_MODE_OR		1
+#define TCAM_MAP_MODE_AND		2
+#define TCAM_MAP_MODE_REPLACE		3
+#define TCAM_PORTS_M			0xFF
+#define TCAM_PORTS_S			(0 + TCAM_ACTION_S)
+
+#define TCAM_CNT_M			((1 << 11) - 1)
+#define TCAM_CNT_S			5
+
+#define TCAM_MSEC_UNIT			(1 << 7)
+#define TCAM_INTR_MODE			(1 << 6)
+
+#define REG_PORT_TCAM_BYTE_EN_0		0x0668
+#define REG_PORT_TCAM_BYTE_EN_1		0x0669
+#define REG_PORT_TCAM_BYTE_EN_2		0x066A
+#define REG_PORT_TCAM_BYTE_EN_3		0x066B
+#define REG_PORT_TCAM_BYTE_EN_4		0x066C
+#define REG_PORT_TCAM_BYTE_EN_5		0x066D
+#define REG_PORT_TCAM_BYTE_EN_6		0x066E
+#define REG_PORT_TCAM_BYTE_EN_7		0x066F
+#define REG_PORT_TCAM_BYTE_EN_8		0x0670
+#define REG_PORT_TCAM_BYTE_EN_9		0x0671
+#define REG_PORT_TCAM_BYTE_EN_A		0x0672
+#define REG_PORT_TCAM_BYTE_EN_B		0x0673
+#define REG_PORT_TCAM_BYTE_EN_C		0x0674
+
+#define REG_PORT_TCAM_CTRL__4		0x0678
+
+#define TCAM_CTRL_ADD_SHIFT_LO_PRIO	BIT(28)
+#define TCAM_CTRL_FLUSH			BIT(27)
+#define TCAM_CTRL_VBEN			BIT(26)
+#define TCAM_CTRL_VBI			BIT(25)
+#define TCAM_CTRL_ROW_VLD_M		0xF
+#define TCAM_CTRL_ROW_VLD_S		21
+#define TCAM_CTRL_START_ROW_M		0x3F
+#define TCAM_CTRL_START_ROW_S		14
+#define TCAM_CTRL_STATUS		BIT(13)
+#define TCAM_CTRL_REQ_M			0x7
+#define TCAM_CTRL_REQ_S			10
+#define TCAM_CTRL_R_ENTRY		0
+#define TCAM_CTRL_W_ENTRY		1
+#define TCAM_CTRL_A_ENTRY		2
+#define TCAM_CTRL_S_ENTRY		3
+#define TCAM_CTRL_R_KIV			4
+#define TCAM_CTRL_W_KIV			5
+#define TCAM_CTRL_R_RFR			6
+#define TCAM_CTRL_W_RFR			7
+#define TCAM_CTRL_ACC_M			0x3
+#define TCAM_CTRL_ACC_S			8
+#define TCAM_CTRL_ACC_MASK		1
+#define TCAM_CTRL_ACC_DATA		2
+#define TCAM_CTRL_ACC_BOTH		3
+#define TCAM_CTRL_SHIFT_NUM_M		0x3
+#define TCAM_CTRL_SHIFT_NUM_S		6
+#define TCAM_CTRL_ROW_ADDR_M		0x3F
+
+#define TCAM_PARSER_M			0xF
+#define TCAM_PARSER_S			4
+
+#define REG_PORT_TCAM_PARSER_CTRL_1__4	0x067C
+
+#define TCAM_PARSER_KEY_NUM_M		0x3
+#define TCAM_PARSER_KEY_NUM_S		30
+#define TCAM_PARSER_KEY_FORMAT_M	0x3
+#define TCAM_PARSER_KEY_FORMAT_S	28
+#define TCAM_PARSER_KEY_1_0		0
+#define TCAM_PARSER_KEY_1_1		1
+#define TCAM_PARSER_KEY_1_2		2
+#define TCAM_PARSER_KEY_1_3		3
+#define TCAM_PARSER_KEY_2_0_1		0
+#define TCAM_PARSER_KEY_2_0_12		1
+#define TCAM_PARSER_KEY_2_01_23		2
+#define TCAM_PARSER_KEY_2_0_123		3
+#define TCAM_PARSER_KEY_3_0_1_2		2
+#define TCAM_PARSER_KEY_3_0_1_23	3
+#define TCAM_PARSER_KEY_4_0_1_2_3	3
+#define TCAM_PARSER_KEY_TYPE_M		TCAM_PARSER_M
+#define TCAM_PARSER_KEY_TYPE_S		24
+#define TCAM_PARSER_KEY_TYPE_UNIVERSAL	0
+#define TCAM_PARSER_KEY_TYPE_MULTIPLE	1
+#define TCAM_PARSER_IP_OPTION_M		TCAM_PARSER_M
+#define TCAM_PARSER_IP_OPTION_S		20
+#define TCAM_PARSER_VLAN_TAG_M		TCAM_PARSER_M
+#define TCAM_PARSER_VLAN_TAG_S		16
+#define TCAM_PARSER_OFFSET_M		TCAM_PARSER_M
+#define TCAM_PARSER_OFFSET_S		12
+#define TCAM_PRASER_REL_OFFSET		0
+#define TCAM_PRASER_ABS_OFFSET		1
+
+#define TCAM_RFR_LAYER_4		(1 << 28)
+#define TCAM_RFR_LAYER_3		(1 << 27)
+#define TCAM_RFR_LAYER_2		(1 << 26)
+#define TCAM_RFR_FIELD_OFF_M		0x3FFF
+#define TCAM_RFR_FIELD_OFF_S		12
+#define TCAM_RFR_FIELD_LEN_M		0x3F
+#define TCAM_RFR_FIELD_LEN_S		6
+#define TCAM_RFR_KEY_NUM_M		0x3
+#define TCAM_RFR_KEY_NUM_S		4
+
+#define REG_PORT_TCAM_RX_CNT_0__4	0x0680
+#define REG_PORT_TCAM_RX_CNT_1__4	0x0684
+#define REG_PORT_TCAM_RX_CNT_2__4	0x0688
+#define REG_PORT_TCAM_RX_CNT_3__4	0x068C
+
+#if 0
+#define ACL_ACTION_START		0xA
+#define ACL_ACTION_LEN			4
+#define ACL_INTR_CNT_START		0xD
+#define ACL_RULESET_START		0xE
+#define ACL_RULESET_LEN			2
+#define ACL_TABLE_LEN			16
+
+#define ACL_ACTION_ENABLE		0x003C
+#define ACL_MATCH_ENABLE		0x7FC0
+#define ACL_RULESET_ENABLE		0x8003
+#define ACL_BYTE_ENABLE			0xFFFF
+
+#define PORT_ACL_WRITE_DONE		(1 << 6)
+#define PORT_ACL_READ_DONE		(1 << 5)
+#define PORT_ACL_WRITE			(1 << 4)
+#define PORT_ACL_INDEX_M		0xF
+#endif
+
+/* 8 - Classification and Policing */
+#define REG_PORT_MRI_MIRROR_CTRL	0x0800
+
+#define PORT_MIRROR_RX			(1 << 6)
+#define PORT_MIRROR_TX			(1 << 5)
+#define PORT_MIRROR_SNIFFER		(1 << 1)
+
+#define REG_PORT_MRI_PRIO_CTRL		0x0801
+
+#define PORT_HIGHEST_PRIO		(1 << 7)
+#define PORT_OR_PRIO			(1 << 6)
+#define PORT_MAC_PRIO_ENABLE		(1 << 4)
+#define PORT_VLAN_PRIO_ENABLE		(1 << 3)
+#define PORT_802_1P_PRIO_ENABLE		(1 << 2)
+#define PORT_DIFFSERV_PRIO_ENABLE	(1 << 1)
+#define PORT_ACL_PRIO_ENABLE		(1 << 0)
+
+#define REG_PORT_MRI_MAC_CTRL		0x0802
+
+#define PORT_USER_PRIO_CEILING		(1 << 7)
+#define PORT_DROP_NON_VLAN		(1 << 4)
+#define PORT_DROP_TAG			(1 << 3)
+#define PORT_BASED_PRIO_M		KS_PRIO_M
+#define PORT_BASED_PRIO_S		0
+
+#define REG_PORT_MRI_AUTHEN_CTRL	0x0803
+
+#define PORT_ACL_ENABLE			(1 << 2)
+#define PORT_AUTHEN_MODE		0x3
+#define PORT_AUTHEN_NORMAL		0
+#define PORT_AUTHEN_BLOCK		1
+#define PORT_AUTHEN_PASS		2
+#define PORT_AUTHEN_TRAP		3
+
+#define REG_PORT_MRI_INDEX__4		0x0804
+
+#define MRI_INDEX_P_M			0x7
+#define MRI_INDEX_P_S			16
+#define MRI_INDEX_Q_M			0x3
+#define MRI_INDEX_Q_S			0
+
+#define REG_PORT_MRI_TC_MAP__4		0x0808
+
+#define PORT_TC_MAP_M			0xf
+#define PORT_TC_MAP_S			4
+
+#define REG_PORT_MRI_POLICE_CTRL__4	0x080C
+
+#define POLICE_DROP_ALL			(1 << 10)
+#define POLICE_PACKET_TYPE_M		0x3
+#define POLICE_PACKET_TYPE_S		8
+#define POLICE_PACKET_DROPPED		0
+#define POLICE_PACKET_GREEN		1
+#define POLICE_PACKET_YELLOW		2
+#define POLICE_PACKET_RED		3
+#define PORT_BASED_POLICING		(1 << 7)
+#define NON_DSCP_COLOR_M		0x3
+#define NON_DSCP_COLOR_S		5
+#define COLOR_MARK_ENABLE		(1 << 4)
+#define COLOR_REMAP_ENABLE		(1 << 3)
+#define POLICE_DROP_SRP			(1 << 2)
+#define POLICE_COLOR_NOT_AWARE		(1 << 1)
+#define POLICE_ENABLE			(1 << 0)
+
+#define REG_PORT_POLICE_COLOR_0__4	0x0810
+#define REG_PORT_POLICE_COLOR_1__4	0x0814
+#define REG_PORT_POLICE_COLOR_2__4	0x0818
+#define REG_PORT_POLICE_COLOR_3__4	0x081C
+
+#define POLICE_COLOR_MAP_S		2
+#define POLICE_COLOR_MAP_M		((1 << POLICE_COLOR_MAP_S) - 1)
+
+#define REG_PORT_POLICE_RATE__4		0x0820
+
+#define POLICE_CIR_S			16
+#define POLICE_PIR_S			0
+
+#define REG_PORT_POLICE_BURST_SIZE__4	0x0824
+
+#define POLICE_BURST_SIZE_M		0x3FFF
+#define POLICE_CBS_S			16
+#define POLICE_PBS_S			0
+
+#define REG_PORT_WRED_PM_CTRL_0__4	0x0830
+
+#define WRED_PM_CTRL_M			((1 << 11) - 1)
+
+#define WRED_PM_MAX_THRESHOLD_S		16
+#define WRED_PM_MIN_THRESHOLD_S		0
+
+#define REG_PORT_WRED_PM_CTRL_1__4	0x0834
+
+#define WRED_PM_MULTIPLIER_S		16
+#define WRED_PM_AVG_QUEUE_SIZE_S	0
+
+#define REG_PORT_WRED_QUEUE_CTRL_0__4	0x0840
+#define REG_PORT_WRED_QUEUE_CTRL_1__4	0x0844
+
+#define REG_PORT_WRED_QUEUE_PMON__4	0x0848
+
+#define WRED_RANDOM_DROP_ENABLE		(1 << 31)
+#define WRED_PMON_FLUSH			(1 << 30)
+#define WRED_DROP_GYR_DISABLE		(1 << 29)
+#define WRED_DROP_YR_DISABLE		(1 << 28)
+#define WRED_DROP_R_DISABLE		(1 << 27)
+#define WRED_DROP_ALL			(1 << 26)
+#define WRED_PMON_M			((1 << 24) - 1)
+
+/* 9 - Shaping */
+
+#define REG_PORT_MTI_QUEUE_INDEX__4	0x0900
+
+#define REG_PORT_MTI_QUEUE_CTRL_0__4	0x0904
+
+#define MTI_PVID_REPLACE		(1 << 0)
+
+#define REG_PORT_MTI_QUEUE_CTRL_0	0x0914
+
+#define MTI_SCHEDULE_MODE_M		0x3
+#define MTI_SCHEDULE_MODE_S		6
+#define MTI_SCHEDULE_STRICT_PRIO	0
+#define MTI_SCHEDULE_WRR		2
+#define MTI_SHAPING_M			0x3
+#define MTI_SHAPING_S			4
+#define MTI_SHAPING_OFF			0
+#define MTI_SHAPING_SRP			1
+
+#define REG_PORT_MTI_QUEUE_CTRL_1	0x0915
+
+#define MTI_TX_RATIO_M			((1 << 7) - 1)
+
+#define REG_PORT_MTI_QUEUE_CTRL_2__2	0x0916
+#define REG_PORT_MTI_HI_WATER_MARK	0x0916
+#define REG_PORT_MTI_QUEUE_CTRL_3__2	0x0918
+#define REG_PORT_MTI_LO_WATER_MARK	0x0918
+#define REG_PORT_MTI_QUEUE_CTRL_4__2	0x091A
+#define REG_PORT_MTI_CREDIT_INCREMENT	0x091A
+#define REG_PORT_MTI_QUEUE_CTRL_4__1	0x091C
+#define REG_PORT_MTI_QUEUE_CTRL_4__4	0x091C
+
+#define REG_PORT_TAS_CTRL__1		0x0920
+
+#define TAS_CUT_THRU_ENABLE		BIT(7)
+
+#define REG_PORT_TAS_EVENT_INDEX__1	0x0923
+
+#define REG_PORT_TAS_EVENT__4		0x0924
+
+#define TAS_GATE_CMD_S			24
+#define TAS_GATE_CYCLE_M		((1 << TAS_GATE_CMD_S) - 1)
+
+#define REG_PORT_TAS_TRIG_NSEC__4	0x0928
+#define REG_PORT_TAS_TRIG_SEC__4	0x092C
+#define REG_PORT_TAS_CYCLE_TIME__4	0x0930
+
+#define REG_PORT_TAS_GCL_LAST_INDEX__2	0x0934
+
+#define REG_PORT_TAS_GATE_CTRL__1	0x0936
+
+#define TAS_CFG_CHANGE			BIT(7)
+#define TAS_GATE_ENABLE			BIT(6)
+#define TAS_OPER_GCL_READ		BIT(5)
+
+#define REG_PORT_TAS_MAX_SDU__2		0x0938
+
+#define TAS_MAX_SDU_M			((1 << 14) - 1)
+
+#define REG_PORT_TAS_CUR_STATE__2	0x093A
+
+#define TAS_CUR_GCL_INDEX_S		8
+#define TAS_CUR_GCL_STATE_M		((1 << TAS_CUR_GCL_INDEX_S) - 1)
+
+#define REG_PORT_TAS_OVERRUN_CNT__2	0x093C
+
+#define REG_PORT_TAS_INT_MASK__2	0x0940
+#define REG_PORT_TAS_INT_STATUS__2	0x0944
+
+#define TAS_CFG_CHANGE_DONE_INT		BIT(15)
+#define TAS_CFG_CHANGE_ERR_INT		BIT(14)
+#define TAS_OVERRUN_QUEUE_7_INT		BIT(7)
+#define TAS_OVERRUN_QUEUE_6_INT		BIT(6)
+#define TAS_OVERRUN_QUEUE_5_INT		BIT(5)
+#define TAS_OVERRUN_QUEUE_4_INT		BIT(4)
+#define TAS_OVERRUN_QUEUE_3_INT		BIT(3)
+#define TAS_OVERRUN_QUEUE_2_INT		BIT(2)
+#define TAS_OVERRUN_QUEUE_1_INT		BIT(1)
+#define TAS_OVERRUN_QUEUE_0_INT		BIT(0)
+
+/* A - QM */
+
+#define REG_PORT_QM_CTRL__4		0x0A00
+
+#define PORT_QM_DROP_PRIO_M		0x3
+
+#define REG_PORT_VLAN_MEMBERSHIP__4	0x0A04
+
+#define REG_PORT_QM_QUEUE_INDEX__4	0x0A08
+
+#define PORT_QM_QUEUE_INDEX_S		24
+#define PORT_QM_BURST_SIZE_S		16
+#define PORT_QM_MIN_RESV_SPACE_M	((1 << 11) - 1)
+
+#define REG_PORT_QM_WATER_MARK__4	0x0A0C
+
+#define PORT_QM_HI_WATER_MARK_S		16
+#define PORT_QM_LO_WATER_MARK_S		0
+#define PORT_QM_WATER_MARK_M		((1 << 11) - 1)
+
+#define REG_PORT_QM_TX_CNT_0__4		0x0A10
+
+#define PORT_QM_TX_CNT_USED_S		0
+#define PORT_QM_TX_CNT_M		((1 << 11) - 1)
+
+#define REG_PORT_QM_TX_CNT_1__4		0x0A14
+
+#define PORT_QM_TX_CNT_CALCULATED_S	16
+#define PORT_QM_TX_CNT_AVAIL_S		0
+
+/* B - LUE */
+#define REG_PORT_LUE_CTRL		0x0B00
+
+#define PORT_VLAN_LOOKUP_VID_0		(1 << 7)
+#define PORT_INGRESS_FILTER		(1 << 6)
+#define PORT_DISCARD_NON_VID		(1 << 5)
+#define PORT_MAC_BASED_802_1X		(1 << 4)
+#define PORT_SRC_ADDR_FILTER		(1 << 3)
+
+#define REG_PORT_LUE_MSTP_INDEX		0x0B01
+
+#define REG_PORT_LUE_MSTP_STATE		0x0B04
+
+#define PORT_TX_ENABLE			(1 << 2)
+#define PORT_RX_ENABLE			(1 << 1)
+#define PORT_LEARN_DISABLE		(1 << 0)
+
+#define REG_PORT_LUE_LEARN_CNT__2	0x0B08
+
+#define REG_PORT_LUE_UNK_UCAST_CTRL__2	0x0B0E
+#define REG_PORT_LUE_UNK_MCAST_CTRL__2	0x0B10
+#define REG_PORT_LUE_UNK_VID_CTRL__2	0x0B12
+
+#define PORT_UNK_UCAST_ENABLE		BIT(15)
+#define PORT_UNK_MCAST_ENABLE		BIT(15)
+#define PORT_UNK_VID_ENABLE		BIT(15)
+
+/* C - PTP */
+
+#define REG_PTP_PORT_RX_DELAY__2	0x0C00
+#define REG_PTP_PORT_TX_DELAY__2	0x0C02
+#define REG_PTP_PORT_ASYM_DELAY__2	0x0C04
+
+#define REG_PTP_PORT_XDELAY_TS		0x0C08
+#define REG_PTP_PORT_XDELAY_TS_H	0x0C08
+#define REG_PTP_PORT_XDELAY_TS_L	0x0C0A
+
+#define REG_PTP_PORT_SYNC_TS		0x0C0C
+#define REG_PTP_PORT_SYNC_TS_H		0x0C0C
+#define REG_PTP_PORT_SYNC_TS_L		0x0C0E
+
+#define REG_PTP_PORT_PDRESP_TS		0x0C10
+#define REG_PTP_PORT_PDRESP_TS_H	0x0C10
+#define REG_PTP_PORT_PDRESP_TS_L	0x0C12
+
+#define REG_PTP_PORT_TX_INT_STATUS__2	0x0C14
+#define REG_PTP_PORT_TX_INT_ENABLE__2	0x0C16
+
+#define PTP_PORT_SYNC_INT		(1 << 15)
+#define PTP_PORT_XDELAY_REQ_INT		(1 << 14)
+#define PTP_PORT_PDELAY_RESP_INT	(1 << 13)
+
+#define REG_PTP_PORT_LINK_DELAY__4	0x0C18
+
+
+/* Default values are used in lan937x_sw.h if these are not defined. */
+#define PRIO_QUEUES			8
+#define RX_PRIO_QUEUES			8
+
+#define KS_PRIO_IN_REG			2
+
+#define TOTAL_PORT_NUM			8
+
+#define LAN937X_COUNTER_NUM		0x20
+#define TOTAL_LAN937X_COUNTER_NUM	(LAN937X_COUNTER_NUM + 2 + 2)
+
+#define SWITCH_COUNTER_NUM		LAN937X_COUNTER_NUM
+#define TOTAL_SWITCH_COUNTER_NUM	TOTAL_LAN937X_COUNTER_NUM
+
+/* Required for common switch control in lan937x_sw.c */
+#define SW_D				u8
+#define SW_R(sw, addr)			(sw)->reg->r8(sw, addr)
+#define SW_W(sw, addr, val)		(sw)->reg->w8(sw, addr, val)
+#define SW_SIZE				(1)
+#define SW_SIZE_STR			"%02x"
+#define port_r				port_r8
+#define port_w				port_w8
+
+#define P_BCAST_STORM_CTRL		REG_PORT_MAC_CTRL_0
+#define P_PRIO_CTRL			REG_PORT_MRI_PRIO_CTRL
+#define P_MIRROR_CTRL			REG_PORT_MRI_MIRROR_CTRL
+#define P_STP_CTRL			REG_PORT_LUE_MSTP_STATE
+#define P_PHY_CTRL			REG_PORT_PHY_CTRL
+#define P_NEG_RESTART_CTRL		REG_PORT_PHY_CTRL
+#define P_LINK_STATUS			REG_PORT_PHY_STATUS
+#define P_SPEED_STATUS			REG_PORT_PHY_PHY_CTRL
+#define P_RATE_LIMIT_CTRL		REG_PORT_MAC_IN_RATE_LIMIT
+
+#define S_LINK_AGING_CTRL		REG_SW_LUE_CTRL_1
+#define S_MIRROR_CTRL			REG_SW_MRI_CTRL_0
+#define S_REPLACE_VID_CTRL		REG_SW_MAC_CTRL_2
+#define S_802_1P_PRIO_CTRL		REG_SW_MAC_802_1P_MAP_0
+#define S_TOS_PRIO_CTRL			REG_SW_MAC_TOS_PRIO_0
+#define S_FLUSH_TABLE_CTRL		REG_SW_LUE_CTRL_1
+
+#define REG_SWITCH_RESET		REG_RESET_CTRL
+
+#define SW_FLUSH_DYN_MAC_TABLE		SW_FLUSH_MSTP_TABLE
+
+
+#define MAX_TIMESTAMP_UNIT		2
+#define MAX_TRIG_UNIT			3
+#define MAX_TIMESTAMP_EVENT_UNIT	8
+#define MAX_GPIO			2
+#define MAX_CLOCK			2
+
+#define PTP_TRIG_UNIT_M			((1 << MAX_TRIG_UNIT) - 1)
+#define PTP_TS_UNIT_M			((1 << MAX_TIMESTAMP_UNIT) - 1)
+
+#define TAIL_TAG_PTP			BIT(7)
+#define TAIL_TAG_NEXT_CHIP		BIT(6)
+#define TAIL_TAG_K2L			BIT(5)
+#define TAIL_TAG_PTP_1_STEP		BIT(4)
+#define TAIL_TAG_PTP_P2P		BIT(3)
+#define TAIL_TAG_RX_PORTS_M		0x7
+
+/* 148,800 frames * 67 ms / 100 */
+#define BROADCAST_STORM_VALUE		9969
+
+#endif

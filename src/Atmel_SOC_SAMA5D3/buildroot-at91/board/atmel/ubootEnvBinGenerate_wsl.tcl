@@ -301,18 +301,20 @@ set kernelLoadAddr [get_kernel_load_addr $boardFamily]
 set dtbLoadAddr	[get_dtb_load_addr $boardFamily]
 
 ## NandFlash Mapping
-set kernelSize	[format "0x%08X" [file size $kernelFile]]
-set dtbSize	[format "0x%08X" [file size $dtbFile]]
-set bootCmd "bootcmd=nand read $dtbLoadAddr $dtbAddr $dtbSize; nand read $kernelLoadAddr $kernelAddr $kernelSize; bootz $kernelLoadAddr - $dtbLoadAddr"
+set kernelSize	[format "0x%08X" [expr (([file size $kernelFile] + 4095) / 4096) * 4096]]
+set dtbSize	[format "0x%08X" [expr (([file size $dtbFile] + 2047) / 2048) * 2048]]
+set loadDts "load_dts=nand read $dtbLoadAddr $dtbAddr $dtbSize; bootz $kernelLoadAddr - $dtbLoadAddr"
+set bootCmd "bootcmd=nand read $kernelLoadAddr $kernelAddr $kernelSize; run load_dts"
 set rootfsSize	[format "0x%08X" [file size $rootfsFile]]
 
 lappend u_boot_variables \
-    "bootdelay=3" \
+    "bootdelay=1" \
     "baudrate=115200" \
     "stdin=serial" \
     "stdout=serial" \
     "stderr=serial" \
     "bootargs=console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,512k(uboot)ro,256k(env),256k(env_redundant),256k(spare),512k(dtb),6M(kernel)ro,-(rootfs) rootfstype=ubifs ubi.mtd=7 root=ubi0:rootfs rw $videoMode" \
+    "$loadDts" \
     "$bootCmd"
     
 #puts "==Env variables are $u_boot_variables=="

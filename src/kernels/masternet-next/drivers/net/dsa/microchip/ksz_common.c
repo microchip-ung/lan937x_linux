@@ -352,7 +352,7 @@ EXPORT_SYMBOL_GPL(ksz_port_mdb_del);
 int ksz_enable_port(struct dsa_switch *ds, int port, struct phy_device *phy)
 {
 	struct ksz_device *dev = ds->priv;
-
+	pr_info("ksz_enable_port start");
 	if (!dsa_is_user_port(ds, port))
 		return 0;
 
@@ -364,7 +364,7 @@ int ksz_enable_port(struct dsa_switch *ds, int port, struct phy_device *phy)
 	/* port_stp_state_set() will be called after to enable the port so
 	 * there is no need to do anything.
 	 */
-
+	pr_info("ksz_enable_port: end");
 	return 0;
 }
 EXPORT_SYMBOL_GPL(ksz_enable_port);
@@ -416,16 +416,23 @@ int ksz_switch_register(struct ksz_device *dev,
 {
 	phy_interface_t interface;
 	int ret;
-
-	if (dev->pdata)
+	
+	pr_info("ksz_switch_register init");
+	
+	if (dev->pdata){
 		dev->chip_id = dev->pdata->chip_id;
+		pr_info("0x%x",dev->pdata->chip_id);
+	}
 
 	dev->reset_gpio = devm_gpiod_get_optional(dev->dev, "reset",
 						  GPIOD_OUT_LOW);
+	
+		
 	if (IS_ERR(dev->reset_gpio))
 		return PTR_ERR(dev->reset_gpio);
 
 	if (dev->reset_gpio) {
+		pr_info("inside reset gpio");
 		gpiod_set_value_cansleep(dev->reset_gpio, 1);
 		mdelay(10);
 		gpiod_set_value_cansleep(dev->reset_gpio, 0);
@@ -442,6 +449,9 @@ int ksz_switch_register(struct ksz_device *dev,
 		return -EINVAL;
 
 	ret = dev->dev_ops->init(dev);
+	
+	pr_info("init done ret: %d",ret);
+	
 	if (ret)
 		return ret;
 
@@ -452,11 +462,14 @@ int ksz_switch_register(struct ksz_device *dev,
 		ret = of_get_phy_mode(dev->dev->of_node, &interface);
 		if (ret == 0)
 			dev->interface = interface;
+		pr_info("Interface: %d",interface);
 		dev->synclko_125 = of_property_read_bool(dev->dev->of_node,
 							 "microchip,synclko-125");
+		pr_info("synclko_125: %d",dev->synclko_125);
 	}
 
 	ret = dsa_register_switch(dev->ds);
+	pr_info("ret: %d",ret);
 	if (ret) {
 		dev->dev_ops->exit(dev);
 		return ret;

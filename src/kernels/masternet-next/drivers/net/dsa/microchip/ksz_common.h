@@ -151,6 +151,7 @@ void ksz_switch_remove(struct ksz_device *dev);
 
 int ksz8795_switch_register(struct ksz_device *dev);
 int ksz9477_switch_register(struct ksz_device *dev);
+int lan937x_switch_register(struct ksz_device *dev);
 
 void ksz_update_port_member(struct ksz_device *dev, int port);
 void ksz_init_mib_timer(struct ksz_device *dev);
@@ -187,7 +188,7 @@ static inline int ksz_read8(struct ksz_device *dev, u32 reg, u8 *val)
 {
 	unsigned int value;
 	int ret = regmap_read(dev->regmap[0], reg, &value);
-
+	pr_info ("ksz_read8=> reg:0x%x, val:0x%x",reg,value);
 	*val = value;
 	return ret;
 }
@@ -195,8 +196,9 @@ static inline int ksz_read8(struct ksz_device *dev, u32 reg, u8 *val)
 static inline int ksz_read16(struct ksz_device *dev, u32 reg, u16 *val)
 {
 	unsigned int value;
+	
 	int ret = regmap_read(dev->regmap[1], reg, &value);
-
+	pr_info ("ksz_read16=> reg:0x%x, val:0x%x",reg,value);
 	*val = value;
 	return ret;
 }
@@ -204,7 +206,12 @@ static inline int ksz_read16(struct ksz_device *dev, u32 reg, u16 *val)
 static inline int ksz_read32(struct ksz_device *dev, u32 reg, u32 *val)
 {
 	unsigned int value;
+
+
+	
 	int ret = regmap_read(dev->regmap[2], reg, &value);
+	
+	pr_info ("ksz_read16=> reg:0x%x, val:0x%x",reg,value);
 
 	*val = value;
 	return ret;
@@ -228,16 +235,19 @@ static inline int ksz_read64(struct ksz_device *dev, u32 reg, u64 *val)
 
 static inline int ksz_write8(struct ksz_device *dev, u32 reg, u8 value)
 {
+	pr_info ("ksz_write8=> reg:0x%x, val:0x%x",reg,value);
 	return regmap_write(dev->regmap[0], reg, value);
 }
 
 static inline int ksz_write16(struct ksz_device *dev, u32 reg, u16 value)
 {
+	pr_info ("ksz_write16=> reg:0x%x, val:0x%x",reg,value);
 	return regmap_write(dev->regmap[1], reg, value);
 }
 
 static inline int ksz_write32(struct ksz_device *dev, u32 reg, u32 value)
 {
+	pr_info ("ksz_write32=> reg:0x%x, val:0x%x",reg,value);
 	return regmap_write(dev->regmap[2], reg, value);
 }
 
