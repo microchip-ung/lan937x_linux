@@ -33,13 +33,27 @@
 
 	ahb {
 		apb {
+		//These define the pin mappings of SD card slot. Refer the board schematics and sama5d3.dtsi for the pin defines
 			mmc0: mmc@f0000000 {
 				pinctrl-0 = <&pinctrl_mmc0_clk_cmd_dat0 &pinctrl_mmc0_dat1_3 &pinctrl_mmc0_dat4_7 &pinctrl_mmc0_cd>;
+				vmmc-supply = <&vcc_mmc0_reg>;
+				vqmmc-supply = <&vcc_3v3_reg>;
 				status = "okay";
 				slot@0 {
 					reg = <0>;
 					bus-width = <8>;
 					cd-gpios = <&pioE 0 GPIO_ACTIVE_LOW>;
+				};
+			};
+
+			mmc1: mmc@f8000000 {
+				vmmc-supply = <&vcc_3v3_reg>;
+				vqmmc-supply = <&vcc_3v3_reg>;
+				status = "disabled";
+				slot@0 {
+					reg = <0>;
+					bus-width = <4>;
+					cd-gpios = <&pioE 1 GPIO_ACTIVE_LOW>;
 				};
 			};
 
@@ -379,6 +393,16 @@
 		};
 	};
 
+//Power supply I think
+	vcc_mmc0_reg: fixedregulator_mmc0 {
+		compatible = "regulator-fixed";
+		gpio = <&pioE 2 GPIO_ACTIVE_LOW>;
+		regulator-name = "mmc0-card-supply";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+	};
+	
 	gpio_keys {
 		compatible = "gpio-keys";
 
