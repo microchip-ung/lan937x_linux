@@ -70,7 +70,8 @@
 					spi-cpha;
 					spi-cpol;
 					interrupt-parent = <&pioB>;
-					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;					status = "okay";
+					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;					
+					status = "okay";
 					ports {
 						#address-cells = <1>;
 						#size-cells = <0>;

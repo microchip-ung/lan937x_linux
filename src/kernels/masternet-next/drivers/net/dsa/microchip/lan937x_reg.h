@@ -839,7 +839,7 @@
 #define PTP_P2P_PORTS_M			0xFF
 
 
-#define PORT_CTRL_ADDR(port, addr)	((addr) | (((port) + 1) << 12))
+#define PORT_CTRL_ADDR(port, addr)	((addr) | ((port)  << 12))
 
 #define REG_GLOBAL_RR_INDEX__1		0x0600
 
@@ -1689,8 +1689,8 @@
 #define PORT_MII_SEL_M			0x3
 #define PORT_RGMII_SEL			0x0
 #define PORT_RMII_SEL			0x1
-#define PORT_GMII_SEL			0x2
-#define PORT_MII_SEL			0x3
+#define PORT_MII_SEL			0x2
+
 
 #define REG_PORT_XMII_CTRL_2		0x0302
 
@@ -2300,5 +2300,28 @@
 
 /* 148,800 frames * 67 ms / 100 */
 #define BROADCAST_STORM_VALUE		9969
+
+/*New Defines*/
+#define SW_CHECK_LENGTH			BIT(3)
+
+#define FR_MIN_SIZE		1522	
+#define FR_MAX_SIZE		9000
+
+
+#define PORT_JUMBO_EN 			BIT(0)
+#define PORT_MAX_FR_SIZE		0x404
+
+#define REG_PORT_CTRL_0			0x0020
+
+#define PORT_MAC_LOOPBACK		BIT(7)
+#define PORT_FORCE_TX_FLOW_CTRL		BIT(4)
+#define PORT_FORCE_RX_FLOW_CTRL		BIT(3)
+
+#define PORT_QUEUE_SPLIT_ENABLE		0x3
+
+/* Driver set switch broadcast storm protection at 10% rate. */
+#define BROADCAST_STORM_PROT_RATE	10
+
+#define MII_BMSR_100BASE_TX_FD		BIT(14)
 
 #endif

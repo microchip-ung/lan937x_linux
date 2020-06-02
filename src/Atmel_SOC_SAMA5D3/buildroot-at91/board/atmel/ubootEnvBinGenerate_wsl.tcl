@@ -313,7 +313,7 @@ lappend u_boot_variables \
     "stdin=serial" \
     "stdout=serial" \
     "stderr=serial" \
-    "bootargs=console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,512k(uboot)ro,256k(env),256k(env_redundant),256k(spare),512k(dtb),6M(kernel)ro,-(rootfs) rootfstype=ubifs ubi.mtd=7 root=ubi0:rootfs rw $videoMode" \
+    "bootargs=console=ttyS0,115200 debug ignore_loglevel mtdparts=atmel_nand:256k(bootstrap)ro,512k(uboot)ro,256k(env),256k(env_redundant),256k(spare),512k(dtb),6M(kernel)ro,-(rootfs) rootfstype=ubifs ubi.mtd=7 root=ubi0:rootfs rw $videoMode" \
     "$loadDts" \
     "$bootCmd"
     
