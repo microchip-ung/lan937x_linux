@@ -532,7 +532,7 @@ static int lan937x_phy_write16(struct dsa_switch *ds, int addr, int reg,
 	as the registers are 32bit aligned.*/
 
 	temp = dev->dev_ops->get_port_addr(logical_port, (REG_PORT_T1_PHY_CTRL_BASE + (reg << 2)));
-	//TODO
+	/*TODO: To be sorted out with Tristram whether "+2" is required*/
 	temp = temp + 2;   //Adding + 2 to access the MSB as it is big-endian
 
 	ret = ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
@@ -1536,17 +1536,22 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 	pr_info("First supported %*pb",__ETHTOOL_LINK_MODE_MASK_NBITS, supported);
 	pr_info("First state->advertising %*pb",__ETHTOOL_LINK_MODE_MASK_NBITS, state->advertising);
 
-	/* Allow all the expected bits */
-	phylink_set(mask, Autoneg);
-	pr_info("mask Autoneg %*pb",__ETHTOOL_LINK_MODE_MASK_NBITS, mask);
-	phylink_set_port_modes(mask);
-	pr_info("mask phylink_set_port_modes %*pb",__ETHTOOL_LINK_MODE_MASK_NBITS, mask);
-	phylink_set(mask, Pause);
-	pr_info("mask Pause %*pb",__ETHTOOL_LINK_MODE_MASK_NBITS, mask);
-	phylink_set(mask, Asym_Pause);
-	pr_info("mask Asym_Pause %*pb",__ETHTOOL_LINK_MODE_MASK_NBITS, mask);
+	if (phy_interface_mode_is_rgmii(state->interface)) {
+		phylink_set(mask, 1000baseT_Full);
+		phylink_set(mask, 1000baseT_Half);
+		phylink_set(mask, 10baseT_Half);
+		phylink_set(mask, 10baseT_Full);
+		phylink_set(mask, 100baseT_Half);
+		phylink_set(mask, 100baseT_Full);
+		phylink_set(mask, Autoneg);
+		phylink_set_port_modes(mask);
+		phylink_set(mask, Pause);
+		phylink_set(mask, Asym_Pause);
+	}
 
-	phylink_set(mask, 100baseT_Full);
+	if (!phy_interface_mode_is_8023z(state->interface)) {
+		phylink_set(mask, 100baseT_Full);
+	}
 
 	bitmap_and(supported, supported, mask,
 		   __ETHTOOL_LINK_MODE_MASK_NBITS);
@@ -1557,7 +1562,6 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 	pr_info("last supported %*pb",__ETHTOOL_LINK_MODE_MASK_NBITS, supported);
 	pr_info("last state->advertising %*pb",__ETHTOOL_LINK_MODE_MASK_NBITS, state->advertising);
 
-	phylink_helper_basex_speed(state);
 	pr_info("last last state->advertising %*pb",__ETHTOOL_LINK_MODE_MASK_NBITS, state->advertising);
 }
 
@@ -1733,7 +1737,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.port_cnt = 5,		/* total physical port count */
 		.mib_port_cnt = 5,
 		.phy_port_cnt = 4,
-						//	AFE0  AFE1  AFE2  AFE3  AFE4  AFE5  SGMII  RGMII1  RGMII2  TxPHY	
+						//TODO: AFE0  AFE1  AFE2  AFE3  AFE4  AFE5  SGMII  RGMII1  RGMII2  TxPHY	
 		.logical_addr_map = {1, 	2,  0xFF,  3,    4,    0xFF, 0xFF,  0xFF,   5,      0xFF},
 	},
 	{
@@ -1746,7 +1750,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.port_cnt = 6,		/* total physical port count */
 		.mib_port_cnt = 6,
 		.phy_port_cnt = 2,
-						//	AFE0  AFE1  AFE2  AFE3  AFE4  AFE5  SGMII  RGMII1  RGMII2  TxPHY	
+						//TODO:AFE0  AFE1  AFE2  AFE3  AFE4  AFE5  SGMII  RGMII1  RGMII2  TxPHY	
 		.logical_addr_map = {1, 	2,  0xFF,  3,   0xFF, 0xFF, 0xFF,    6,      5,      4},
 	},
 	{
@@ -1759,7 +1763,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.port_cnt = 8,		/* total port count */
 		.mib_port_cnt = 8,
 		.phy_port_cnt = 6,
-						//	AFE0  AFE1  AFE2  AFE3  AFE4  AFE5  SGMII  RGMII1  RGMII2  TxPHY	
+					//TODO:AFE0  AFE1  AFE2  AFE3  AFE4  AFE5  SGMII  RGMII1  RGMII2  TxPHY	
 		.logical_addr_map = {1, 	2,   8,    3,    7,    0xFF, 0xFF,  6,   	5,      4},
 
 	},
@@ -1773,7 +1777,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.port_cnt = 5,		/* total physical port count */
 		.mib_port_cnt = 5,
 		.phy_port_cnt = 3,
-								//	AFE0  AFE1  AFE2  AFE3  AFE4  AFE5  SGMII  RGMII1  RGMII2  TxPHY	
+					//TODO:	AFE0  AFE1  AFE2  AFE3  AFE4  AFE5  SGMII  RGMII1  RGMII2  TxPHY	
 		.logical_addr_map = {1, 	2,   8,    3,    7,    0xFF,  4,     6,   	5,      0xFF},
 
 	},
@@ -1787,8 +1791,10 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.port_cnt = 8,		/* total physical port count */
 		.mib_port_cnt = 8,
 		.phy_port_cnt = 6,
-						//	AFE0  AFE1  AFE2  AFE3  AFE4  AFE5  SGMII  RGMII1  RGMII2  TxPHY	
-		.logical_addr_map = {1, 	2,   8,    3,    7,    4,   0xFF,     6,   	5,      0xFF},
+							//AFE0  AFE1  AFE2  AFE3  AFE4  AFE5  	
+		.logical_addr_map = {1, 	2,   8,    3,    7,    4,   	
+							//RGMII2/Port6/CPU  RGMII1/Port7
+							5,  				6},
 	},
 	
 };
