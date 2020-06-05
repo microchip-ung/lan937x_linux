@@ -370,15 +370,16 @@ static int lan937x_enable_spi_indirect_access (struct ksz_device *dev)
 	u16 data16;
 	int ret;
 	
-	/*TODO reg define*/
-	ret = ksz_read8(dev, 0x0007, &data8);
+	
+	ret = ksz_read8(dev, REG_GLOBAL_CTRL_0, &data8);
 
 	if (ret)
 		return ret;
 	
-	data8 &= ~0x80;
+	/* Enable Phy access through SPI*/
+	data8 &= ~SW_PHY_REG_BLOCK;
 
-	ret = ksz_write8(dev, 0x0007, data8);
+	ret = ksz_write8(dev, REG_GLOBAL_CTRL_0, data8);
 	
 	if (ret)
 		return ret;
@@ -388,8 +389,6 @@ static int lan937x_enable_spi_indirect_access (struct ksz_device *dev)
 	if (ret)
 		return ret;
 
-	//pr_info ("REG_VPHY_SPECIAL_CTRL__2: 0x%x", data16);
-
 	//If already the access is not enabled go ahead and allow SPI access
 	if(!(data16 & VPHY_SPI_INDIRECT_ENABLE)) {
 		data16 |= VPHY_SPI_INDIRECT_ENABLE;
@@ -398,8 +397,6 @@ static int lan937x_enable_spi_indirect_access (struct ksz_device *dev)
 		if (ret)
 			return ret;
 	}
-
-
 	return ret;
 }
 static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
@@ -459,17 +456,12 @@ static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
 			return ret;
 
 		/*Physical to logical mapping is not done here as the dts would
-		be updated correctly as per the SKU*/
-		/*What we are getting as addr is logical port*/
-		/*Write the PHY address to be accessed to the VPHY register. <<2 is done 
-		as the registers are 32bit aligned.*/
+		be updated correctly as per the SKU; What we are getting as addr is logical port*/
 		
 		//Get the logical to physical PHY mapping
 		logical_port = dev->logical_port_map[addr];
 
 		temp = dev->dev_ops->get_port_addr(logical_port, (REG_PORT_T1_PHY_CTRL_BASE + (reg << 2)));
-		/*TODO: To be sorted out with Tristram whether "+2" is required*/
-		temp = temp + 2;   //Adding + 2 to access the MSB as it is big-endian
 
 		ret = ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
 
@@ -525,15 +517,9 @@ static int lan937x_phy_write16(struct dsa_switch *ds, int addr, int reg,
 	logical_port = dev->logical_port_map[addr];
 
 	/*Physical to logical mapping is not done here as the dts would
-	be updated correctly as per the SKU*/
-	/*What we are getting as addr is logical port*/
-
-	/*Write the PHY address to be accessed to the VPHY register. <<2 is done 
-	as the registers are 32bit aligned.*/
+	be updated correctly as per the SKU What we are getting as addr is logical port*/
 
 	temp = dev->dev_ops->get_port_addr(logical_port, (REG_PORT_T1_PHY_CTRL_BASE + (reg << 2)));
-	/*TODO: To be sorted out with Tristram whether "+2" is required*/
-	temp = temp + 2;   //Adding + 2 to access the MSB as it is big-endian
 
 	ret = ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
 	if (ret)
@@ -1309,20 +1295,9 @@ static void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 
 	if (port < dev->phy_port_cnt) {
 		pr_info("port < dev->phy_port_cnt: %d",port);
-		/* do not force flow control */
-
-		/*TODO: No such bits available even in KSZ9477*/
-		/*lan937x_port_cfg(dev, port, REG_PORT_CTRL_0,
-			     PORT_FORCE_TX_FLOW_CTRL | PORT_FORCE_RX_FLOW_CTRL,
-			     false);*/
-
-
+		//TODO: For future reservation: any other writes to be added?
+		//To be removed before submitting the driver
 	} else {
-		/* force flow control */
-		/*TODO: No such bits available even in KSZ9477*/
-		/*(lan937x_port_cfg(dev, port, REG_PORT_CTRL_0,
-			     PORT_FORCE_TX_FLOW_CTRL | PORT_FORCE_RX_FLOW_CTRL,
-			     true);*/
 
 		/* configure MAC to 1G & RGMII mode */
 		lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
@@ -1440,10 +1415,8 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 		p->on = 1;
 		if (i < dev->phy_port_cnt)
 			p->phy = 1;
-		//TODO:last port has a phy???
-		if (dev->chip_id == 0x00937400 && i == 7) {
-			p->sgmii = 1;
 
+		if (dev->chip_id == 0x00937400 && i == 7) {
 			/* SGMII PHY detection code is not implemented yet. */
 			p->phy = 0;
 		}
