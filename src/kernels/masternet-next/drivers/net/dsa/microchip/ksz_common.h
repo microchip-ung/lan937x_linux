@@ -77,6 +77,8 @@ struct ksz_device {
 	bool phy_errata_9477;
 	bool synclko_125;
 	const u8  *logical_port_map;
+	u8 tx_phy_logical_prt_n;
+	u8 sgmii_port_num;
 
 	struct vlan_table *vlan_cache;
 
