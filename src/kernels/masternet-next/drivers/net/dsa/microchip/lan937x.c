@@ -389,7 +389,7 @@ static int lan937x_enable_spi_indirect_access (struct ksz_device *dev)
 	if (ret)
 		return ret;
 
-	//If already the access is not enabled go ahead and allow SPI access
+	/*If already the access is not enabled go ahead and allow SPI access*/
 	if(!(data16 & VPHY_SPI_INDIRECT_ENABLE)) {
 		data16 |= VPHY_SPI_INDIRECT_ENABLE;
 		ret = ksz_write16 (dev, REG_VPHY_SPECIAL_CTRL__2, data16);
@@ -403,14 +403,71 @@ static bool lan937x_is_tx_phy_port(struct ksz_device *dev, int physical_port)
 {
 	int logical_port;
 
-	//Get the logical to physical PHY mapping
+	/*Get the logical to physical PHY mapping*/
 	logical_port = dev->logical_port_map[physical_port];
 
 	return logical_port == dev->tx_phy_logical_prt_n;
 }
-static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
+static int lan937x_t1_tx_phy_write (struct ksz_device *dev,int addr,int reg,u16 val)
 {
-	struct ksz_device *dev = ds->priv;
+	int ret,logical_port;
+	u16 data;
+	u16 temp,addr_base;
+
+	pr_info ("lan937x_phy_write16 start, addr:0x%x reg:0x%x,val:0x%x",addr,reg,val);
+
+	/* No real PHY after this. */
+	if (addr >= dev->phy_port_cnt)
+		return 0;
+
+	/*Enable Indirect Access from SPI to the VPHY registers*/
+	ret = lan937x_enable_spi_indirect_access(dev);
+
+	if (ret)
+		return ret;
+
+	/*Get the logical to physical PHY mapping*/
+	logical_port = dev->logical_port_map[addr];
+
+	/*Physical to logical mapping is not done here as the dts would
+	be updated correctly as per the SKU What we are getting as addr is logical port*/
+
+	if (logical_port == LOGICAL_PORT_INVALID)
+		return -EINVAL; /*addr given in the argument is invalid*/
+	
+	if (lan937x_is_tx_phy_port(dev, addr)) {
+		addr_base = REG_PORT_TX_PHY_CTRL_BASE;
+	} else {
+		addr_base = REG_PORT_T1_PHY_CTRL_BASE;
+	}
+
+	temp = dev->dev_ops->get_port_addr(logical_port, (addr_base + (reg << 2)));
+
+	ret = ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
+	if (ret)
+		return ret;
+
+	/*Write the data to be written to theVPHY reg*/
+	ret = ksz_write16(dev, REG_VPHY_IND_DATA__2, val);
+	if (ret)
+		return ret;
+
+	/*Write the Write En and Busy bit*/
+	ret = ksz_write16(dev, REG_VPHY_IND_CTRL__2, (VPHY_IND_WRITE | VPHY_IND_BUSY));
+
+	if (ret)
+		return ret;
+
+	do {
+		ret = ksz_read16(dev, REG_VPHY_IND_CTRL__2, &data);	
+		if (ret)
+			return ret;
+	}while (data & VPHY_IND_BUSY);
+		
+	return 0;
+}
+static int lan937x_t1_tx_phy_read (struct ksz_device *dev,int addr, int reg)
+{
 	u16 val = 0xffff;
 	int ret,logical_port;
 	u16 temp,addr_base;
@@ -458,7 +515,7 @@ static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
 	} else {
 		//pr_info("readinfo from device");
 
-		//Enable Indirect Access from SPI to the VPHY registers
+		/*Enable Indirect Access from SPI to the VPHY registers*/
 		ret = lan937x_enable_spi_indirect_access(dev);
 
 		if (ret)
@@ -499,7 +556,7 @@ static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
 				return ret;
 		}while (val & VPHY_IND_BUSY);
 
-		//Read the VPHY register which has the PHY data
+		/*Read the VPHY register which has the PHY data*/
 		ksz_read16(dev, REG_VPHY_IND_DATA__2, &val);
 
 		if (reg == MII_BMSR && !lan937x_is_tx_phy_port(dev, addr)) {
@@ -509,67 +566,21 @@ static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
 	}
 	
 	return val;
+
+}
+static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
+{
+	struct ksz_device *dev = ds->priv;
+
+	return lan937x_t1_tx_phy_read(dev, addr, reg);
 }
 
 static int lan937x_phy_write16(struct dsa_switch *ds, int addr, int reg,
 			       u16 val)
 {
 	struct ksz_device *dev = ds->priv;
-	int ret,logical_port;
-	u16 data;
-	u16 temp,addr_base;
 
-	pr_info ("lan937x_phy_write16 start, addr:0x%x reg:0x%x,val:0x%x",addr,reg,val);
-
-	/* No real PHY after this. */
-	if (addr >= dev->phy_port_cnt)
-		return 0;
-
-	//Enable Indirect Access from SPI to the VPHY registers
-	ret = lan937x_enable_spi_indirect_access(dev);
-
-	if (ret)
-		return ret;
-
-	//Get the logical to physical PHY mapping
-	logical_port = dev->logical_port_map[addr];
-
-	/*Physical to logical mapping is not done here as the dts would
-	be updated correctly as per the SKU What we are getting as addr is logical port*/
-
-	if (logical_port == LOGICAL_PORT_INVALID)
-		return -EINVAL; /*addr given in the argument is invalid*/
-	
-	if (lan937x_is_tx_phy_port(dev, addr)) {
-		addr_base = REG_PORT_TX_PHY_CTRL_BASE;
-	} else {
-		addr_base = REG_PORT_T1_PHY_CTRL_BASE;
-	}
-
-	temp = dev->dev_ops->get_port_addr(logical_port, (addr_base + (reg << 2)));
-
-	ret = ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
-	if (ret)
-		return ret;
-
-	//Write the data to be written to theVPHY reg
-	ret = ksz_write16(dev, REG_VPHY_IND_DATA__2, val);
-	if (ret)
-		return ret;
-
-	/*Write the Write En and Busy bit*/
-	ret = ksz_write16(dev, REG_VPHY_IND_CTRL__2, (VPHY_IND_WRITE | VPHY_IND_BUSY));
-
-	if (ret)
-		return ret;
-
-	do {
-		ret = ksz_read16(dev, REG_VPHY_IND_CTRL__2, &data);	
-		if (ret)
-			return ret;
-	}while (data & VPHY_IND_BUSY);
-		
-	return 0;
+	return lan937x_t1_tx_phy_write(dev, addr, reg, val);
 }
 
 static void lan937x_get_strings(struct dsa_switch *ds, int port,
@@ -1611,9 +1622,18 @@ static void lan937x_phylink_mac_config(struct dsa_switch *ds, int port,
 static void lan937x_phylink_mac_an_restart(struct dsa_switch *ds, int port)
 {
 	struct ksz_device *dev = ds->priv;
+	int regval;
 	pr_info("lan937x_phylink_mac_an_restart: port:%d",port);
-	/*if (dev->ops->serdes_an_restart)
-		dev->ops->serdes_an_restart(dev, port);*/
+
+	/*Auto negotiation is not supported for T1 & MII ports*/
+	if(!lan937x_is_tx_phy_port(dev,port))
+		return;
+	
+	regval = lan937x_t1_tx_phy_read(dev, port, MII_BMCR);
+
+	regval |= BMCR_ANRESTART;
+
+	lan937x_t1_tx_phy_write(dev, port, MII_BMCR, regval);
 }
 static void lan937x_phylink_mac_link_down(struct dsa_switch *ds, int port,
 			       unsigned int mode,
@@ -1621,17 +1641,14 @@ static void lan937x_phylink_mac_link_down(struct dsa_switch *ds, int port,
 {
 	struct ksz_device *dev = ds->priv;
 	pr_info("lan937x_phylink_mac_link_down: port:%d",port);
-	if (mode == MLO_AN_PHY)
-		return;
 
-	if (mode == MLO_AN_FIXED) {
-		//b53_force_link(dev, port, false);
-		return;
-	}
+	/*If mode is not an in-band negotiation mode (as defined by phylink_autoneg_inband()), 
+	force the link down and disable any Energy Efficient Ethernet MAC configuration*/
 
-	/*if (phy_interface_mode_is_8023z(interface) &&
-	    dev->ops->serdes_link_set)
-		dev->ops->serdes_link_set(dev, port, mode, interface, false);*/
+	/*TODO:Force the link down, for power saving */
+
+	/*100BT_EEE_DIS & 1000BT_EEE_DIS are 1 by default EEE is disabled by default*/
+
 }
 
 
@@ -1646,16 +1663,18 @@ static void lan937x_phylink_mac_link_up(struct dsa_switch *ds, int port,
 
 	pr_info("lan937x_phylink_mac_link_up: port:%d,mode:%d,speed:%d,duplex:%d,tx_pause:%d,rx_pause:%d",port,mode,speed,duplex,tx_pause,rx_pause);
 	pr_info("interface:%s",phy_modes(interface));
+
+	/*TODO: speed, duplex, tx_pause and rx_pause indicate the finalised link settings, 
+	and should be used to configure the MAC block appropriately*/
+
+	/*TODO: If phy is non-NULL, configure Energy Efficient Ethernet by calling phy_init_eee() 
+	and perform appropriate MAC configuration for EEE*/
 	if (mode == MLO_AN_PHY)
 		return;
 
-	if (mode == MLO_AN_FIXED) {
-		//b53_force_link(dev, port, true);
+	if (mode == MLO_AN_FIXED)
 		return;
-	}
-	/*if (phy_interface_mode_is_8023z(interface) &&
-	    dev->ops->serdes_link_set)
-		dev->ops->serdes_link_set(dev, port, mode, interface, true);*/
+
 }
 
 static const struct dsa_switch_ops lan937x_switch_ops = {
@@ -1663,7 +1682,6 @@ static const struct dsa_switch_ops lan937x_switch_ops = {
 	.setup			= lan937x_setup,
 	.phy_read		= lan937x_phy_read16,
 	.phy_write		= lan937x_phy_write16,
-//	.adjust_link		= ksz_adjust_link,
 	.port_enable		= ksz_enable_port,
 	.port_disable		= ksz_disable_port,
 	.get_strings		= lan937x_get_strings,
