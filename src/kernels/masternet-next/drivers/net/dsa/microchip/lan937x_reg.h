@@ -1717,8 +1717,6 @@
 #define PORT_BROADCAST_STORM		BIT(1)
 #define PORT_JUMBO_PACKET		BIT(0)
 
-
-
 #define REG_PORT_MAC_CTRL_1		0x0401
 
 #define PORT_BACK_PRESSURE		(1 << 3)

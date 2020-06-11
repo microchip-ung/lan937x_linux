@@ -566,7 +566,6 @@ static int lan937x_t1_tx_phy_read (struct ksz_device *dev,int addr, int reg)
 	}
 	
 	return val;
-
 }
 static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
 {
@@ -1547,8 +1546,8 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 	pr_info("First supported %*pb",__ETHTOOL_LINK_MODE_MASK_NBITS, supported);
 	pr_info("First state->advertising %*pb",__ETHTOOL_LINK_MODE_MASK_NBITS, state->advertising);
 
-
-	if (phy_interface_mode_is_rgmii(state->interface) || lan937x_is_tx_phy_port(dev,port)) {
+	
+	if (phy_interface_mode_is_rgmii(state->interface) || (PHY_INTERFACE_MODE_SGMII == state->interface)){
 		phylink_set(mask, 1000baseT_Full);
 		phylink_set(mask, 1000baseT_Half);
 		phylink_set(mask, 10baseT_Half);
@@ -1560,11 +1559,33 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 		phylink_set(mask, Pause);
 		phylink_set(mask, Asym_Pause);
 	}
-
-	if (!phy_interface_mode_is_8023z(state->interface)) {
+	else if (lan937x_is_tx_phy_port(dev,port)) 
+	{
+		phylink_set(mask, 10baseT_Half);
+		phylink_set(mask, 10baseT_Full);
+		phylink_set(mask, 100baseT_Half);
 		phylink_set(mask, 100baseT_Full);
+		phylink_set(mask, Autoneg);
+		phylink_set_port_modes(mask);
+		phylink_set(mask, Pause);
+		phylink_set(mask, Asym_Pause);
+	} 
+	else{
+		/*This part of the code would be executed for T1 PHY*/
+		phylink_set(mask, 100baseT_Full);
+	/*	phylink_set(mask, Autoneg); */
+		phylink_set_port_modes(mask);
+	/*	phylink_set(mask, Pause);*/
+	/*	phylink_set(mask, Asym_Pause);*/
 	}
 
+	/*This part of the code would not be applicable i guess*/
+	/* if (!phy_interface_mode_is_8023z(state->interface)) {
+		phylink_set(mask, 100baseT_Full);
+		phylink_set_port_modes(mask);
+	} */
+
+	
 	bitmap_and(supported, supported, mask,
 		   __ETHTOOL_LINK_MODE_MASK_NBITS);
 	bitmap_and(state->advertising, state->advertising, mask,
@@ -1587,7 +1608,7 @@ static int lan937x_phylink_mac_link_state(struct dsa_switch *ds, int port,
 	     state->interface == PHY_INTERFACE_MODE_SGMII) &&
 	     dev->ops->serdes_link_state)
 		ret = dev->ops->serdes_link_state(dev, port, state);*/
-
+	/*TODO:This API is called only for INBAND PHY*/
 	return 0;
 }
 static void lan937x_phylink_mac_config(struct dsa_switch *ds, int port,
@@ -1606,11 +1627,15 @@ static void lan937x_phylink_mac_config(struct dsa_switch *ds, int port,
 	pr_info("lan937x_phylink_mac_config: advertising:%*pb,lp_advertising:%*pb",__ETHTOOL_LINK_MODE_MASK_NBITS,state->advertising,__ETHTOOL_LINK_MODE_MASK_NBITS,state->lp_advertising);
 
 	/*For mode configuration, valid state members are interface and advertising*/
-	if (mode == MLO_AN_PHY)	{
-		
-	}
+	if (mode == MLO_AN_PHY)	
+		return;
+	
 	if (mode == MLO_AN_FIXED) {
-		
+		/*TODO: For fixed PHY (RGMII ports), still not decided what to do*/
+	}
+
+	if (mode == MLO_AN_INBAND){
+		/*TODO: For SGMII connected PHYs*/
 	}
 
 	/*if ((phy_interface_mode_is_8023z(state->interface) ||

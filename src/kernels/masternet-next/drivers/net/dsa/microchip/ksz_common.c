@@ -426,8 +426,6 @@ int ksz_switch_register(struct ksz_device *dev,
 
 	dev->reset_gpio = devm_gpiod_get_optional(dev->dev, "reset",
 						  GPIOD_OUT_LOW);
-	
-		
 	if (IS_ERR(dev->reset_gpio))
 		return PTR_ERR(dev->reset_gpio);
 
