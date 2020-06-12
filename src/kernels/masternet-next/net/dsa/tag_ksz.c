@@ -241,10 +241,46 @@ static const struct dsa_device_ops ksz9893_netdev_ops = {
 DSA_TAG_DRIVER(ksz9893_netdev_ops);
 MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
 
+#define LAN937X_INGRESS_TAG_LEN		2
+
+#define LAN937X_TAIL_TAG_OVERRIDE	BIT(11)
+#define LAN937X_TAIL_TAG_LOOKUP		BIT(12)
+#define LAN937X_TAIL_TAG_VALID		BIT(13)
+
+
+static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
+				    struct net_device *dev)
+{
+	struct dsa_port *dp = dsa_slave_to_port(dev);
+	struct sk_buff *nskb;
+	u16 *tag;
+	u8 *addr;
+
+	nskb = ksz_common_xmit(skb, dev, LAN937X_INGRESS_TAG_LEN);
+	if (!nskb)
+		return NULL;
+
+	/* Tag encoding */
+	tag = skb_put(nskb, LAN937X_INGRESS_TAG_LEN);
+	addr = skb_mac_header(nskb);
+
+	*tag = BIT(dp->index);
+
+	if (is_link_local_ether_addr(addr))
+		*tag |= LAN937X_TAIL_TAG_OVERRIDE;
+
+	/*Tail tag valid bit - This bit should always be set by the CPU*/
+	*tag |= LAN937X_TAIL_TAG_VALID;
+
+	*tag = cpu_to_be16(*tag);
+
+	return nskb;
+}
+
 static const struct dsa_device_ops lan937x_netdev_ops = {
 	.name	= "lan937x",
 	.proto	= DSA_TAG_PROTO_LAN937X,
-	.xmit	= ksz9477_xmit,
+	.xmit	= lan937x_xmit,
 	.rcv	= ksz9477_rcv,
 	.overhead = KSZ9477_INGRESS_TAG_LEN,
 };
