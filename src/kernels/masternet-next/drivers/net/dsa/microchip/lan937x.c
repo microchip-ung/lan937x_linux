@@ -413,6 +413,7 @@ static int lan937x_t1_tx_phy_write (struct ksz_device *dev,int addr,int reg,u16 
 	int ret,logical_port;
 	u16 data;
 	u16 temp,addr_base;
+	unsigned int value;
 
 	pr_info ("lan937x_phy_write16 start, addr:0x%x reg:0x%x,val:0x%x",addr,reg,val);
 
@@ -458,11 +459,15 @@ static int lan937x_t1_tx_phy_write (struct ksz_device *dev,int addr,int reg,u16 
 	if (ret)
 		return ret;
 
-	do {
-		ret = ksz_read16(dev, REG_VPHY_IND_CTRL__2, &data);	
-		if (ret)
-			return ret;
-	}while (data & VPHY_IND_BUSY);
+	ret = regmap_read_poll_timeout(dev->regmap[1],
+				REG_VPHY_IND_CTRL__2,
+				value, !(value & VPHY_IND_BUSY), 10, 1000);
+
+	/* failed to write phy register. get out of loop */
+	if (ret) {
+		dev_dbg(dev->dev, "Failed to write phy register\n");
+		return;
+	}
 		
 	return 0;
 }
@@ -471,6 +476,7 @@ static int lan937x_t1_tx_phy_read (struct ksz_device *dev,int addr, int reg)
 	u16 val = 0xffff;
 	int ret,logical_port;
 	u16 temp,addr_base;
+	unsigned int value;
 
 	/* No real PHY after this. Simulate the PHY.
 	 * A fixed PHY can be setup in the device tree, but this function is
@@ -548,13 +554,16 @@ static int lan937x_t1_tx_phy_read (struct ksz_device *dev,int addr, int reg)
 
 		if (ret)
 			return ret;
-		do {
-			/*Keep read ing the register until the BUSY bit is cleared*/
-			ret = ksz_read16(dev, REG_VPHY_IND_CTRL__2, &val);	
+		
+		ret = regmap_read_poll_timeout(dev->regmap[1],
+					REG_VPHY_IND_CTRL__2,
+					value, !(value & VPHY_IND_BUSY), 10, 1000);
 
-			if(ret)
-				return ret;
-		}while (val & VPHY_IND_BUSY);
+		/* failed to read phy register. get out of loop */
+		if (ret) {
+			dev_dbg(dev->dev, "Failed to read phy register\n");
+			return;
+		}
 
 		/*Read the VPHY register which has the PHY data*/
 		ksz_read16(dev, REG_VPHY_IND_DATA__2, &val);
