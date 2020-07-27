@@ -2311,7 +2311,9 @@
 #define FR_MAX_SIZE		9000
 
 
+
 #define PORT_JUMBO_EN 			BIT(0)
+#define PORT_FR_CHK_LENGTH		BIT(2)
 #define PORT_MAX_FR_SIZE		0x404
 
 #define REG_PORT_CTRL_0			0x0020
