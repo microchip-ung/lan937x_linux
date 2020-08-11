@@ -66,6 +66,9 @@ enum {
 	MV_PCS_CSSR1_SPD2_2500	= 0x0004,
 	MV_PCS_CSSR1_SPD2_10000	= 0x0000,
 
+	/* Temperature read register (88E2110 only) */
+	MV_PCS_TEMP		= 0x8042,
+
 	/* These registers appear at 0x800X and 0xa00X - the 0xa00X control
 	 * registers appear to set themselves to the 0x800X when AN is
 	 * restarted, but status registers appear readable from either.
@@ -77,6 +80,9 @@ enum {
 	MV_V2_PORT_CTRL		= 0xf001,
 	MV_V2_PORT_CTRL_SWRST	= BIT(15),
 	MV_V2_PORT_CTRL_PWRDOWN = BIT(11),
+	MV_V2_PORT_MAC_TYPE_MASK = 0x7,
+	MV_V2_PORT_MAC_TYPE_RATE_MATCH = 0x6,
+	/* Temperature control/read registers (88X3310 only) */
 	MV_V2_TEMP_CTRL		= 0xf08a,
 	MV_V2_TEMP_CTRL_MASK	= 0xc000,
 	MV_V2_TEMP_CTRL_SAMPLE	= 0x0000,
@@ -87,6 +93,7 @@ enum {
 
 struct mv3310_priv {
 	u32 firmware_ver;
+	bool rate_match;
 
 	struct device *hwmon_dev;
 	char *hwmon_name;
@@ -104,6 +111,24 @@ static umode_t mv3310_hwmon_is_visible(const void *data,
 	return 0;
 }
 
+static int mv3310_hwmon_read_temp_reg(struct phy_device *phydev)
+{
+	return phy_read_mmd(phydev, MDIO_MMD_VEND2, MV_V2_TEMP);
+}
+
+static int mv2110_hwmon_read_temp_reg(struct phy_device *phydev)
+{
+	return phy_read_mmd(phydev, MDIO_MMD_PCS, MV_PCS_TEMP);
+}
+
+static int mv10g_hwmon_read_temp_reg(struct phy_device *phydev)
+{
+	if (phydev->drv->phy_id == MARVELL_PHY_ID_88X3310)
+		return mv3310_hwmon_read_temp_reg(phydev);
+	else /* MARVELL_PHY_ID_88E2110 */
+		return mv2110_hwmon_read_temp_reg(phydev);
+}
+
 static int mv3310_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 			     u32 attr, int channel, long *value)
 {
@@ -116,7 +141,7 @@ static int mv3310_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 	}
 
 	if (type == hwmon_temp && attr == hwmon_temp_input) {
-		temp = phy_read_mmd(phydev, MDIO_MMD_VEND2, MV_V2_TEMP);
+		temp = mv10g_hwmon_read_temp_reg(phydev);
 		if (temp < 0)
 			return temp;
 
@@ -168,6 +193,9 @@ static int mv3310_hwmon_config(struct phy_device *phydev, bool enable)
 {
 	u16 val;
 	int ret;
+
+	if (phydev->drv->phy_id != MARVELL_PHY_ID_88X3310)
+		return 0;
 
 	ret = phy_write_mmd(phydev, MDIO_MMD_VEND2, MV_V2_TEMP,
 			    MV_V2_TEMP_UNKNOWN);
@@ -433,7 +461,9 @@ static bool mv3310_has_pma_ngbaset_quirk(struct phy_device *phydev)
 
 static int mv3310_config_init(struct phy_device *phydev)
 {
+	struct mv3310_priv *priv = dev_get_drvdata(&phydev->mdio.dev);
 	int err;
+	int val;
 
 	/* Check that the PHY interface type is compatible */
 	if (phydev->interface != PHY_INTERFACE_MODE_SGMII &&
@@ -449,6 +479,12 @@ static int mv3310_config_init(struct phy_device *phydev)
 	err = mv3310_power_up(phydev);
 	if (err)
 		return err;
+
+	val = phy_read_mmd(phydev, MDIO_MMD_VEND2, MV_V2_PORT_CTRL);
+	if (val < 0)
+		return val;
+	priv->rate_match = ((val & MV_V2_PORT_MAC_TYPE_MASK) ==
+			MV_V2_PORT_MAC_TYPE_RATE_MATCH);
 
 	/* Enable EDPD mode - saving 600mW */
 	return mv3310_set_edpd(phydev, ETHTOOL_PHY_EDPD_DFLT_TX_MSECS);
@@ -556,6 +592,17 @@ static int mv3310_aneg_done(struct phy_device *phydev)
 
 static void mv3310_update_interface(struct phy_device *phydev)
 {
+	struct mv3310_priv *priv = dev_get_drvdata(&phydev->mdio.dev);
+
+	/* In "XFI with Rate Matching" mode the PHY interface is fixed at
+	 * 10Gb. The PHY adapts the rate to actual wire speed with help of
+	 * internal 16KB buffer.
+	 */
+	if (priv->rate_match) {
+		phydev->interface = PHY_INTERFACE_MODE_10GBASER;
+		return;
+	}
+
 	if ((phydev->interface == PHY_INTERFACE_MODE_SGMII ||
 	     phydev->interface == PHY_INTERFACE_MODE_2500BASEX ||
 	     phydev->interface == PHY_INTERFACE_MODE_10GBASER) &&

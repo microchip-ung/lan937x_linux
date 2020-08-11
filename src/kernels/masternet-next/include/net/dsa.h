@@ -44,7 +44,8 @@ struct phylink_link_state;
 #define DSA_TAG_PROTO_KSZ8795_VALUE		14
 #define DSA_TAG_PROTO_OCELOT_VALUE		15
 #define DSA_TAG_PROTO_AR9331_VALUE		16
-#define DSA_TAG_PROTO_LAN937X_VALUE		17
+#define DSA_TAG_PROTO_RTL4_A_VALUE		17
+#define DSA_TAG_PROTO_LAN937X_VALUE		18
 
 enum dsa_tag_protocol {
 	DSA_TAG_PROTO_NONE		= DSA_TAG_PROTO_NONE_VALUE,
@@ -64,7 +65,8 @@ enum dsa_tag_protocol {
 	DSA_TAG_PROTO_KSZ8795		= DSA_TAG_PROTO_KSZ8795_VALUE,
 	DSA_TAG_PROTO_OCELOT		= DSA_TAG_PROTO_OCELOT_VALUE,
 	DSA_TAG_PROTO_AR9331		= DSA_TAG_PROTO_AR9331_VALUE,
-	DSA_TAG_PROTO_LAN937X		= DSA_TAG_PROTO_LAN937X_VALUE,
+	DSA_TAG_PROTO_RTL4_A		= DSA_TAG_PROTO_RTL4_A_VALUE,
+	DSA_TAG_PROTO_LAN937X = DSA_TAG_PROTO_LAN937X_VALUE,
 };
 
 struct packet_type;
@@ -84,6 +86,16 @@ struct dsa_device_ops {
 	unsigned int overhead;
 	const char *name;
 	enum dsa_tag_protocol proto;
+};
+
+/* This structure defines the control interfaces that are overlayed by the
+ * DSA layer on top of the DSA CPU/management net_device instance. This is
+ * used by the core net_device layer while calling various net_device_ops
+ * function pointers.
+ */
+struct dsa_netdevice_ops {
+	int (*ndo_do_ioctl)(struct net_device *dev, struct ifreq *ifr,
+			    int cmd);
 };
 
 #define DSA_TAG_DRIVER_ALIAS "dsa_tag-"
@@ -146,7 +158,7 @@ struct dsa_mall_mirror_tc_entry {
 
 /* TC port policer entry */
 struct dsa_mall_policer_tc_entry {
-	s64 burst;
+	u32 burst;
 	u64 rate_bytes_per_sec;
 };
 
@@ -217,7 +229,7 @@ struct dsa_port {
 	/*
 	 * Original copy of the master netdev net_device_ops
 	 */
-	const struct net_device_ops *orig_ndo_ops;
+	const struct dsa_netdevice_ops *netdev_ops;
 
 	bool setup;
 };
@@ -283,6 +295,13 @@ struct dsa_switch {
 	 * settings on ports if not hardware-supported
 	 */
 	bool			vlan_filtering_is_global;
+
+	/* Pass .port_vlan_add and .port_vlan_del to drivers even for bridges
+	 * that have vlan_filtering=0. All drivers should ideally set this (and
+	 * then the option would get removed), but it is unknown whether this
+	 * would break things or not.
+	 */
+	bool			configure_vlan_while_not_filtering;
 
 	/* In case vlan_filtering_is_global is set, the VLAN awareness state
 	 * should be retrieved from here and not from the per-port settings.
@@ -576,10 +595,12 @@ struct dsa_switch_ops {
 	/*
 	 * Cross-chip operations
 	 */
-	int	(*crosschip_bridge_join)(struct dsa_switch *ds, int sw_index,
-					 int port, struct net_device *br);
-	void	(*crosschip_bridge_leave)(struct dsa_switch *ds, int sw_index,
-					  int port, struct net_device *br);
+	int	(*crosschip_bridge_join)(struct dsa_switch *ds, int tree_index,
+					 int sw_index, int port,
+					 struct net_device *br);
+	void	(*crosschip_bridge_leave)(struct dsa_switch *ds, int tree_index,
+					  int sw_index, int port,
+					  struct net_device *br);
 
 	/*
 	 * PTP functionality
@@ -603,7 +624,7 @@ struct dsa_switch_ops {
 	 * MTU change functionality. Switches can also adjust their MRU through
 	 * this method. By MTU, one understands the SDU (L2 payload) length.
 	 * If the switch needs to account for the DSA tag on the CPU port, this
-	 * method needs to to do so privately.
+	 * method needs to do so privately.
 	 */
 	int	(*port_change_mtu)(struct dsa_switch *ds, int port,
 				   int new_mtu);
@@ -639,6 +660,7 @@ void dsa_devlink_resource_occ_get_register(struct dsa_switch *ds,
 					   void *occ_get_priv);
 void dsa_devlink_resource_occ_get_unregister(struct dsa_switch *ds,
 					     u64 resource_id);
+struct dsa_port *dsa_port_from_netdev(struct net_device *netdev);
 
 struct dsa_devlink_priv {
 	struct dsa_switch *ds;
@@ -652,7 +674,7 @@ struct dsa_switch_driver {
 struct net_device *dsa_dev_to_net_device(struct device *dev);
 
 /* Keep inline for faster access in hot path */
-static inline bool netdev_uses_dsa(struct net_device *dev)
+static inline bool netdev_uses_dsa(const struct net_device *dev)
 {
 #if IS_ENABLED(CONFIG_NET_DSA)
 	return dev->dsa_ptr && dev->dsa_ptr->rcv;
@@ -669,8 +691,45 @@ static inline bool dsa_can_decode(const struct sk_buff *skb,
 	return false;
 }
 
+#if IS_ENABLED(CONFIG_NET_DSA)
+static inline int __dsa_netdevice_ops_check(struct net_device *dev)
+{
+	int err = -EOPNOTSUPP;
+
+	if (!dev->dsa_ptr)
+		return err;
+
+	if (!dev->dsa_ptr->netdev_ops)
+		return err;
+
+	return 0;
+}
+
+static inline int dsa_ndo_do_ioctl(struct net_device *dev, struct ifreq *ifr,
+				   int cmd)
+{
+	const struct dsa_netdevice_ops *ops;
+	int err;
+
+	err = __dsa_netdevice_ops_check(dev);
+	if (err)
+		return err;
+
+	ops = dev->dsa_ptr->netdev_ops;
+
+	return ops->ndo_do_ioctl(dev, ifr, cmd);
+}
+#else
+static inline int dsa_ndo_do_ioctl(struct net_device *dev, struct ifreq *ifr,
+				   int cmd)
+{
+	return -EOPNOTSUPP;
+}
+#endif
+
 void dsa_unregister_switch(struct dsa_switch *ds);
 int dsa_register_switch(struct dsa_switch *ds);
+struct dsa_switch *dsa_switch_find(int tree_index, int sw_index);
 #ifdef CONFIG_PM_SLEEP
 int dsa_switch_suspend(struct dsa_switch *ds);
 int dsa_switch_resume(struct dsa_switch *ds);

@@ -147,8 +147,7 @@
 	LE_SF(DPCSTX0_DPCSTX_TX_CNTL, DPCS_TX_DATA_SWAP, mask_sh),\
 	LE_SF(DPCSTX0_DPCSTX_TX_CNTL, DPCS_TX_DATA_ORDER_INVERT, mask_sh),\
 	LE_SF(DPCSTX0_DPCSTX_TX_CNTL, DPCS_TX_FIFO_EN, mask_sh),\
-	LE_SF(DPCSTX0_DPCSTX_TX_CNTL, DPCS_TX_FIFO_RD_START_DELAY, mask_sh),\
-	LE_SF(DPCSTX0_DPCSTX_DEBUG_CONFIG, DPCS_DBG_CBUS_DIS, mask_sh)
+	LE_SF(DPCSTX0_DPCSTX_TX_CNTL, DPCS_TX_FIFO_RD_START_DELAY, mask_sh)
 
 #define DPCS_DCN2_MASK_SH_LIST(mask_sh)\
 	DPCS_MASK_SH_LIST(mask_sh),\
@@ -274,6 +273,10 @@ struct mpll_cfg {
 	bool dp_tx1_vergdrv_byp;
 	bool dp_tx2_vergdrv_byp;
 	bool dp_tx3_vergdrv_byp;
+#if defined(CONFIG_DRM_AMD_DC_DCN3_0)
+	uint32_t tx_peaking_lvl;
+	uint32_t ctr_reqs_pll;
+#endif
 
 
 };
@@ -342,6 +345,10 @@ void dcn20_link_encoder_enable_dp_output(
 	struct link_encoder *enc,
 	const struct dc_link_settings *link_settings,
 	enum clock_source_id clock_source);
+
+bool dcn20_link_encoder_is_in_alt_mode(struct link_encoder *enc);
+void dcn20_link_encoder_get_max_link_cap(struct link_encoder *enc,
+	struct dc_link_settings *link_settings);
 
 void dcn20_link_encoder_construct(
 	struct dcn20_link_encoder *enc20,

@@ -284,7 +284,7 @@ static int l2cap_sock_listen(struct socket *sock, int backlog)
 	case L2CAP_MODE_STREAMING:
 		if (!disable_ertm)
 			break;
-		/* fall through */
+		fallthrough;
 	default:
 		err = -EOPNOTSUPP;
 		goto done;
@@ -703,7 +703,7 @@ static bool l2cap_valid_mtu(struct l2cap_chan *chan, u16 mtu)
 }
 
 static int l2cap_sock_setsockopt_old(struct socket *sock, int optname,
-				     char __user *optval, unsigned int optlen)
+				     sockptr_t optval, unsigned int optlen)
 {
 	struct sock *sk = sock->sk;
 	struct l2cap_chan *chan = l2cap_pi(sk)->chan;
@@ -736,7 +736,7 @@ static int l2cap_sock_setsockopt_old(struct socket *sock, int optname,
 		opts.txwin_size = chan->tx_win;
 
 		len = min_t(unsigned int, sizeof(opts), optlen);
-		if (copy_from_user((char *) &opts, optval, len)) {
+		if (copy_from_sockptr(&opts, optval, len)) {
 			err = -EFAULT;
 			break;
 		}
@@ -760,7 +760,7 @@ static int l2cap_sock_setsockopt_old(struct socket *sock, int optname,
 		case L2CAP_MODE_STREAMING:
 			if (!disable_ertm)
 				break;
-			/* fall through */
+			fallthrough;
 		default:
 			err = -EINVAL;
 			break;
@@ -782,7 +782,7 @@ static int l2cap_sock_setsockopt_old(struct socket *sock, int optname,
 		break;
 
 	case L2CAP_LM:
-		if (get_user(opt, (u32 __user *) optval)) {
+		if (copy_from_sockptr(&opt, optval, sizeof(u32))) {
 			err = -EFAULT;
 			break;
 		}
@@ -859,7 +859,7 @@ static int l2cap_set_mode(struct l2cap_chan *chan, u8 mode)
 }
 
 static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
-				 char __user *optval, unsigned int optlen)
+				 sockptr_t optval, unsigned int optlen)
 {
 	struct sock *sk = sock->sk;
 	struct l2cap_chan *chan = l2cap_pi(sk)->chan;
@@ -891,7 +891,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 		sec.level = BT_SECURITY_LOW;
 
 		len = min_t(unsigned int, sizeof(sec), optlen);
-		if (copy_from_user((char *) &sec, optval, len)) {
+		if (copy_from_sockptr(&sec, optval, len)) {
 			err = -EFAULT;
 			break;
 		}
@@ -939,7 +939,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		if (get_user(opt, (u32 __user *) optval)) {
+		if (copy_from_sockptr(&opt, optval, sizeof(u32))) {
 			err = -EFAULT;
 			break;
 		}
@@ -954,7 +954,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 		break;
 
 	case BT_FLUSHABLE:
-		if (get_user(opt, (u32 __user *) optval)) {
+		if (copy_from_sockptr(&opt, optval, sizeof(u32))) {
 			err = -EFAULT;
 			break;
 		}
@@ -990,7 +990,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 		pwr.force_active = BT_POWER_FORCE_ACTIVE_ON;
 
 		len = min_t(unsigned int, sizeof(pwr), optlen);
-		if (copy_from_user((char *) &pwr, optval, len)) {
+		if (copy_from_sockptr(&pwr, optval, len)) {
 			err = -EFAULT;
 			break;
 		}
@@ -1002,7 +1002,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 		break;
 
 	case BT_CHANNEL_POLICY:
-		if (get_user(opt, (u32 __user *) optval)) {
+		if (copy_from_sockptr(&opt, optval, sizeof(u32))) {
 			err = -EFAULT;
 			break;
 		}
@@ -1050,7 +1050,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		if (get_user(opt, (u16 __user *) optval)) {
+		if (copy_from_sockptr(&opt, optval, sizeof(u16))) {
 			err = -EFAULT;
 			break;
 		}
@@ -1081,7 +1081,7 @@ static int l2cap_sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		if (get_user(opt, (u8 __user *) optval)) {
+		if (copy_from_sockptr(&opt, optval, sizeof(u8))) {
 			err = -EFAULT;
 			break;
 		}
@@ -1271,14 +1271,21 @@ static int l2cap_sock_shutdown(struct socket *sock, int how)
 	struct l2cap_conn *conn;
 	int err = 0;
 
-	BT_DBG("sock %p, sk %p", sock, sk);
+	BT_DBG("sock %p, sk %p, how %d", sock, sk, how);
+
+	/* 'how' parameter is mapped to sk_shutdown as follows:
+	 * SHUT_RD   (0) --> RCV_SHUTDOWN  (1)
+	 * SHUT_WR   (1) --> SEND_SHUTDOWN (2)
+	 * SHUT_RDWR (2) --> SHUTDOWN_MASK (3)
+	 */
+	how++;
 
 	if (!sk)
 		return 0;
 
 	lock_sock(sk);
 
-	if (sk->sk_shutdown)
+	if ((sk->sk_shutdown & how) == how)
 		goto shutdown_already;
 
 	BT_DBG("Handling sock shutdown");
@@ -1301,11 +1308,20 @@ static int l2cap_sock_shutdown(struct socket *sock, int how)
 		 * has already been actioned to close the L2CAP
 		 * link such as by l2cap_disconnection_req().
 		 */
-		if (sk->sk_shutdown)
-			goto has_shutdown;
+		if ((sk->sk_shutdown & how) == how)
+			goto shutdown_matched;
 	}
 
-	sk->sk_shutdown = SHUTDOWN_MASK;
+	/* Try setting the RCV_SHUTDOWN bit, return early if SEND_SHUTDOWN
+	 * is already set
+	 */
+	if ((how & RCV_SHUTDOWN) && !(sk->sk_shutdown & RCV_SHUTDOWN)) {
+		sk->sk_shutdown |= RCV_SHUTDOWN;
+		if ((sk->sk_shutdown & how) == how)
+			goto shutdown_matched;
+	}
+
+	sk->sk_shutdown |= SEND_SHUTDOWN;
 	release_sock(sk);
 
 	l2cap_chan_lock(chan);
@@ -1335,7 +1351,7 @@ static int l2cap_sock_shutdown(struct socket *sock, int how)
 		err = bt_sock_wait_state(sk, BT_CLOSED,
 					 sk->sk_lingertime);
 
-has_shutdown:
+shutdown_matched:
 	l2cap_chan_put(chan);
 	sock_put(sk);
 
@@ -1363,7 +1379,7 @@ static int l2cap_sock_release(struct socket *sock)
 
 	bt_sock_unlink(&l2cap_sk_list, sk);
 
-	err = l2cap_sock_shutdown(sock, 2);
+	err = l2cap_sock_shutdown(sock, SHUT_RDWR);
 	chan = l2cap_pi(sk)->chan;
 
 	l2cap_chan_hold(chan);

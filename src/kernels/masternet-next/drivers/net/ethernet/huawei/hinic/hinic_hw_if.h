@@ -12,6 +12,8 @@
 #include <linux/types.h>
 #include <asm/byteorder.h>
 
+#define HINIC_PCIE_LINK_DOWN					0xFFFFFFFF
+
 #define HINIC_DMA_ATTR_ST_SHIFT                                 0
 #define HINIC_DMA_ATTR_AT_SHIFT                                 8
 #define HINIC_DMA_ATTR_PH_SHIFT                                 10
@@ -55,13 +57,15 @@
 #define HINIC_FA1_IRQS_PER_FUNC_SHIFT                           20
 #define HINIC_FA1_DMA_ATTR_PER_FUNC_SHIFT                       24
 /* reserved members - off 27 */
-#define HINIC_FA1_INIT_STATUS_SHIFT                             30
+#define HINIC_FA1_MGMT_INIT_STATUS_SHIFT			30
+#define HINIC_FA1_PF_INIT_STATUS_SHIFT				31
 
 #define HINIC_FA1_AEQS_PER_FUNC_MASK                            0x3
 #define HINIC_FA1_CEQS_PER_FUNC_MASK                            0x7
 #define HINIC_FA1_IRQS_PER_FUNC_MASK                            0xF
 #define HINIC_FA1_DMA_ATTR_PER_FUNC_MASK                        0x7
-#define HINIC_FA1_INIT_STATUS_MASK                              0x1
+#define HINIC_FA1_MGMT_INIT_STATUS_MASK                         0x1
+#define HINIC_FA1_PF_INIT_STATUS_MASK				0x1
 
 #define HINIC_FA1_GET(val, member)                              \
 	(((val) >> HINIC_FA1_##member##_SHIFT) & HINIC_FA1_##member##_MASK)
@@ -190,7 +194,7 @@ enum hinic_mod_type {
 	HINIC_MOD_COMM  = 0,    /* HW communication module */
 	HINIC_MOD_L2NIC = 1,    /* L2NIC module */
 	HINIC_MOD_CFGM  = 7,    /* Configuration module */
-
+	HINIC_MOD_HILINK = 14,  /* Hilink module */
 	HINIC_MOD_MAX   = 15
 };
 
@@ -247,13 +251,17 @@ struct hinic_hwif {
 
 static inline u32 hinic_hwif_read_reg(struct hinic_hwif *hwif, u32 reg)
 {
-	return be32_to_cpu(readl(hwif->cfg_regs_bar + reg));
+	u32 out = readl(hwif->cfg_regs_bar + reg);
+
+	return be32_to_cpu(*(__be32 *)&out);
 }
 
 static inline void hinic_hwif_write_reg(struct hinic_hwif *hwif, u32 reg,
 					u32 val)
 {
-	writel(cpu_to_be32(val), hwif->cfg_regs_bar + reg);
+	__be32 in = cpu_to_be32(val);
+
+	writel(*(u32 *)&in, hwif->cfg_regs_bar + reg);
 }
 
 int hinic_msix_attr_set(struct hinic_hwif *hwif, u16 msix_index,

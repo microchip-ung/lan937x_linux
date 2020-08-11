@@ -161,9 +161,11 @@ static int tipc_udp_xmit(struct net *net, struct sk_buff *skb,
 			 struct udp_bearer *ub, struct udp_media_addr *src,
 			 struct udp_media_addr *dst, struct dst_cache *cache)
 {
-	struct dst_entry *ndst = dst_cache_get(cache);
+	struct dst_entry *ndst;
 	int ttl, err = 0;
 
+	local_bh_disable();
+	ndst = dst_cache_get(cache);
 	if (dst->proto == htons(ETH_P_IP)) {
 		struct rtable *rt = (struct rtable *)ndst;
 
@@ -210,9 +212,11 @@ static int tipc_udp_xmit(struct net *net, struct sk_buff *skb,
 					   src->port, dst->port, false);
 #endif
 	}
+	local_bh_enable();
 	return err;
 
 tx_error:
+	local_bh_enable();
 	kfree_skb(skb);
 	return err;
 }
@@ -561,7 +565,7 @@ msg_full:
 
 /**
  * tipc_parse_udp_addr - build udp media address from netlink data
- * @nlattr:	netlink attribute containing sockaddr storage aligned address
+ * @nla:	netlink attribute containing sockaddr storage aligned address
  * @addr:	tipc media address to fill with address, port and protocol type
  * @scope_id:	IPv6 scope id pointer, not NULL indicates it's required
  */
@@ -734,6 +738,13 @@ static int tipc_udp_enable(struct net *net, struct tipc_bearer *b,
 		b->mtu = b->media->mtu;
 #if IS_ENABLED(CONFIG_IPV6)
 	} else if (local.proto == htons(ETH_P_IPV6)) {
+		struct net_device *dev;
+
+		dev = ipv6_dev_find(net, &local.ipv6);
+		if (!dev) {
+			err = -ENODEV;
+			goto err;
+		}
 		udp_conf.family = AF_INET6;
 		udp_conf.use_udp6_tx_checksums = true;
 		udp_conf.use_udp6_rx_checksums = true;
@@ -741,6 +752,7 @@ static int tipc_udp_enable(struct net *net, struct tipc_bearer *b,
 			udp_conf.local_ip6 = in6addr_any;
 		else
 			udp_conf.local_ip6 = local.ipv6;
+		ub->ifindex = dev->ifindex;
 		b->mtu = 1280;
 #endif
 	} else {

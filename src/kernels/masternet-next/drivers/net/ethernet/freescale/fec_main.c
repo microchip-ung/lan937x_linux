@@ -75,8 +75,6 @@ static void fec_enet_itr_coal_init(struct net_device *ndev);
 
 #define DRIVER_NAME	"fec"
 
-#define FEC_ENET_GET_QUQUE(_x) ((_x == 0) ? 1 : ((_x == 1) ? 2 : 0))
-
 /* Pause frame feild and FIFO threshold */
 #define FEC_ENET_FCE	(1 << 5)
 #define FEC_ENET_RSEM_V	0x84
@@ -88,8 +86,6 @@ static void fec_enet_itr_coal_init(struct net_device *ndev);
 
 struct fec_devinfo {
 	u32 quirks;
-	u8 stop_gpr_reg;
-	u8 stop_gpr_bit;
 };
 
 static const struct fec_devinfo fec_imx25_info = {
@@ -112,8 +108,6 @@ static const struct fec_devinfo fec_imx6q_info = {
 		  FEC_QUIRK_HAS_BUFDESC_EX | FEC_QUIRK_HAS_CSUM |
 		  FEC_QUIRK_HAS_VLAN | FEC_QUIRK_ERR006358 |
 		  FEC_QUIRK_HAS_RACC,
-	.stop_gpr_reg = 0x34,
-	.stop_gpr_bit = 27,
 };
 
 static const struct fec_devinfo fec_mvf600_info = {
@@ -714,8 +708,7 @@ static int fec_enet_txq_submit_tso(struct fec_enet_priv_tx_q *txq,
 				   struct net_device *ndev)
 {
 	struct fec_enet_private *fep = netdev_priv(ndev);
-	int hdr_len = skb_transport_offset(skb) + tcp_hdrlen(skb);
-	int total_len, data_left;
+	int hdr_len, total_len, data_left;
 	struct bufdesc *bdp = txq->bd.cur;
 	struct tso_t tso;
 	unsigned int index = 0;
@@ -735,7 +728,7 @@ static int fec_enet_txq_submit_tso(struct fec_enet_priv_tx_q *txq,
 	}
 
 	/* Initialize the TSO handler, and prepare the first payload */
-	tso_start(skb, &tso);
+	hdr_len = tso_start(skb, &tso);
 
 	total_len = skb->len - hdr_len;
 	while (total_len > 0) {
@@ -1252,8 +1245,6 @@ fec_enet_tx_queue(struct net_device *ndev, u16 queue_id)
 
 	fep = netdev_priv(ndev);
 
-	queue_id = FEC_ENET_GET_QUQUE(queue_id);
-
 	txq = fep->tx_queue[queue_id];
 	/* get next bdp of dirty_tx */
 	nq = netdev_get_tx_queue(ndev, queue_id);
@@ -1302,8 +1293,13 @@ fec_enet_tx_queue(struct net_device *ndev, u16 queue_id)
 			ndev->stats.tx_bytes += skb->len;
 		}
 
-		if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_IN_PROGRESS) &&
-			fep->bufdesc_ex) {
+		/* NOTE: SKBTX_IN_PROGRESS being set does not imply it's we who
+		 * are to time stamp the packet, so we still need to check time
+		 * stamping enabled flag.
+		 */
+		if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_IN_PROGRESS &&
+			     fep->hwts_tx_en) &&
+		    fep->bufdesc_ex) {
 			struct skb_shared_hwtstamps shhwtstamps;
 			struct bufdesc_ex *ebdp = (struct bufdesc_ex *)bdp;
 
@@ -1344,17 +1340,14 @@ skb_done:
 		writel(0, txq->bd.reg_desc_active);
 }
 
-static void
-fec_enet_tx(struct net_device *ndev)
+static void fec_enet_tx(struct net_device *ndev)
 {
 	struct fec_enet_private *fep = netdev_priv(ndev);
-	u16 queue_id;
-	/* First process class A queue, then Class B and Best Effort queue */
-	for_each_set_bit(queue_id, &fep->work_tx, FEC_ENET_MAX_TX_QS) {
-		clear_bit(queue_id, &fep->work_tx);
-		fec_enet_tx_queue(ndev, queue_id);
-	}
-	return;
+	int i;
+
+	/* Make sure that AVB queues are processed first. */
+	for (i = fep->num_tx_queues - 1; i >= 0; i--)
+		fec_enet_tx_queue(ndev, i);
 }
 
 static int
@@ -1430,7 +1423,6 @@ fec_enet_rx_queue(struct net_device *ndev, int budget, u16 queue_id)
 #ifdef CONFIG_M532x
 	flush_cache_all();
 #endif
-	queue_id = FEC_ENET_GET_QUQUE(queue_id);
 	rxq = fep->rx_queue[queue_id];
 
 	/* First, grab all of the stats for the incoming packet.
@@ -1554,6 +1546,7 @@ fec_enet_rx_queue(struct net_device *ndev, int budget, u16 queue_id)
 					       htons(ETH_P_8021Q),
 					       vlan_tag);
 
+		skb_record_rx_queue(skb, queue_id);
 		napi_gro_receive(&fep->napi, skb);
 
 		if (is_copybreak) {
@@ -1599,57 +1592,21 @@ rx_processing_done:
 	return pkt_received;
 }
 
-static int
-fec_enet_rx(struct net_device *ndev, int budget)
+static int fec_enet_rx(struct net_device *ndev, int budget)
 {
-	int     pkt_received = 0;
-	u16	queue_id;
 	struct fec_enet_private *fep = netdev_priv(ndev);
+	int i, done = 0;
 
-	for_each_set_bit(queue_id, &fep->work_rx, FEC_ENET_MAX_RX_QS) {
-		int ret;
+	/* Make sure that AVB queues are processed first. */
+	for (i = fep->num_rx_queues - 1; i >= 0; i--)
+		done += fec_enet_rx_queue(ndev, budget - done, i);
 
-		ret = fec_enet_rx_queue(ndev,
-					budget - pkt_received, queue_id);
-
-		if (ret < budget - pkt_received)
-			clear_bit(queue_id, &fep->work_rx);
-
-		pkt_received += ret;
-	}
-	return pkt_received;
+	return done;
 }
 
-static bool
-fec_enet_collect_events(struct fec_enet_private *fep, uint int_events)
+static bool fec_enet_collect_events(struct fec_enet_private *fep)
 {
-	if (int_events == 0)
-		return false;
-
-	if (int_events & FEC_ENET_RXF_0)
-		fep->work_rx |= (1 << 2);
-	if (int_events & FEC_ENET_RXF_1)
-		fep->work_rx |= (1 << 0);
-	if (int_events & FEC_ENET_RXF_2)
-		fep->work_rx |= (1 << 1);
-
-	if (int_events & FEC_ENET_TXF_0)
-		fep->work_tx |= (1 << 2);
-	if (int_events & FEC_ENET_TXF_1)
-		fep->work_tx |= (1 << 0);
-	if (int_events & FEC_ENET_TXF_2)
-		fep->work_tx |= (1 << 1);
-
-	return true;
-}
-
-static irqreturn_t
-fec_enet_interrupt(int irq, void *dev_id)
-{
-	struct net_device *ndev = dev_id;
-	struct fec_enet_private *fep = netdev_priv(ndev);
 	uint int_events;
-	irqreturn_t ret = IRQ_NONE;
 
 	int_events = readl(fep->hwp + FEC_IEVENT);
 
@@ -1657,9 +1614,18 @@ fec_enet_interrupt(int irq, void *dev_id)
 	int_events &= ~FEC_ENET_MII;
 
 	writel(int_events, fep->hwp + FEC_IEVENT);
-	fec_enet_collect_events(fep, int_events);
 
-	if ((fep->work_tx || fep->work_rx) && fep->link) {
+	return int_events != 0;
+}
+
+static irqreturn_t
+fec_enet_interrupt(int irq, void *dev_id)
+{
+	struct net_device *ndev = dev_id;
+	struct fec_enet_private *fep = netdev_priv(ndev);
+	irqreturn_t ret = IRQ_NONE;
+
+	if (fec_enet_collect_events(fep) && fep->link) {
 		ret = IRQ_HANDLED;
 
 		if (napi_schedule_prep(&fep->napi)) {
@@ -1676,17 +1642,19 @@ static int fec_enet_rx_napi(struct napi_struct *napi, int budget)
 {
 	struct net_device *ndev = napi->dev;
 	struct fec_enet_private *fep = netdev_priv(ndev);
-	int pkts;
+	int done = 0;
 
-	pkts = fec_enet_rx(ndev, budget);
+	do {
+		done += fec_enet_rx(ndev, budget - done);
+		fec_enet_tx(ndev);
+	} while ((done < budget) && fec_enet_collect_events(fep));
 
-	fec_enet_tx(ndev);
-
-	if (pkts < budget) {
-		napi_complete_done(napi, pkts);
+	if (done < budget) {
+		napi_complete_done(napi, done);
 		writel(FEC_DEFAULT_IMASK, fep->hwp + FEC_IMASK);
 	}
-	return pkts;
+
+	return done;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -1985,8 +1953,12 @@ static int fec_enet_clk_enable(struct net_device *ndev, bool enable)
 	return 0;
 
 failed_clk_ref:
-	if (fep->clk_ref)
-		clk_disable_unprepare(fep->clk_ref);
+	if (fep->clk_ptp) {
+		mutex_lock(&fep->ptp_clk_mutex);
+		clk_disable_unprepare(fep->clk_ptp);
+		fep->ptp_clk_on = false;
+		mutex_unlock(&fep->ptp_clk_mutex);
+	}
 failed_clk_ptp:
 	if (fep->clk_enet_out)
 		clk_disable_unprepare(fep->clk_enet_out);
@@ -2755,10 +2727,16 @@ static int fec_enet_ioctl(struct net_device *ndev, struct ifreq *rq, int cmd)
 		return -ENODEV;
 
 	if (fep->bufdesc_ex) {
-		if (cmd == SIOCSHWTSTAMP)
-			return fec_ptp_set(ndev, rq);
-		if (cmd == SIOCGHWTSTAMP)
-			return fec_ptp_get(ndev, rq);
+		bool use_fec_hwts = !phy_has_hwtstamp(phydev);
+
+		if (cmd == SIOCSHWTSTAMP) {
+			if (use_fec_hwts)
+				return fec_ptp_set(ndev, rq);
+			fec_ptp_disable_hwts(ndev);
+		} else if (cmd == SIOCGHWTSTAMP) {
+			if (use_fec_hwts)
+				return fec_ptp_get(ndev, rq);
+		}
 	}
 
 	return phy_mii_ioctl(phydev, rq, cmd);
@@ -3476,18 +3454,22 @@ static int fec_enet_get_irq_cnt(struct platform_device *pdev)
 }
 
 static int fec_enet_init_stop_mode(struct fec_enet_private *fep,
-				   struct fec_devinfo *dev_info,
 				   struct device_node *np)
 {
 	struct device_node *gpr_np;
+	u32 out_val[3];
 	int ret = 0;
 
-	if (!dev_info)
-		return 0;
-
-	gpr_np = of_parse_phandle(np, "gpr", 0);
+	gpr_np = of_parse_phandle(np, "fsl,stop-mode", 0);
 	if (!gpr_np)
 		return 0;
+
+	ret = of_property_read_u32_array(np, "fsl,stop-mode", out_val,
+					 ARRAY_SIZE(out_val));
+	if (ret) {
+		dev_dbg(&fep->pdev->dev, "no stop mode property\n");
+		return ret;
+	}
 
 	fep->stop_gpr.gpr = syscon_node_to_regmap(gpr_np);
 	if (IS_ERR(fep->stop_gpr.gpr)) {
@@ -3497,8 +3479,8 @@ static int fec_enet_init_stop_mode(struct fec_enet_private *fep,
 		goto out;
 	}
 
-	fep->stop_gpr.reg = dev_info->stop_gpr_reg;
-	fep->stop_gpr.bit = dev_info->stop_gpr_bit;
+	fep->stop_gpr.reg = out_val[1];
+	fep->stop_gpr.bit = out_val[2];
 
 out:
 	of_node_put(gpr_np);
@@ -3575,7 +3557,7 @@ fec_probe(struct platform_device *pdev)
 	if (of_get_property(np, "fsl,magic-packet", NULL))
 		fep->wol_flag |= FEC_WOL_HAS_MAGIC_PACKET;
 
-	ret = fec_enet_init_stop_mode(fep, dev_info, np);
+	ret = fec_enet_init_stop_mode(fep, np);
 	if (ret)
 		goto failed_stop_mode;
 
@@ -3706,6 +3688,8 @@ fec_probe(struct platform_device *pdev)
 	netif_carrier_off(ndev);
 	fec_enet_clk_enable(ndev, false);
 	pinctrl_pm_select_sleep_state(&pdev->dev);
+
+	ndev->max_mtu = PKT_MAXBUF_SIZE - ETH_HLEN - ETH_FCS_LEN;
 
 	ret = register_netdev(ndev);
 	if (ret)

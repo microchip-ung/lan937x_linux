@@ -62,9 +62,10 @@ on the capabilities of the processor.
 Active Mode
 -----------
 
-This is the default operation mode of ``intel_pstate``.  If it works in this
-mode, the ``scaling_driver`` policy attribute in ``sysfs`` for all ``CPUFreq``
-policies contains the string "intel_pstate".
+This is the default operation mode of ``intel_pstate`` for processors with
+hardware-managed P-states (HWP) support.  If it works in this mode, the
+``scaling_driver`` policy attribute in ``sysfs`` for all ``CPUFreq`` policies
+contains the string "intel_pstate".
 
 In this mode the driver bypasses the scaling governors layer of ``CPUFreq`` and
 provides its own scaling algorithms for P-state selection.  Those algorithms
@@ -138,12 +139,13 @@ internal P-state selection logic to be less performance-focused.
 Active Mode Without HWP
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-This is the default operation mode for processors that do not support the HWP
-feature.  It also is used by default with the ``intel_pstate=no_hwp`` argument
-in the kernel command line.  However, in this mode ``intel_pstate`` may refuse
-to work with the given processor if it does not recognize it.  [Note that
-``intel_pstate`` will never refuse to work with any processor with the HWP
-feature enabled.]
+This operation mode is optional for processors that do not support the HWP
+feature or when the ``intel_pstate=no_hwp`` argument is passed to the kernel in
+the command line.  The active mode is used in those cases if the
+``intel_pstate=active`` argument is passed to the kernel in the command line.
+In this mode ``intel_pstate`` may refuse to work with processors that are not
+recognized by it.  [Note that ``intel_pstate`` will never refuse to work with
+any processor with the HWP feature enabled.]
 
 In this mode ``intel_pstate`` registers utilization update callbacks with the
 CPU scheduler in order to run a P-state selection algorithm, either
@@ -188,10 +190,14 @@ is not set.
 Passive Mode
 ------------
 
-This mode is used if the ``intel_pstate=passive`` argument is passed to the
-kernel in the command line (it implies the ``intel_pstate=no_hwp`` setting too).
-Like in the active mode without HWP support, in this mode ``intel_pstate`` may
-refuse to work with the given processor if it does not recognize it.
+This is the default operation mode of ``intel_pstate`` for processors without
+hardware-managed P-states (HWP) support.  It is always used if the
+``intel_pstate=passive`` argument is passed to the kernel in the command line
+regardless of whether or not the given processor supports HWP.  [Note that the
+``intel_pstate=no_hwp`` setting implies ``intel_pstate=passive`` if it is used
+without ``intel_pstate=active``.]  Like in the active mode without HWP support,
+in this mode ``intel_pstate`` may refuse to work with processors that are not
+recognized by it.
 
 If the driver works in this mode, the ``scaling_driver`` policy attribute in
 ``sysfs`` for all ``CPUFreq`` policies contains the string "intel_cpufreq".
@@ -425,6 +431,17 @@ argument is passed to the kernel in the command line.
 	supported in the current configuration, writes to this attribute will
 	fail with an appropriate error.
 
+``energy_efficiency``
+	This attribute is only present on platforms, which have CPUs matching
+	Kaby Lake or Coffee Lake desktop CPU model. By default
+	energy efficiency optimizations are disabled on these CPU models in HWP
+	mode by this driver. Enabling energy efficiency may limit maximum
+	operating frequency in both HWP and non HWP mode. In non HWP mode,
+	optimizations are done only in the turbo frequency range. In HWP mode,
+	optimizations are done in the entire frequency range. Setting this
+	attribute to "1" enables energy efficiency optimizations and setting
+	to "0" disables energy efficiency optimizations.
+
 Interpretation of Policy Attributes
 -----------------------------------
 
@@ -548,7 +565,11 @@ somewhere between the two extremes:
 Strings written to the ``energy_performance_preference`` attribute are
 internally translated to integer values written to the processor's
 Energy-Performance Preference (EPP) knob (if supported) or its
-Energy-Performance Bias (EPB) knob.
+Energy-Performance Bias (EPB) knob. It is also possible to write a positive
+integer value between 0 to 255, if the EPP feature is present. If the EPP
+feature is not present, writing integer value to this attribute is not
+supported. In this case, user can use
+ "/sys/devices/system/cpu/cpu*/power/energy_perf_bias" interface.
 
 [Note that tasks may by migrated from one CPU to another by the scheduler's
 load-balancing algorithm and if different energy vs performance hints are
@@ -702,7 +723,7 @@ core (for the policies with other scaling governors).
 
 The ``ftrace`` interface can be used for low-level diagnostics of
 ``intel_pstate``.  For example, to check how often the function to set a
-P-state is called, the ``ftrace`` filter can be set to to
+P-state is called, the ``ftrace`` filter can be set to
 :c:func:`intel_pstate_set_pstate`::
 
  # cd /sys/kernel/debug/tracing/

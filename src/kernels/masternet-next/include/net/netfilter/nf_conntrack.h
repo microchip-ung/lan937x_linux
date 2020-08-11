@@ -87,7 +87,7 @@ struct nf_conn {
 	struct hlist_node	nat_bysource;
 #endif
 	/* all members below initialized via memset */
-	u8 __nfct_init_offset[0];
+	struct { } __nfct_init_offset;
 
 	/* If we were expected by an expectation, this will be it */
 	struct nf_conn *master;
@@ -277,6 +277,18 @@ static inline bool nf_ct_should_gc(const struct nf_conn *ct)
 {
 	return nf_ct_is_expired(ct) && nf_ct_is_confirmed(ct) &&
 	       !nf_ct_is_dying(ct);
+}
+
+#define	NF_CT_DAY	(86400 * HZ)
+
+/* Set an arbitrary timeout large enough not to ever expire, this save
+ * us a check for the IPS_OFFLOAD_BIT from the packet path via
+ * nf_ct_is_expired().
+ */
+static inline void nf_ct_offload_timeout(struct nf_conn *ct)
+{
+	if (nf_ct_expires(ct) < NF_CT_DAY / 2)
+		ct->timeout = nfct_time_stamp + NF_CT_DAY;
 }
 
 struct kernel_param;

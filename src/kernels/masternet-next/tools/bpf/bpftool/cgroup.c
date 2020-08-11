@@ -25,9 +25,10 @@
 	"       ATTACH_TYPE := { ingress | egress | sock_create |\n"	       \
 	"                        sock_ops | device | bind4 | bind6 |\n"	       \
 	"                        post_bind4 | post_bind6 | connect4 |\n"       \
-	"                        connect6 | sendmsg4 | sendmsg6 |\n"           \
-	"                        recvmsg4 | recvmsg6 | sysctl |\n"	       \
-	"                        getsockopt | setsockopt }"
+	"                        connect6 | getpeername4 | getpeername6 |\n"   \
+	"                        getsockname4 | getsockname6 | sendmsg4 |\n"   \
+	"                        sendmsg6 | recvmsg4 | recvmsg6 |\n"           \
+	"                        sysctl | getsockopt | setsockopt }"
 
 static unsigned int query_flags;
 
@@ -490,20 +491,18 @@ static int do_help(int argc, char **argv)
 	}
 
 	fprintf(stderr,
-		"Usage: %s %s { show | list } CGROUP [**effective**]\n"
-		"       %s %s tree [CGROUP_ROOT] [**effective**]\n"
-		"       %s %s attach CGROUP ATTACH_TYPE PROG [ATTACH_FLAGS]\n"
-		"       %s %s detach CGROUP ATTACH_TYPE PROG\n"
-		"       %s %s help\n"
+		"Usage: %1$s %2$s { show | list } CGROUP [**effective**]\n"
+		"       %1$s %2$s tree [CGROUP_ROOT] [**effective**]\n"
+		"       %1$s %2$s attach CGROUP ATTACH_TYPE PROG [ATTACH_FLAGS]\n"
+		"       %1$s %2$s detach CGROUP ATTACH_TYPE PROG\n"
+		"       %1$s %2$s help\n"
 		"\n"
 		HELP_SPEC_ATTACH_TYPES "\n"
 		"       " HELP_SPEC_ATTACH_FLAGS "\n"
 		"       " HELP_SPEC_PROGRAM "\n"
 		"       " HELP_SPEC_OPTIONS "\n"
 		"",
-		bin_name, argv[-2],
-		bin_name, argv[-2], bin_name, argv[-2],
-		bin_name, argv[-2], bin_name, argv[-2]);
+		bin_name, argv[-2]);
 
 	return 0;
 }

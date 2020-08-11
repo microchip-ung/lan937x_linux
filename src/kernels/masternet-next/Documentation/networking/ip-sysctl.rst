@@ -741,7 +741,7 @@ tcp_fastopen - INTEGER
 
 	Default: 0x1
 
-	Note that that additional client or server features are only
+	Note that additional client or server features are only
 	effective if the basic support (0x1 and 0x2) are enabled respectively.
 
 tcp_fastopen_blackhole_timeout_sec - INTEGER
@@ -2065,7 +2065,7 @@ use_tempaddr - INTEGER
 temp_valid_lft - INTEGER
 	valid lifetime (in seconds) for temporary addresses.
 
-	Default: 604800 (7 days)
+	Default: 172800 (2 days)
 
 temp_prefered_lft - INTEGER
 	Preferred lifetime (in seconds) for temporary addresses.

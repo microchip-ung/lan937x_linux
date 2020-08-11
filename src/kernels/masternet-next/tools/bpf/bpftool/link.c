@@ -16,10 +16,14 @@ static const char * const link_type_name[] = {
 	[BPF_LINK_TYPE_RAW_TRACEPOINT]		= "raw_tracepoint",
 	[BPF_LINK_TYPE_TRACING]			= "tracing",
 	[BPF_LINK_TYPE_CGROUP]			= "cgroup",
+	[BPF_LINK_TYPE_ITER]			= "iter",
+	[BPF_LINK_TYPE_NETNS]			= "netns",
 };
 
 static int link_parse_fd(int *argc, char ***argv)
 {
+	int fd;
+
 	if (is_prefix(**argv, "id")) {
 		unsigned int id;
 		char *endptr;
@@ -33,7 +37,10 @@ static int link_parse_fd(int *argc, char ***argv)
 		}
 		NEXT_ARGP();
 
-		return bpf_link_get_fd_by_id(id);
+		fd = bpf_link_get_fd_by_id(id);
+		if (fd < 0)
+			p_err("failed to get link with ID %d: %s", id, strerror(errno));
+		return fd;
 	} else if (is_prefix(**argv, "pinned")) {
 		char *path;
 
@@ -59,6 +66,15 @@ show_link_header_json(struct bpf_link_info *info, json_writer_t *wtr)
 		jsonw_uint_field(wtr, "type", info->type);
 
 	jsonw_uint_field(json_wtr, "prog_id", info->prog_id);
+}
+
+static void show_link_attach_type_json(__u32 attach_type, json_writer_t *wtr)
+{
+	if (attach_type < ARRAY_SIZE(attach_type_name))
+		jsonw_string_field(wtr, "attach_type",
+				   attach_type_name[attach_type]);
+	else
+		jsonw_uint_field(wtr, "attach_type", attach_type);
 }
 
 static int get_prog_info(int prog_id, struct bpf_prog_info *info)
@@ -97,29 +113,25 @@ static int show_link_close_json(int fd, struct bpf_link_info *info)
 		if (err)
 			return err;
 
-		if (prog_info.type < ARRAY_SIZE(prog_type_name))
+		if (prog_info.type < prog_type_name_size)
 			jsonw_string_field(json_wtr, "prog_type",
 					   prog_type_name[prog_info.type]);
 		else
 			jsonw_uint_field(json_wtr, "prog_type",
 					 prog_info.type);
 
-		if (info->tracing.attach_type < ARRAY_SIZE(attach_type_name))
-			jsonw_string_field(json_wtr, "attach_type",
-			       attach_type_name[info->tracing.attach_type]);
-		else
-			jsonw_uint_field(json_wtr, "attach_type",
-					 info->tracing.attach_type);
+		show_link_attach_type_json(info->tracing.attach_type,
+					   json_wtr);
 		break;
 	case BPF_LINK_TYPE_CGROUP:
 		jsonw_lluint_field(json_wtr, "cgroup_id",
 				   info->cgroup.cgroup_id);
-		if (info->cgroup.attach_type < ARRAY_SIZE(attach_type_name))
-			jsonw_string_field(json_wtr, "attach_type",
-			       attach_type_name[info->cgroup.attach_type]);
-		else
-			jsonw_uint_field(json_wtr, "attach_type",
-					 info->cgroup.attach_type);
+		show_link_attach_type_json(info->cgroup.attach_type, json_wtr);
+		break;
+	case BPF_LINK_TYPE_NETNS:
+		jsonw_uint_field(json_wtr, "netns_ino",
+				 info->netns.netns_ino);
+		show_link_attach_type_json(info->netns.attach_type, json_wtr);
 		break;
 	default:
 		break;
@@ -136,6 +148,9 @@ static int show_link_close_json(int fd, struct bpf_link_info *info)
 		}
 		jsonw_end_array(json_wtr);
 	}
+
+	emit_obj_refs_json(&refs_table, info->id, json_wtr);
+
 	jsonw_end_object(json_wtr);
 
 	return 0;
@@ -150,6 +165,14 @@ static void show_link_header_plain(struct bpf_link_info *info)
 		printf("type %u  ", info->type);
 
 	printf("prog %u  ", info->prog_id);
+}
+
+static void show_link_attach_type_plain(__u32 attach_type)
+{
+	if (attach_type < ARRAY_SIZE(attach_type_name))
+		printf("attach_type %s  ", attach_type_name[attach_type]);
+	else
+		printf("attach_type %u  ", attach_type);
 }
 
 static int show_link_close_plain(int fd, struct bpf_link_info *info)
@@ -169,25 +192,21 @@ static int show_link_close_plain(int fd, struct bpf_link_info *info)
 		if (err)
 			return err;
 
-		if (prog_info.type < ARRAY_SIZE(prog_type_name))
+		if (prog_info.type < prog_type_name_size)
 			printf("\n\tprog_type %s  ",
 			       prog_type_name[prog_info.type]);
 		else
 			printf("\n\tprog_type %u  ", prog_info.type);
 
-		if (info->tracing.attach_type < ARRAY_SIZE(attach_type_name))
-			printf("attach_type %s  ",
-			       attach_type_name[info->tracing.attach_type]);
-		else
-			printf("attach_type %u  ", info->tracing.attach_type);
+		show_link_attach_type_plain(info->tracing.attach_type);
 		break;
 	case BPF_LINK_TYPE_CGROUP:
 		printf("\n\tcgroup_id %zu  ", (size_t)info->cgroup.cgroup_id);
-		if (info->cgroup.attach_type < ARRAY_SIZE(attach_type_name))
-			printf("attach_type %s  ",
-			       attach_type_name[info->cgroup.attach_type]);
-		else
-			printf("attach_type %u  ", info->cgroup.attach_type);
+		show_link_attach_type_plain(info->cgroup.attach_type);
+		break;
+	case BPF_LINK_TYPE_NETNS:
+		printf("\n\tnetns_ino %u  ", info->netns.netns_ino);
+		show_link_attach_type_plain(info->netns.attach_type);
 		break;
 	default:
 		break;
@@ -201,6 +220,7 @@ static int show_link_close_plain(int fd, struct bpf_link_info *info)
 				printf("\n\tpinned %s", obj->path);
 		}
 	}
+	emit_obj_refs_plain(&refs_table, info->id, "\n\tpids ");
 
 	printf("\n");
 
@@ -246,6 +266,7 @@ static int do_show(int argc, char **argv)
 
 	if (show_pinned)
 		build_pinned_obj_table(&link_table, BPF_OBJ_LINK);
+	build_obj_refs_table(&refs_table, BPF_OBJ_LINK);
 
 	if (argc == 2) {
 		fd = link_parse_fd(&argc, &argv);
@@ -285,6 +306,8 @@ static int do_show(int argc, char **argv)
 	if (json_output)
 		jsonw_end_array(json_wtr);
 
+	delete_obj_refs_table(&refs_table);
+
 	return errno == ENOENT ? 0 : -1;
 }
 
@@ -298,6 +321,34 @@ static int do_pin(int argc, char **argv)
 	return err;
 }
 
+static int do_detach(int argc, char **argv)
+{
+	int err, fd;
+
+	if (argc != 2) {
+		p_err("link specifier is invalid or missing\n");
+		return 1;
+	}
+
+	fd = link_parse_fd(&argc, &argv);
+	if (fd < 0)
+		return 1;
+
+	err = bpf_link_detach(fd);
+	if (err)
+		err = -errno;
+	close(fd);
+	if (err) {
+		p_err("failed link detach: %s", strerror(-err));
+		return 1;
+	}
+
+	if (json_output)
+		jsonw_null(json_wtr);
+
+	return 0;
+}
+
 static int do_help(int argc, char **argv)
 {
 	if (json_output) {
@@ -308,10 +359,10 @@ static int do_help(int argc, char **argv)
 	fprintf(stderr,
 		"Usage: %1$s %2$s { show | list }   [LINK]\n"
 		"       %1$s %2$s pin        LINK  FILE\n"
+		"       %1$s %2$s detach     LINK\n"
 		"       %1$s %2$s help\n"
 		"\n"
 		"       " HELP_SPEC_LINK "\n"
-		"       " HELP_SPEC_PROGRAM "\n"
 		"       " HELP_SPEC_OPTIONS "\n"
 		"",
 		bin_name, argv[-2]);
@@ -324,6 +375,7 @@ static const struct cmd cmds[] = {
 	{ "list",	do_show },
 	{ "help",	do_help },
 	{ "pin",	do_pin },
+	{ "detach",	do_detach },
 	{ 0 }
 };
 

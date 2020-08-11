@@ -23,7 +23,9 @@ struct user_namespace;
 extern void __init bdev_cache_init(void);
 
 extern int __sync_blockdev(struct block_device *bdev, int wait);
-
+void iterate_bdevs(void (*)(struct block_device *, void *), void *);
+void emergency_thaw_bdev(struct super_block *sb);
+void bd_forget(struct inode *inode);
 #else
 static inline void bdev_cache_init(void)
 {
@@ -33,7 +35,18 @@ static inline int __sync_blockdev(struct block_device *bdev, int wait)
 {
 	return 0;
 }
-#endif
+static inline void iterate_bdevs(void (*f)(struct block_device *, void *),
+		void *arg)
+{
+}
+static inline int emergency_thaw_bdev(struct super_block *sb)
+{
+	return 0;
+}
+static inline void bd_forget(struct inode *inode)
+{
+}
+#endif /* CONFIG_BLOCK */
 
 /*
  * buffer.c
@@ -126,7 +139,6 @@ extern struct open_how build_open_how(int flags, umode_t mode);
 extern int build_open_flags(const struct open_how *how, struct open_flags *op);
 
 long do_sys_ftruncate(unsigned int fd, loff_t length, int small);
-long do_faccessat(int dfd, const char __user *filename, int mode);
 int do_fchmodat(int dfd, const char __user *filename, umode_t mode);
 int do_fchownat(int dfd, const char __user *filename, uid_t user, gid_t group,
 		int flag);
@@ -143,8 +155,6 @@ extern int dentry_needs_remove_privs(struct dentry *dentry);
 /*
  * fs-writeback.c
  */
-extern void inode_io_list_del(struct inode *inode);
-
 extern long get_nr_dirty_inodes(void);
 extern int invalidate_inodes(struct super_block *, bool);
 
@@ -186,5 +196,5 @@ int sb_init_dio_done_wq(struct super_block *sb);
 /*
  * fs/stat.c:
  */
-unsigned vfs_stat_set_lookup_flags(unsigned *lookup_flags, int flags);
-int cp_statx(const struct kstat *stat, struct statx __user *buffer);
+int do_statx(int dfd, const char __user *filename, unsigned flags,
+	     unsigned int mask, struct statx __user *buffer);

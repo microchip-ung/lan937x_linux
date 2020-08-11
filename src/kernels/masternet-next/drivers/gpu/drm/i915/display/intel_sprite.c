@@ -34,6 +34,7 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_color_mgmt.h>
 #include <drm/drm_crtc.h>
+#include <drm/drm_damage_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_plane_helper.h>
 #include <drm/drm_rect.h>
@@ -331,6 +332,21 @@ int intel_plane_check_src_coordinates(struct intel_plane_state *plane_state)
 	}
 
 	return 0;
+}
+
+static u8 icl_nv12_y_plane_mask(struct drm_i915_private *i915)
+{
+	if (IS_ROCKETLAKE(i915))
+		return BIT(PLANE_SPRITE2) | BIT(PLANE_SPRITE3);
+	else
+		return BIT(PLANE_SPRITE4) | BIT(PLANE_SPRITE5);
+}
+
+bool icl_is_nv12_y_plane(struct drm_i915_private *dev_priv,
+			 enum plane_id plane_id)
+{
+	return INTEL_GEN(dev_priv) >= 11 &&
+		icl_nv12_y_plane_mask(dev_priv) & BIT(plane_id);
 }
 
 bool icl_is_hdr_plane(struct drm_i915_private *dev_priv, enum plane_id plane_id)
@@ -2503,6 +2519,7 @@ static const u32 skl_plane_formats[] = {
 	DRM_FORMAT_YVYU,
 	DRM_FORMAT_UYVY,
 	DRM_FORMAT_VYUY,
+	DRM_FORMAT_XYUV8888,
 };
 
 static const u32 skl_planar_formats[] = {
@@ -2521,6 +2538,7 @@ static const u32 skl_planar_formats[] = {
 	DRM_FORMAT_UYVY,
 	DRM_FORMAT_VYUY,
 	DRM_FORMAT_NV12,
+	DRM_FORMAT_XYUV8888,
 };
 
 static const u32 glk_planar_formats[] = {
@@ -2539,6 +2557,7 @@ static const u32 glk_planar_formats[] = {
 	DRM_FORMAT_UYVY,
 	DRM_FORMAT_VYUY,
 	DRM_FORMAT_NV12,
+	DRM_FORMAT_XYUV8888,
 	DRM_FORMAT_P010,
 	DRM_FORMAT_P012,
 	DRM_FORMAT_P016,
@@ -2562,6 +2581,7 @@ static const u32 icl_sdr_y_plane_formats[] = {
 	DRM_FORMAT_Y210,
 	DRM_FORMAT_Y212,
 	DRM_FORMAT_Y216,
+	DRM_FORMAT_XYUV8888,
 	DRM_FORMAT_XVYU2101010,
 	DRM_FORMAT_XVYU12_16161616,
 	DRM_FORMAT_XVYU16161616,
@@ -2589,6 +2609,7 @@ static const u32 icl_sdr_uv_plane_formats[] = {
 	DRM_FORMAT_Y210,
 	DRM_FORMAT_Y212,
 	DRM_FORMAT_Y216,
+	DRM_FORMAT_XYUV8888,
 	DRM_FORMAT_XVYU2101010,
 	DRM_FORMAT_XVYU12_16161616,
 	DRM_FORMAT_XVYU16161616,
@@ -2620,6 +2641,7 @@ static const u32 icl_hdr_plane_formats[] = {
 	DRM_FORMAT_Y210,
 	DRM_FORMAT_Y212,
 	DRM_FORMAT_Y216,
+	DRM_FORMAT_XYUV8888,
 	DRM_FORMAT_XVYU2101010,
 	DRM_FORMAT_XVYU12_16161616,
 	DRM_FORMAT_XVYU16161616,
@@ -2790,6 +2812,7 @@ static bool skl_plane_format_mod_supported(struct drm_plane *_plane,
 	case DRM_FORMAT_UYVY:
 	case DRM_FORMAT_VYUY:
 	case DRM_FORMAT_NV12:
+	case DRM_FORMAT_XYUV8888:
 	case DRM_FORMAT_P010:
 	case DRM_FORMAT_P012:
 	case DRM_FORMAT_P016:
@@ -2860,6 +2883,7 @@ static bool gen12_plane_format_mod_supported(struct drm_plane *_plane,
 	case DRM_FORMAT_UYVY:
 	case DRM_FORMAT_VYUY:
 	case DRM_FORMAT_NV12:
+	case DRM_FORMAT_XYUV8888:
 	case DRM_FORMAT_P010:
 	case DRM_FORMAT_P012:
 	case DRM_FORMAT_P016:
@@ -2995,7 +3019,7 @@ static const u32 *icl_get_plane_formats(struct drm_i915_private *dev_priv,
 	if (icl_is_hdr_plane(dev_priv, plane_id)) {
 		*num_formats = ARRAY_SIZE(icl_hdr_plane_formats);
 		return icl_hdr_plane_formats;
-	} else if (icl_is_nv12_y_plane(plane_id)) {
+	} else if (icl_is_nv12_y_plane(dev_priv, plane_id)) {
 		*num_formats = ARRAY_SIZE(icl_sdr_y_plane_formats);
 		return icl_sdr_y_plane_formats;
 	} else {
@@ -3038,6 +3062,7 @@ skl_universal_plane_create(struct drm_i915_private *dev_priv,
 	struct intel_plane *plane;
 	enum drm_plane_type plane_type;
 	unsigned int supported_rotations;
+	unsigned int supported_csc;
 	const u64 *modifiers;
 	const u32 *formats;
 	int num_formats;
@@ -3112,9 +3137,13 @@ skl_universal_plane_create(struct drm_i915_private *dev_priv,
 					   DRM_MODE_ROTATE_0,
 					   supported_rotations);
 
+	supported_csc = BIT(DRM_COLOR_YCBCR_BT601) | BIT(DRM_COLOR_YCBCR_BT709);
+
+	if (INTEL_GEN(dev_priv) >= 10 || IS_GEMINILAKE(dev_priv))
+		supported_csc |= BIT(DRM_COLOR_YCBCR_BT2020);
+
 	drm_plane_create_color_properties(&plane->base,
-					  BIT(DRM_COLOR_YCBCR_BT601) |
-					  BIT(DRM_COLOR_YCBCR_BT709),
+					  supported_csc,
 					  BIT(DRM_COLOR_YCBCR_LIMITED_RANGE) |
 					  BIT(DRM_COLOR_YCBCR_FULL_RANGE),
 					  DRM_COLOR_YCBCR_BT709,
@@ -3127,6 +3156,9 @@ skl_universal_plane_create(struct drm_i915_private *dev_priv,
 					     BIT(DRM_MODE_BLEND_COVERAGE));
 
 	drm_plane_create_zpos_immutable_property(&plane->base, plane_id);
+
+	if (INTEL_GEN(dev_priv) >= 12)
+		drm_plane_enable_fb_damage_clips(&plane->base);
 
 	drm_plane_helper_add(&plane->base, &intel_plane_helper_funcs);
 

@@ -32,10 +32,10 @@
 static int vega12_get_current_rpm(struct pp_hwmgr *hwmgr, uint32_t *current_rpm)
 {
 	PP_ASSERT_WITH_CODE(!smum_send_msg_to_smc(hwmgr,
-				PPSMC_MSG_GetCurrentRpm),
+				PPSMC_MSG_GetCurrentRpm,
+				current_rpm),
 			"Attempt to get current RPM from SMC Failed!",
 			return -EINVAL);
-	*current_rpm = smum_get_argument(hwmgr);
 
 	return 0;
 }
@@ -251,7 +251,7 @@ int vega12_thermal_stop_thermal_controller(struct pp_hwmgr *hwmgr)
 * @param    Result the last failure code
 * @return   result from set temperature range routine
 */
-int vega12_thermal_setup_fan_table(struct pp_hwmgr *hwmgr)
+static int vega12_thermal_setup_fan_table(struct pp_hwmgr *hwmgr)
 {
 	int ret;
 	struct vega12_hwmgr *data = (struct vega12_hwmgr *)(hwmgr->backend);
@@ -259,7 +259,8 @@ int vega12_thermal_setup_fan_table(struct pp_hwmgr *hwmgr)
 
 	ret = smum_send_msg_to_smc_with_parameter(hwmgr,
 				PPSMC_MSG_SetFanTemperatureTarget,
-				(uint32_t)table->FanTargetTemperature);
+				(uint32_t)table->FanTargetTemperature,
+				NULL);
 
 	return ret;
 }
@@ -273,7 +274,7 @@ int vega12_thermal_setup_fan_table(struct pp_hwmgr *hwmgr)
 * @param    Result the last failure code
 * @return   result from set temperature range routine
 */
-int vega12_thermal_start_smc_fan_control(struct pp_hwmgr *hwmgr)
+static int vega12_thermal_start_smc_fan_control(struct pp_hwmgr *hwmgr)
 {
 	/* If the fantable setup has failed we could have disabled
 	 * PHM_PlatformCaps_MicrocodeFanControl even after

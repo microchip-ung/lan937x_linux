@@ -7,6 +7,7 @@
 #include <linux/etherdevice.h>
 #include <linux/list.h>
 #include <linux/slab.h>
+#include <../drivers/net/dsa/microchip/ksz_common.h>
 #include <net/dsa.h>
 #include "dsa_priv.h"
 
@@ -156,8 +157,9 @@ static struct sk_buff *ksz9477_xmit(struct sk_buff *skb,
 {
 	struct dsa_port *dp = dsa_slave_to_port(dev);
 	struct sk_buff *nskb;
-	u16 *tag;
+	__be16 *tag;
 	u8 *addr;
+	u16 val;
 
 	nskb = ksz_common_xmit(skb, dev, KSZ9477_INGRESS_TAG_LEN);
 	if (!nskb)
@@ -167,12 +169,12 @@ static struct sk_buff *ksz9477_xmit(struct sk_buff *skb,
 	tag = skb_put(nskb, KSZ9477_INGRESS_TAG_LEN);
 	addr = skb_mac_header(nskb);
 
-	*tag = BIT(dp->index);
+	val = BIT(dp->index);
 
 	if (is_link_local_ether_addr(addr))
-		*tag |= KSZ9477_TAIL_TAG_OVERRIDE;
+		val |= KSZ9477_TAIL_TAG_OVERRIDE;
 
-	*tag = cpu_to_be16(*tag);
+	*tag = cpu_to_be16(val);
 
 	return nskb;
 }
@@ -247,14 +249,29 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
 #define LAN937X_TAIL_TAG_LOOKUP		BIT(12)
 #define LAN937X_TAIL_TAG_VALID		BIT(13)
 
+static int lan937x_get_phy_port(struct ksz_device *dev, int log_port)
+{
+	int i;
+
+	for (i = 0; i < dev->port_cnt; i++)
+		if (log_port == dev->logical_port_map[i])
+			return i;
+
+	return 0;
+}
 
 static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 				    struct net_device *dev)
 {
 	struct dsa_port *dp = dsa_slave_to_port(dev);
+	struct dsa_switch *ds = dp->ds;
+	struct ksz_device *lan937xpriv = ds->priv;
+	u8 log_port = lan937xpriv->logical_port_map[dp->index] - 1;
+
 	struct sk_buff *nskb;
-	u16 *tag;
+	__be16 *tag;
 	u8 *addr;
+	u16 val;
 
 	nskb = ksz_common_xmit(skb, dev, LAN937X_INGRESS_TAG_LEN);
 	if (!nskb)
@@ -264,25 +281,46 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	tag = skb_put(nskb, LAN937X_INGRESS_TAG_LEN);
 	addr = skb_mac_header(nskb);
 
-	*tag = BIT(dp->index);
+	val = BIT(log_port);
 
 	if (is_link_local_ether_addr(addr))
-		*tag |= LAN937X_TAIL_TAG_OVERRIDE;
+		val |= LAN937X_TAIL_TAG_OVERRIDE;
 
 	/*Tail tag valid bit - This bit should always be set by the CPU*/
-	*tag |= LAN937X_TAIL_TAG_VALID;
+	val |= LAN937X_TAIL_TAG_VALID;
 
-	*tag = cpu_to_be16(*tag);
+	*tag = cpu_to_be16(val);
 
 	return nskb;
+}
+static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev,
+				   struct packet_type *pt)
+{
+	struct dsa_port *dp = dsa_slave_to_port(dev);
+	struct dsa_switch *ds = dp->ds;
+	struct ksz_device *lan937xpriv = ds->priv;
+
+	/* Tag decoding */
+	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
+
+	unsigned int port = lan937x_get_phy_port(lan937xpriv, tag[0] & 7);
+	unsigned int len = KSZ_EGRESS_TAG_LEN;
+
+	/* Extra 4-bytes PTP timestamp */
+	if (tag[0] & KSZ9477_PTP_TAG_INDICATION)
+		len += KSZ9477_PTP_TAG_LEN;
+
+	pr_info("r");
+	
+	return ksz_common_rcv(skb, dev, port, len);
 }
 
 static const struct dsa_device_ops lan937x_netdev_ops = {
 	.name	= "lan937x",
 	.proto	= DSA_TAG_PROTO_LAN937X,
 	.xmit	= lan937x_xmit,
-	.rcv	= ksz9477_rcv,
-	.overhead = KSZ9477_INGRESS_TAG_LEN,
+	.rcv	= lan937x_rcv,
+	.overhead = LAN937X_INGRESS_TAG_LEN,
 };
 
 DSA_TAG_DRIVER(lan937x_netdev_ops);

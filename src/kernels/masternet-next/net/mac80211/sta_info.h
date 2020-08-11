@@ -3,6 +3,7 @@
  * Copyright 2002-2005, Devicescape Software, Inc.
  * Copyright 2013-2014  Intel Mobile Communications GmbH
  * Copyright(c) 2015-2017 Intel Deutschland GmbH
+ * Copyright(c) 2020 Intel Corporation
  */
 
 #ifndef STA_INFO_H
@@ -68,6 +69,8 @@
  * @WLAN_STA_MPSP_RECIPIENT: local STA is recipient of a MPSP.
  * @WLAN_STA_PS_DELIVER: station woke up, but we're still blocking TX
  *	until pending frames are delivered
+ * @WLAN_STA_USES_ENCRYPTION: This station was configured for encryption,
+ *	so drop all packets without a key later.
  *
  * @NUM_WLAN_STA_FLAGS: number of defined flags
  */
@@ -116,6 +119,7 @@ enum ieee80211_sta_info_flags {
 #define HT_AGG_STATE_WANT_STOP		5
 #define HT_AGG_STATE_START_CB		6
 #define HT_AGG_STATE_STOP_CB		7
+#define HT_AGG_STATE_SENT_ADDBA		8
 
 DECLARE_EWMA(avg_signal, 10, 8)
 enum ieee80211_agg_stop_reason {
@@ -381,6 +385,7 @@ DECLARE_EWMA(mesh_tx_rate_avg, 8, 16)
  * @processed_beacon: set to true after peer rates and capabilities are
  *	processed
  * @connected_to_gate: true if mesh STA has a path to a mesh gate
+ * @connected_to_as: true if mesh STA has a path to a authentication server
  * @fail_avg: moving percentage of failed MSDUs
  * @tx_rate_avg: moving average of tx bitrate
  */
@@ -400,6 +405,7 @@ struct mesh_sta {
 
 	bool processed_beacon;
 	bool connected_to_gate;
+	bool connected_to_as;
 
 	enum nl80211_plink_state plink_state;
 	u32 plink_timeout;

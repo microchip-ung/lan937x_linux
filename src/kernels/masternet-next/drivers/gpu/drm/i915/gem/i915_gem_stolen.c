@@ -381,14 +381,14 @@ static int i915_gem_init_stolen(struct drm_i915_private *i915)
 	mutex_init(&i915->mm.stolen_lock);
 
 	if (intel_vgpu_active(i915)) {
-		dev_notice(i915->drm.dev,
+		drm_notice(&i915->drm,
 			   "%s, disabling use of stolen memory\n",
 			   "iGVT-g active");
 		return 0;
 	}
 
 	if (intel_vtd_active() && INTEL_GEN(i915) < 8) {
-		dev_notice(i915->drm.dev,
+		drm_notice(&i915->drm,
 			   "%s, disabling use of stolen memory\n",
 			   "DMAR active");
 		return 0;
@@ -566,6 +566,7 @@ i915_gem_object_release_stolen(struct drm_i915_gem_object *obj)
 }
 
 static const struct drm_i915_gem_object_ops i915_gem_object_stolen_ops = {
+	.name = "i915_gem_object_stolen",
 	.get_pages = i915_gem_object_get_pages_stolen,
 	.put_pages = i915_gem_object_put_pages_stolen,
 	.release = i915_gem_object_release_stolen,

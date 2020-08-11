@@ -80,6 +80,7 @@
 #include <linux/workqueue.h>
 #include <linux/kmemleak.h>
 #include <linux/sched.h>
+#include <linux/sched/mm.h>
 
 #include <asm/cacheflush.h>
 #include <asm/sections.h>
@@ -481,7 +482,7 @@ static void *pcpu_mem_zalloc(size_t size, gfp_t gfp)
 	if (size <= PAGE_SIZE)
 		return kzalloc(size, gfp);
 	else
-		return __vmalloc(size, gfp | __GFP_ZERO, PAGE_KERNEL);
+		return __vmalloc(size, gfp | __GFP_ZERO);
 }
 
 /**
@@ -1557,10 +1558,9 @@ static struct pcpu_chunk *pcpu_chunk_addr_search(void *addr)
 static void __percpu *pcpu_alloc(size_t size, size_t align, bool reserved,
 				 gfp_t gfp)
 {
-	/* whitelisted flags that can be passed to the backing allocators */
-	gfp_t pcpu_gfp = gfp & (GFP_KERNEL | __GFP_NORETRY | __GFP_NOWARN);
-	bool is_atomic = (gfp & GFP_KERNEL) != GFP_KERNEL;
-	bool do_warn = !(gfp & __GFP_NOWARN);
+	gfp_t pcpu_gfp;
+	bool is_atomic;
+	bool do_warn;
 	static int warn_limit = 10;
 	struct pcpu_chunk *chunk, *next;
 	const char *err;
@@ -1568,6 +1568,12 @@ static void __percpu *pcpu_alloc(size_t size, size_t align, bool reserved,
 	unsigned long flags;
 	void __percpu *ptr;
 	size_t bits, bit_align;
+
+	gfp = current_gfp_context(gfp);
+	/* whitelisted flags that can be passed to the backing allocators */
+	pcpu_gfp = gfp & (GFP_KERNEL | __GFP_NORETRY | __GFP_NOWARN);
+	is_atomic = (gfp & GFP_KERNEL) != GFP_KERNEL;
+	do_warn = !(gfp & __GFP_NOWARN);
 
 	/*
 	 * There is now a minimum allocation size of PCPU_MIN_ALLOC_SIZE,
@@ -2507,7 +2513,7 @@ static struct pcpu_alloc_info * __init pcpu_build_alloc_info(
 	const size_t static_size = __per_cpu_end - __per_cpu_start;
 	int nr_groups = 1, nr_units = 0;
 	size_t size_sum, min_unit_size, alloc_size;
-	int upa, max_upa, uninitialized_var(best_upa);	/* units_per_alloc */
+	int upa, max_upa, best_upa;	/* units_per_alloc */
 	int last_allocs, group, unit;
 	unsigned int cpu, tcpu;
 	struct pcpu_alloc_info *ai;

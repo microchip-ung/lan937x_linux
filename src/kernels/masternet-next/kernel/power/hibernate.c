@@ -67,6 +67,18 @@ bool freezer_test_done;
 
 static const struct platform_hibernation_ops *hibernation_ops;
 
+static atomic_t hibernate_atomic = ATOMIC_INIT(1);
+
+bool hibernate_acquire(void)
+{
+	return atomic_add_unless(&hibernate_atomic, -1, 0);
+}
+
+void hibernate_release(void)
+{
+	atomic_inc(&hibernate_atomic);
+}
+
 bool hibernation_available(void)
 {
 	return nohibernate == 0 && !security_locked_down(LOCKDOWN_HIBERNATION);
@@ -704,7 +716,7 @@ int hibernate(void)
 
 	lock_system_sleep();
 	/* The snapshot device should not be opened while we're running */
-	if (!atomic_add_unless(&snapshot_device_available, -1, 0)) {
+	if (!hibernate_acquire()) {
 		error = -EBUSY;
 		goto Unlock;
 	}
@@ -775,7 +787,7 @@ int hibernate(void)
  Exit:
 	__pm_notifier_call_chain(PM_POST_HIBERNATION, nr_calls, NULL);
 	pm_restore_console();
-	atomic_inc(&snapshot_device_available);
+	hibernate_release();
  Unlock:
 	unlock_system_sleep();
 	pr_info("hibernation exit\n");
@@ -880,7 +892,7 @@ static int software_resume(void)
 		goto Unlock;
 
 	/* The snapshot device should not be opened while we're running */
-	if (!atomic_add_unless(&snapshot_device_available, -1, 0)) {
+	if (!hibernate_acquire()) {
 		error = -EBUSY;
 		swsusp_close(FMODE_READ);
 		goto Unlock;
@@ -898,13 +910,20 @@ static int software_resume(void)
 	error = freeze_processes();
 	if (error)
 		goto Close_Finish;
+
+	error = freeze_kernel_threads();
+	if (error) {
+		thaw_processes();
+		goto Close_Finish;
+	}
+
 	error = load_image_and_restore();
 	thaw_processes();
  Finish:
 	__pm_notifier_call_chain(PM_POST_RESTORE, nr_calls, NULL);
 	pm_restore_console();
 	pr_info("resume failed (%d)\n", error);
-	atomic_inc(&snapshot_device_available);
+	hibernate_release();
 	/* For success case, the suspend path will release the lock */
  Unlock:
 	mutex_unlock(&system_transition_mutex);
@@ -1043,7 +1062,7 @@ power_attr(disk);
 static ssize_t resume_show(struct kobject *kobj, struct kobj_attribute *attr,
 			   char *buf)
 {
-	return sprintf(buf,"%d:%d\n", MAJOR(swsusp_resume_device),
+	return sprintf(buf, "%d:%d\n", MAJOR(swsusp_resume_device),
 		       MINOR(swsusp_resume_device));
 }
 
@@ -1143,7 +1162,7 @@ static ssize_t reserved_size_store(struct kobject *kobj,
 
 power_attr(reserved_size);
 
-static struct attribute * g[] = {
+static struct attribute *g[] = {
 	&disk_attr.attr,
 	&resume_offset_attr.attr,
 	&resume_attr.attr,
@@ -1171,7 +1190,7 @@ static int __init resume_setup(char *str)
 	if (noresume)
 		return 1;
 
-	strncpy( resume_file, str, 255 );
+	strncpy(resume_file, str, 255);
 	return 1;
 }
 

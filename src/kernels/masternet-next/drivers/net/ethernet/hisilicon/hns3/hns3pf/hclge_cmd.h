@@ -184,11 +184,11 @@ enum hclge_opcode_type {
 	/* TQP commands */
 	HCLGE_OPC_CFG_TX_QUEUE		= 0x0B01,
 	HCLGE_OPC_QUERY_TX_POINTER	= 0x0B02,
-	HCLGE_OPC_QUERY_TX_STATUS	= 0x0B03,
+	HCLGE_OPC_QUERY_TX_STATS	= 0x0B03,
 	HCLGE_OPC_TQP_TX_QUEUE_TC	= 0x0B04,
 	HCLGE_OPC_CFG_RX_QUEUE		= 0x0B11,
 	HCLGE_OPC_QUERY_RX_POINTER	= 0x0B12,
-	HCLGE_OPC_QUERY_RX_STATUS	= 0x0B13,
+	HCLGE_OPC_QUERY_RX_STATS	= 0x0B13,
 	HCLGE_OPC_STASH_RX_QUEUE_LRO	= 0x0B16,
 	HCLGE_OPC_CFG_RX_QUEUE_LRO	= 0x0B17,
 	HCLGE_OPC_CFG_COM_TQP_QUEUE	= 0x0B20,
@@ -884,8 +884,8 @@ struct hclge_cfg_tso_status_cmd {
 
 #define HCLGE_GRO_EN_B		0
 struct hclge_cfg_gro_status_cmd {
-	__le16 gro_en;
-	u8 rsv[22];
+	u8 gro_en;
+	u8 rsv[23];
 };
 
 #define HCLGE_TSO_MSS_MIN	256

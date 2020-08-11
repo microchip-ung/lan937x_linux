@@ -126,8 +126,10 @@ EXPORT_SYMBOL_GPL(smc_proto6);
 
 static void smc_restore_fallback_changes(struct smc_sock *smc)
 {
-	smc->clcsock->file->private_data = smc->sk.sk_socket;
-	smc->clcsock->file = NULL;
+	if (smc->clcsock->file) { /* non-accepted sockets have no file yet */
+		smc->clcsock->file->private_data = smc->sk.sk_socket;
+		smc->clcsock->file = NULL;
+	}
 }
 
 static int __smc_release(struct smc_sock *smc)
@@ -352,7 +354,7 @@ static int smcr_lgr_reg_rmbs(struct smc_link *link,
 	 */
 	mutex_lock(&lgr->llc_conf_mutex);
 	for (i = 0; i < SMC_LINKS_PER_LGR_MAX; i++) {
-		if (lgr->lnk[i].state != SMC_LNK_ACTIVE)
+		if (!smc_link_active(&lgr->lnk[i]))
 			continue;
 		rc = smcr_link_reg_rmb(&lgr->lnk[i], rmb_desc);
 		if (rc)
@@ -378,8 +380,6 @@ static int smcr_clnt_conf_first_link(struct smc_sock *smc)
 	struct smc_llc_qentry *qentry;
 	int rc;
 
-	link->lgr->type = SMC_LGR_SINGLE;
-
 	/* receive CONFIRM LINK request from server over RoCE fabric */
 	qentry = smc_llc_wait(link->lgr, NULL, SMC_LLC_WAIT_TIME,
 			      SMC_LLC_CONFIRM_LINK);
@@ -390,6 +390,7 @@ static int smcr_clnt_conf_first_link(struct smc_sock *smc)
 				      SMC_CLC_DECLINE, CLC_WAIT_TIME_SHORT);
 		return rc == -EAGAIN ? SMC_CLC_DECL_TIMEOUT_CL : rc;
 	}
+	smc_llc_save_peer_uid(qentry);
 	rc = smc_llc_eval_conf_link(qentry, SMC_LLC_REQ);
 	smc_llc_flow_qentry_del(&link->lgr->llc_flow_lcl);
 	if (rc)
@@ -413,6 +414,7 @@ static int smcr_clnt_conf_first_link(struct smc_sock *smc)
 		return SMC_CLC_DECL_TIMEOUT_CL;
 
 	smc_llc_link_active(link);
+	smcr_lgr_set_type(link->lgr, SMC_LGR_SINGLE);
 
 	/* optional 2nd link, receive ADD LINK request from server */
 	qentry = smc_llc_wait(link->lgr, NULL, SMC_LLC_WAIT_TIME,
@@ -632,7 +634,9 @@ static int smc_connect_rdma(struct smc_sock *smc,
 		for (i = 0; i < SMC_LINKS_PER_LGR_MAX; i++) {
 			struct smc_link *l = &smc->conn.lgr->lnk[i];
 
-			if (l->peer_qpn == ntoh24(aclc->qpn)) {
+			if (l->peer_qpn == ntoh24(aclc->qpn) &&
+			    !memcmp(l->peer_gid, &aclc->lcl.gid, SMC_GID_SIZE) &&
+			    !memcmp(l->peer_mac, &aclc->lcl.mac, sizeof(l->peer_mac))) {
 				link = l;
 				break;
 			}
@@ -715,8 +719,11 @@ static int smc_connect_ism(struct smc_sock *smc,
 	}
 
 	/* Create send and receive buffers */
-	if (smc_buf_create(smc, true))
-		return smc_connect_abort(smc, SMC_CLC_DECL_MEM,
+	rc = smc_buf_create(smc, true);
+	if (rc)
+		return smc_connect_abort(smc, (rc == -ENOSPC) ?
+					      SMC_CLC_DECL_MAX_DMB :
+					      SMC_CLC_DECL_MEM,
 					 ini->cln_first_contact);
 
 	smc_conn_save_peer_info(smc, aclc);
@@ -1036,8 +1043,6 @@ static int smcr_serv_conf_first_link(struct smc_sock *smc)
 	struct smc_llc_qentry *qentry;
 	int rc;
 
-	link->lgr->type = SMC_LGR_SINGLE;
-
 	if (smcr_link_reg_rmb(link, smc->conn.rmb_desc))
 		return SMC_CLC_DECL_ERR_REGRMB;
 
@@ -1056,6 +1061,7 @@ static int smcr_serv_conf_first_link(struct smc_sock *smc)
 				      SMC_CLC_DECLINE, CLC_WAIT_TIME_SHORT);
 		return rc == -EAGAIN ? SMC_CLC_DECL_TIMEOUT_CL : rc;
 	}
+	smc_llc_save_peer_uid(qentry);
 	rc = smc_llc_eval_conf_link(qentry, SMC_LLC_RESP);
 	smc_llc_flow_qentry_del(&link->lgr->llc_flow_lcl);
 	if (rc)
@@ -1065,6 +1071,7 @@ static int smcr_serv_conf_first_link(struct smc_sock *smc)
 	smc->conn.rmb_desc->is_conf_rkey = true;
 
 	smc_llc_link_active(link);
+	smcr_lgr_set_type(link->lgr, SMC_LGR_SINGLE);
 
 	/* initial contact - try to establish second link */
 	smc_llc_srv_add_link(link);
@@ -1196,12 +1203,14 @@ static int smc_listen_ism_init(struct smc_sock *new_smc,
 	}
 
 	/* Create send and receive buffers */
-	if (smc_buf_create(new_smc, true)) {
+	rc = smc_buf_create(new_smc, true);
+	if (rc) {
 		if (ini->cln_first_contact == SMC_FIRST_CONTACT)
 			smc_lgr_cleanup_early(&new_smc->conn);
 		else
 			smc_conn_free(&new_smc->conn);
-		return SMC_CLC_DECL_MEM;
+		return (rc == -ENOSPC) ? SMC_CLC_DECL_MAX_DMB :
+					 SMC_CLC_DECL_MEM;
 	}
 
 	return 0;
@@ -1731,7 +1740,7 @@ out:
 }
 
 static int smc_setsockopt(struct socket *sock, int level, int optname,
-			  char __user *optval, unsigned int optlen)
+			  sockptr_t optval, unsigned int optlen)
 {
 	struct sock *sk = sock->sk;
 	struct smc_sock *smc;
@@ -1742,8 +1751,11 @@ static int smc_setsockopt(struct socket *sock, int level, int optname,
 	/* generic setsockopts reaching us here always apply to the
 	 * CLC socket
 	 */
-	rc = smc->clcsock->ops->setsockopt(smc->clcsock, level, optname,
-					   optval, optlen);
+	if (unlikely(!smc->clcsock->ops->setsockopt))
+		rc = -EOPNOTSUPP;
+	else
+		rc = smc->clcsock->ops->setsockopt(smc->clcsock, level, optname,
+						   optval, optlen);
 	if (smc->clcsock->sk->sk_err) {
 		sk->sk_err = smc->clcsock->sk->sk_err;
 		sk->sk_error_report(sk);
@@ -1751,7 +1763,7 @@ static int smc_setsockopt(struct socket *sock, int level, int optname,
 
 	if (optlen < sizeof(int))
 		return -EINVAL;
-	if (get_user(val, (int __user *)optval))
+	if (copy_from_sockptr(&val, optval, sizeof(int)))
 		return -EFAULT;
 
 	lock_sock(sk);
@@ -1808,6 +1820,8 @@ static int smc_getsockopt(struct socket *sock, int level, int optname,
 
 	smc = smc_sk(sock->sk);
 	/* socket options apply to the CLC socket */
+	if (unlikely(!smc->clcsock->ops->getsockopt))
+		return -EOPNOTSUPP;
 	return smc->clcsock->ops->getsockopt(smc->clcsock, level, optname,
 					     optval, optlen);
 }

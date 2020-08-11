@@ -4,7 +4,7 @@
  *
  * Copyright (C) 2017-2019 Microchip Technology Inc.
  */
-
+#define DEBUG
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/iopoll.h>
@@ -272,7 +272,7 @@ static int lan937x_reset_switch(struct ksz_device *dev)
 
 	/* disable interrupts */
 	ksz_write32(dev, REG_SW_INT_MASK__4, SWITCH_INT_MASK);
-	ksz_write32(dev, REG_SW_PORT_INT_MASK__4, 0x7F);
+	ksz_write32(dev, REG_SW_PORT_INT_MASK__4, 0xFF);
 	ksz_read32(dev, REG_SW_PORT_INT_STATUS__4, &data32);
 
 	/* set broadcast storm protection 10% rate */
@@ -295,6 +295,7 @@ static void lan937x_r_mib_cnt(struct ksz_device *dev, int port, u16 addr,
 	unsigned int val;
 	u32 data;
 	int ret;
+	int log_port = dev->logical_port_map[port];
 
 	/* retain the flush/freeze bit */
 	data = p->freeze ? MIB_COUNTER_FLUSH_FREEZE : 0;
@@ -303,7 +304,7 @@ static void lan937x_r_mib_cnt(struct ksz_device *dev, int port, u16 addr,
 	lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4, data);
 
 	ret = regmap_read_poll_timeout(dev->regmap[2],
-			PORT_CTRL_ADDR(port, REG_PORT_MIB_CTRL_STAT__4),
+			PORT_CTRL_ADDR(log_port, REG_PORT_MIB_CTRL_STAT__4),
 			val, !(val & MIB_COUNTER_READ), 10, 1000);
 	/* failed to read MIB. get out of loop */
 	if (ret) {
@@ -413,7 +414,7 @@ static int lan937x_t1_tx_phy_write (struct ksz_device *dev,int addr,int reg,u16 
 	u16 temp,addr_base;
 	unsigned int value;
 
-	pr_info ("lan937x_phy_write16 start, addr:0x%x reg:0x%x,val:0x%x",addr,reg,val);
+	//pr_info ("lan937x_phy_write16 start, addr:0x%x reg:0x%x,val:0x%x",addr,reg,val);
 
 	/* No real PHY after this. */
 	if (addr >= dev->phy_port_cnt)
@@ -643,7 +644,16 @@ static void lan937x_get_strings(struct dsa_switch *ds, int port,
 static void lan937x_cfg_port_member(struct ksz_device *dev, int port,
 				    u8 member)
 {
-	lan937x_pwrite32(dev, port, REG_PORT_VLAN_MEMBERSHIP__4, member);
+	u8 logicalmember = 0;
+	int i;
+
+	for (i = 0; i < dev->port_cnt; i++)
+		if (member & (1 << i)) 
+			logicalmember |=  (1 << (dev->logical_port_map[i] - 1));
+
+	/*Physical port number conversion to logical port number*/
+	lan937x_pwrite32(dev, port, REG_PORT_VLAN_MEMBERSHIP__4, logicalmember);
+
 	dev->ports[port].member = member;
 }
 
@@ -703,17 +713,9 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 	}
 	
 	lan937x_pwrite8(dev, port, P_STP_CTRL, data);
-	pr_info("data:0x%x",data);
+	pr_debug("data:0x%x",data);
 	p->stp_state = state;
 	mutex_lock(&dev->dev_mutex);
-	if (data & PORT_RX_ENABLE)
-		dev->rx_ports |= (1 << port);
-	else
-		dev->rx_ports &= ~(1 << port);
-	if (data & PORT_TX_ENABLE)
-		dev->tx_ports |= (1 << port);
-	else
-		dev->tx_ports &= ~(1 << port);
 
 	/* Port membership may share register with STP state. */
 	if (member >= 0 && member != p->member)
@@ -760,7 +762,7 @@ static int lan937x_port_vlan_filtering(struct dsa_switch *ds, int port,
 {
 	struct ksz_device *dev = ds->priv;
 
-	pr_info("vlan fil,p:%d",port);
+	pr_debug("vlan fil,p:%d",port);
 
 	if (flag) {
 		lan937x_port_cfg(dev, port, REG_PORT_LUE_CTRL,
@@ -782,8 +784,11 @@ static void lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 	u32 vlan_table[3];
 	u16 vid;
 	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
+	u8 log_port = dev->logical_port_map[port] - 1;
+	u8 cpu_log_port = dev->logical_port_map[dev->cpu_port] - 1;
+	
 
-	pr_info("vlan add,p:%d",port);
+	pr_debug("vlan add,p:%d,lp:%d,cp:%d",port, log_port, cpu_log_port);
 
 	for (vid = vlan->vid_begin; vid <= vlan->vid_end; vid++) {
 		if (lan937x_get_vlan_table(dev, vid, vlan_table)) {
@@ -793,12 +798,12 @@ static void lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 
 		vlan_table[0] = VLAN_VALID | (vid & VLAN_FID_M);
 		if (untagged)
-			vlan_table[1] |= BIT(port);
+			vlan_table[1] |= BIT(log_port);
 		else
-			vlan_table[1] &= ~BIT(port);
-		vlan_table[1] &= ~(BIT(dev->cpu_port));
+			vlan_table[1] &= ~BIT(log_port);
+		vlan_table[1] &= ~(BIT(cpu_log_port));
 
-		vlan_table[2] |= BIT(port) | BIT(dev->cpu_port);
+		vlan_table[2] |= BIT(log_port) | BIT(cpu_log_port);
 
 		if (lan937x_set_vlan_table(dev, vid, vlan_table)) {
 			dev_dbg(dev->dev, "Failed to set vlan table\n");
@@ -819,7 +824,11 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 	u32 vlan_table[3];
 	u16 vid;
 	u16 pvid;
-	pr_info("vlan del,p:%d",port);
+	u8 log_port = dev->logical_port_map[port] - 1;
+
+
+	pr_debug("vlan del,p:%d,lp:%d",port, log_port);
+
 	lan937x_pread16(dev, port, REG_PORT_DEFAULT_VID, &pvid);
 	pvid = pvid & 0xFFF;
 
@@ -829,13 +838,13 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 			return -ETIMEDOUT;
 		}
 
-		vlan_table[2] &= ~BIT(port);
+		vlan_table[2] &= ~BIT(log_port);
 
 		if (pvid == vid)
 			pvid = 1;
 
 		if (untagged)
-			vlan_table[1] &= ~BIT(port);
+			vlan_table[1] &= ~BIT(log_port);
 
 		if (lan937x_set_vlan_table(dev, vid, vlan_table)) {
 			dev_dbg(dev->dev, "Failed to set vlan table\n");
@@ -855,10 +864,12 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 	u32 alu_table[4];
 	u32 data;
 	int ret = 0;
+	u8 log_port = dev->logical_port_map[port] - 1;
+
+
+	pr_debug("fdb add,p:%d,vid:%x",port,vid);
 
 	mutex_lock(&dev->alu_mutex);
-
-	pr_info("fdb del,p:%d,vid:%x",port,vid);
 
 	/* find any entry with mac & vid */
 	data = vid << ALU_FID_INDEX_S;
@@ -884,7 +895,7 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 
 	/* update ALU entry */
 	alu_table[0] = ALU_V_STATIC_VALID;
-	alu_table[1] |= BIT(port);
+	alu_table[1] |= BIT(log_port);
 	if (vid)
 		alu_table[1] |= ALU_V_USE_FID;
 	alu_table[2] = (vid << ALU_V_FID_S);
@@ -914,10 +925,11 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 	u32 alu_table[4];
 	u32 data;
 	int ret = 0;
+	u8 log_port = dev->logical_port_map[port] - 1;
+
+	pr_debug("fdb del,p:%d,vid:%x",port,vid);
 
 	mutex_lock(&dev->alu_mutex);
-
-	pr_info("fdb del,p:%d,vid:%x",port,vid);
 
 	/* read any entry with mac & vid */
 	data = vid << ALU_FID_INDEX_S;
@@ -945,7 +957,7 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 		ksz_read32(dev, REG_SW_ALU_VAL_D, &alu_table[3]);
 
 		/* clear forwarding port */
-		alu_table[2] &= ~BIT(port);
+		alu_table[2] &= ~BIT(log_port);
 
 		/* if there is no port to forward, clear table */
 		if ((alu_table[2] & ALU_V_PORT_MAP) == 0) {
@@ -1008,10 +1020,11 @@ static int lan937x_port_fdb_dump(struct dsa_switch *ds, int port,
 	u32 alu_table[4];
 	struct alu_struct alu;
 	int timeout;
+	u8 log_port = dev->logical_port_map[port] - 1;
+
+	pr_debug("fdb dump,p:%d,lp:%d",port,log_port);
 
 	mutex_lock(&dev->alu_mutex);
-
-	pr_info("fdb dump,p:%d",port);
 
 	/* start ALU search */
 	ksz_write32(dev, REG_SW_ALU_CTRL__4, ALU_START | ALU_SEARCH);
@@ -1033,13 +1046,16 @@ static int lan937x_port_fdb_dump(struct dsa_switch *ds, int port,
 
 		/* read ALU table */
 		lan937x_read_table(dev, alu_table);
-
+		
 		lan937x_convert_alu(&alu, alu_table);
 
-		if (alu.port_forward & BIT(port)) {
+		if (alu.port_forward & BIT(log_port)) {
+			pr_debug("pf:%d,lp:%d,fid:%d",alu.port_forward,log_port,alu.fid);
 			ret = cb(alu.mac, alu.fid, alu.is_static, data);
-			if (ret)
+			if (ret) {
+				pr_debug("exited");
 				goto exit;
+			}
 		}
 	} while (lan937x_data & ALU_START);
 
@@ -1061,7 +1077,9 @@ static void lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 	u32 data;
 	int index;
 	u32 mac_hi, mac_lo;
-	//pr_info("mdb add,p:%d",port);
+	u8 log_port = dev->logical_port_map[port] - 1;
+
+	pr_debug("mdb add,p:%d",port);
 	mac_hi = ((mdb->addr[0] << 8) | mdb->addr[1]);
 	mac_lo = ((mdb->addr[2] << 24) | (mdb->addr[3] << 16));
 	mac_lo |= ((mdb->addr[4] << 8) | mdb->addr[5]);
@@ -1103,7 +1121,7 @@ static void lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 
 	/* add entry */
 	static_table[0] = ALU_V_STATIC_VALID;
-	static_table[1] |= BIT(port);
+	static_table[1] |= BIT(log_port);
 	if (mdb->vid)
 		static_table[1] |= ALU_V_USE_FID;
 	static_table[2] = (mdb->vid << ALU_V_FID_S);
@@ -1132,7 +1150,9 @@ static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
 	int index;
 	int ret = 0;
 	u32 mac_hi, mac_lo;
-	//pr_info("mdb del,p:%d",port);
+	u8 log_port = dev->logical_port_map[port] - 1;
+
+	pr_debug("mdb del,p:%d",port);
 	mac_hi = ((mdb->addr[0] << 8) | mdb->addr[1]);
 	mac_lo = ((mdb->addr[2] << 24) | (mdb->addr[3] << 16));
 	mac_lo |= ((mdb->addr[4] << 8) | mdb->addr[5]);
@@ -1172,7 +1192,7 @@ static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
 		goto exit;
 
 	/* clear port */
-	static_table[1] &= ~BIT(port);
+	static_table[1] &= ~BIT(log_port);
 
 	if ((static_table[1] & ALU_V_PORT_MAP) == 0) {
 		/* delete entry */
@@ -1204,6 +1224,8 @@ static int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
 {
 	struct ksz_device *dev = ds->priv;
 
+	pr_debug("madd,p:%d,mp:%d", port, mirror->to_local_port);
+	
 	if (ingress)
 		lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX, true);
 	else
@@ -1225,6 +1247,7 @@ static void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
 {
 	struct ksz_device *dev = ds->priv;
 	u8 data;
+	pr_debug("mdel,p:%d,mp:%d", port, mirror->to_local_port);
 
 	if (mirror->ingress)
 		lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX, false);
@@ -1238,22 +1261,7 @@ static void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
 			     PORT_MIRROR_SNIFFER, false);
 }
 
-static void lan937x_phy_setup(struct ksz_device *dev, int port,
-			      struct phy_device *phy)
-{
-	pr_info("phy_setup");
-	/* Only apply to port with PHY. */
-	if (port >= dev->phy_port_cnt)
-		return;
-	
-	/* The MAC actually cannot run in 1000 half-duplex mode. */
-	phy_remove_link_mode(phy,
-			     ETHTOOL_LINK_MODE_1000baseT_Half_BIT);
 
-
-	phy_remove_link_mode(phy,
-				     ETHTOOL_LINK_MODE_1000baseT_Full_BIT);
-}
 
 static void lan937x_set_gbit(struct ksz_device *dev, bool gbit, u8 *data)
 {
@@ -1425,6 +1433,9 @@ static void tx_phy_port_init(struct ksz_device *dev, int port)
 {
 	u32 data;
 
+	/* Software reset. */
+	lan937x_t1_tx_phy_mod_bits(dev, port, MII_BMCR, BMCR_RESET, true);
+
 	tx_phy_setup (dev, port);
 
 	data = lan937x_tx_phy_bank_read(dev, port, TX_REG_BANK_SEL_VMDAC,
@@ -1588,9 +1599,18 @@ static void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 	pr_info("port set up port:%d",port);
 
 	/* enable tag tail for host port */
-	if (cpu_port)
+	if (cpu_port) {
 		lan937x_port_cfg(dev, port, REG_PORT_CTRL_0, PORT_TAIL_TAG_ENABLE,
 			     true);
+		/* Enable jumbo packet in host port so that frames are not
+		 * counted as oversized.
+		 */
+		lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_JUMBO_PACKET,
+			     true);
+		lan937x_pwrite16(dev, port, REG_PORT_MTU__2, 1540);
+	}
+
+	lan937x_port_cfg(dev,port, REG_PORT_MAC_CTRL_0, PORT_FR_CHK_LENGTH , false);
 
 	lan937x_port_cfg(dev, port, REG_PORT_CTRL_0, PORT_MAC_LOOPBACK, false);
 
@@ -1656,18 +1676,10 @@ static void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 		p->phydev.duplex = 1;
 	}
 	mutex_lock(&dev->dev_mutex);
-	if (cpu_port) {
+	if (cpu_port)
 		member = dev->port_mask;
-		dev->on_ports = dev->host_mask;
-		dev->live_ports = dev->host_mask;
-	} else {
+	else
 		member = dev->host_mask | p->vid_member;
-		dev->on_ports |= (1 << port);
-
-		/* Link was detected before port is enabled. */
-		if (p->phydev.link)
-			dev->live_ports |= (1 << port);
-	}
 	mutex_unlock(&dev->dev_mutex);
 	lan937x_cfg_port_member(dev, port, member);
 
@@ -1746,6 +1758,7 @@ static int lan937x_setup(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
 	int ret = 0;
+	u8 data8;
 
 	dev->vlan_cache = devm_kcalloc(dev->dev, sizeof(struct vlan_table),
 				       dev->num_vlans, GFP_KERNEL);
@@ -1757,23 +1770,42 @@ static int lan937x_setup(struct dsa_switch *ds)
 		dev_err(ds->dev, "failed to reset switch\n");
 		return ret;
 	}
-	 
+	
 	/* Required for port partitioning. */
 	lan937x_cfg32(dev, REG_SW_QM_CTRL__4, UNICAST_VLAN_BOUNDARY,
 		      true);
 
-	/* Do not work correctly with tail tagging. */
-	lan937x_cfg(dev, REG_SW_MAC_CTRL_0, SW_CHECK_LENGTH, false);
-
-	/* accept packet up to 2000bytes */
-	lan937x_cfg(dev, REG_SW_MAC_CTRL_1, SW_LEGAL_PACKET_DISABLE, true);
-
 	lan937x_config_cpu_port(ds);
 
-	lan937x_cfg(dev, REG_SW_MAC_CTRL_1, MULTICAST_STORM_DISABLE, true);
+	/*I've taken "net: dsa: sja1105: disable rxvlan offload for the DSA master"
+	 from (https://lore.kernel.org/netdev/20200512234921.25460-1-olteanv@gmail.com/) 
+	 and also applied it to the KSZ9477-Driver, which fixes the problem. 
+	 It's probably a workaround, but fixes the VLAN behavior for now. 
+	 I would suggest also applying "ds->disable_master_rxvlan = true;" 
+	 to KSZ9477 after the mentioned patch is merged.*/
+	//ds->disable_master_rxvlan = true;
+
+	
+	ds->mtu_enforcement_ingress = true;
+	
+	ds->configure_vlan_while_not_filtering = true;
+
+	/* Enable aggressive back off algorithm in half duplex mode. 
+	* If no excessive collision drop is enabled the default backoff algorithm
+	* may cause both linked device to stop passing traffic completely.
+	* Recommended to turn on UNH mode to pass UNH tests.
+	*/
+
+	lan937x_cfg(dev, REG_SW_MAC_CTRL_0, SW_PAUSE_UNH_MODE | SW_NEW_BACKOFF | 
+						SW_AGGR_BACKOFF, true);
+
+	lan937x_cfg(dev, REG_SW_MAC_CTRL_1, (MULTICAST_STORM_DISABLE | NO_EXC_COLLISION_DROP)
+								 , true);
 
 	/* queue based egress rate limit */
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_5, SW_OUT_RATE_LIMIT_QUEUE_BASED, true);
+
+	lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_RESV_MCAST_ENABLE, true);
 
 	/* enable global MIB counter freeze function */
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FREEZE, true);
@@ -1792,7 +1824,7 @@ static int lan937x_change_mtu(struct dsa_switch *ds, int port, int mtu)
 	struct ksz_device *dev = ds->priv;
 	u16 max_size;
 	
-	pr_info("Change_mtu port %d, mtu: %d", port, mtu);
+	//pr_info("Change_mtu port %d, mtu: %d", port, mtu);
 	
 	if (mtu >= FR_MIN_SIZE) {
 		lan937x_port_cfg(dev,port, REG_PORT_MAC_CTRL_0,PORT_JUMBO_EN , true);
@@ -1807,7 +1839,7 @@ static int lan937x_change_mtu(struct dsa_switch *ds, int port, int mtu)
 }
 static int lan937x_get_max_mtu(struct dsa_switch *ds, int port)
 {
-	pr_info("get max mtu port:%d",port);
+	//pr_info("get max mtu port:%d",port);
 	return FR_MAX_SIZE;
 }
 static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
@@ -1817,14 +1849,13 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 	struct ksz_device *dev = ds->priv;
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(mask) = { 0, };
 
-	pr_info("Phy link Validate: port:%d",port);
-	pr_info("First supported %*pb",__ETHTOOL_LINK_MODE_MASK_NBITS, supported);
-	pr_info("First state->advertising %*pb",__ETHTOOL_LINK_MODE_MASK_NBITS, state->advertising);
+	//pr_info("Phy link Validate: port:%d",port);
+	//pr_info("First supported %*pb",__ETHTOOL_LINK_MODE_MASK_NBITS, supported);
+	//pr_info("First state->advertising %*pb",__ETHTOOL_LINK_MODE_MASK_NBITS, state->advertising);
 
 	
 	if (phy_interface_mode_is_rgmii(state->interface) || (PHY_INTERFACE_MODE_SGMII == state->interface)){
 		phylink_set(mask, 1000baseT_Full);
-		phylink_set(mask, 1000baseT_Half);
 		phylink_set(mask, 10baseT_Half);
 		phylink_set(mask, 10baseT_Full);
 		phylink_set(mask, 100baseT_Half);
@@ -1878,7 +1909,7 @@ static int lan937x_phylink_mac_link_state(struct dsa_switch *ds, int port,
 {
 	//struct ksz_device *dev = ds->priv;
 	int ret = -EOPNOTSUPP;
-	pr_info("mac_link_state: port:%d",port);
+	//pr_info("mac_link_state: port:%d",port);
 	/*if ((phy_interface_mode_is_8023z(state->interface) ||
 	     state->interface == PHY_INTERFACE_MODE_SGMII) &&
 	     dev->ops->serdes_link_state)
@@ -1896,10 +1927,10 @@ static void lan937x_phylink_mac_config(struct dsa_switch *ds, int port,
 	
 	struct ksz_device *dev = ds->priv;
 
-	pr_info("mac_config: port:%d,mode:%d,speed:%d",port,mode,state->speed);
-	pr_info("mac_config: duplex:%d,pause:%d,link:%d",state->duplex,state->pause,state->link);
-	pr_info("mac_config: an_enabled:%d,an_complete:%d",state->an_enabled,state->an_complete);
-	pr_info("mac_config: advertising:%*pb,lp_advertising:%*pb",__ETHTOOL_LINK_MODE_MASK_NBITS,state->advertising,__ETHTOOL_LINK_MODE_MASK_NBITS,state->lp_advertising);
+	//pr_info("mac_config: port:%d,mode:%d,speed:%d",port,mode,state->speed);
+	//pr_info("mac_config: duplex:%d,pause:%d,link:%d",state->duplex,state->pause,state->link);
+	//pr_info("mac_config: an_enabled:%d,an_complete:%d",state->an_enabled,state->an_complete);
+	//pr_info("mac_config: advertising:%*pb,lp_advertising:%*pb",__ETHTOOL_LINK_MODE_MASK_NBITS,state->advertising,__ETHTOOL_LINK_MODE_MASK_NBITS,state->lp_advertising);
 
 	/*For mode configuration, valid state members are interface and advertising*/
 	if (mode == MLO_AN_PHY)	
@@ -1934,21 +1965,21 @@ static void lan937x_phylink_mac_an_restart(struct dsa_switch *ds, int port)
 		lan937x_t1_tx_phy_write(dev, port, MII_BMCR, regval);
 	}
 }
-static void lan937x_phylink_mac_link_down(struct dsa_switch *ds, int port,
-			       unsigned int mode,
-			       phy_interface_t interface)
-{
-	struct ksz_device *dev = ds->priv;
-	pr_info("mac_link_down: port:%d",port);
+// static void lan937x_phylink_mac_link_down(struct dsa_switch *ds, int port,
+// 			       unsigned int mode,
+// 			       phy_interface_t interface)
+// {
+// 	struct ksz_device *dev = ds->priv;
+// 	pr_info("mac_link_down: port:%d",port);
 
-	/*If mode is not an in-band negotiation mode (as defined by phylink_autoneg_inband()), 
-	force the link down and disable any Energy Efficient Ethernet MAC configuration*/
+// 	/*If mode is not an in-band negotiation mode (as defined by phylink_autoneg_inband()), 
+// 	force the link down and disable any Energy Efficient Ethernet MAC configuration*/
 
-	/*TODO:Force the link down, for power saving */
+// 	/*TODO:Force the link down, for power saving */
 
-	/*100BT_EEE_DIS & 1000BT_EEE_DIS are 1 by default EEE is disabled by default*/
+// 	/*100BT_EEE_DIS & 1000BT_EEE_DIS are 1 by default EEE is disabled by default*/
 
-}
+// }
 
 
 static void lan937x_phylink_mac_link_up(struct dsa_switch *ds, int port,
@@ -1960,8 +1991,8 @@ static void lan937x_phylink_mac_link_up(struct dsa_switch *ds, int port,
 {
 	struct ksz_device *dev = ds->priv;
 
-	pr_info("mac_link_up: port:%d,mode:%d,speed:%d,duplex:%d,tx_pause:%d,rx_pause:%d",port,mode,speed,duplex,tx_pause,rx_pause);
-	pr_info("interface:%s",phy_modes(interface));
+	//pr_info("mac_link_up: port:%d,mode:%d,speed:%d,duplex:%d,tx_pause:%d,rx_pause:%d",port,mode,speed,duplex,tx_pause,rx_pause);
+	//pr_info("interface:%s",phy_modes(interface));
 
 	/*TODO: speed, duplex, tx_pause and rx_pause indicate the finalised link settings, 
 	and should be used to configure the MAC block appropriately*/
@@ -1983,7 +2014,6 @@ static const struct dsa_switch_ops lan937x_switch_ops = {
 	.phy_read		= lan937x_phy_read16,
 	.phy_write		= lan937x_phy_write16,
 	.port_enable		= ksz_enable_port,
-	.port_disable		= ksz_disable_port,
 	.get_strings		= lan937x_get_strings,
 	.get_ethtool_stats	= ksz_get_ethtool_stats,
 	.get_sset_count		= ksz_sset_count,
@@ -2009,7 +2039,7 @@ static const struct dsa_switch_ops lan937x_switch_ops = {
 	.phylink_mac_link_state	= lan937x_phylink_mac_link_state,
 	.phylink_mac_config	= lan937x_phylink_mac_config,
 	.phylink_mac_an_restart	= lan937x_phylink_mac_an_restart,
-	.phylink_mac_link_down	= lan937x_phylink_mac_link_down,
+	.phylink_mac_link_down	= ksz_mac_link_down,
 	.phylink_mac_link_up	= lan937x_phylink_mac_link_up,
 };
 
@@ -2194,6 +2224,8 @@ static int lan937x_switch_init(struct ksz_device *dev)
 
 	}
 
+	/* set the real number of ports */
+	dev->ds->num_ports = dev->port_cnt;
 	return 0;
 }
 
@@ -2206,7 +2238,6 @@ static const struct ksz_dev_ops lan937x_dev_ops = {
 	.get_port_addr = lan937x_get_port_addr,
 	.cfg_port_member = lan937x_cfg_port_member,
 	.flush_dyn_mac_table = lan937x_flush_dyn_mac_table,
-	.phy_setup = lan937x_phy_setup,
 	.port_setup = lan937x_port_setup,
 	.r_mib_cnt = lan937x_r_mib_cnt,
 	.r_mib_pkt = lan937x_r_mib_pkt,
@@ -2220,7 +2251,25 @@ static const struct ksz_dev_ops lan937x_dev_ops = {
 
 int lan937x_switch_register(struct ksz_device *dev)
 {
-	return ksz_switch_register(dev, &lan937x_dev_ops);
+	int ret, i;
+	struct phy_device *phydev;
+	ret = ksz_switch_register(dev, &lan937x_dev_ops);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < dev->phy_port_cnt; ++i) {
+		if (!dsa_is_user_port(dev->ds, i))
+			continue;
+
+		phydev = dsa_to_port(dev->ds, i)->slave->phydev;
+
+		/* The MAC actually cannot run in 1000 half-duplex mode. */
+		phy_remove_link_mode(phydev,
+				     ETHTOOL_LINK_MODE_1000baseT_Half_BIT);
+
+
+	}
+	return ret;
 }
 EXPORT_SYMBOL(lan937x_switch_register);
 

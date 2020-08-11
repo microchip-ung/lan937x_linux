@@ -28,7 +28,7 @@ static int __init no_initrd(char *str)
 
 __setup("noinitrd", no_initrd);
 
-static int __init early_initrd(char *p)
+static int __init early_initrdmem(char *p)
 {
 	phys_addr_t start;
 	unsigned long size;
@@ -42,6 +42,12 @@ static int __init early_initrd(char *p)
 		phys_initrd_size = size;
 	}
 	return 0;
+}
+early_param("initrdmem", early_initrdmem);
+
+static int __init early_initrd(char *p)
+{
+	return early_initrdmem(p);
 }
 early_param("initrd", early_initrd);
 
