@@ -65,6 +65,7 @@
 				lan9374: lan9374@0 {
 					compatible = "microchip,lan937x";
 					reg = <0>;
+					phy-mode = "rmii";
 					/*44 MHz did not work*/
 					spi-max-frequency = <6000000>;
 					spi-cpha;
@@ -104,7 +105,7 @@
 							label = "cpu";
 							ethernet = <&macb0>;
 							fixed-link {
-								speed = <1000>;
+								speed = <100>;
 								full-duplex;
 							};
 						};
@@ -112,7 +113,7 @@
 							reg = <7>;
 							label = "lan7";
 							fixed-link {
-								speed = <1000>;
+								speed = <100>;
 								full-duplex;
 							};
 						};
@@ -122,6 +123,7 @@
 				lan9372: lan9372@0 {
 					compatible = "microchip,lan937x";
 					reg = <0>;
+					phy-mode = "rmii";
 					/*44 MHz did not work*/
 					spi-max-frequency = <6000000>;
 					spi-cpha;
@@ -161,7 +163,7 @@
 							label = "cpu";
 							ethernet = <&macb0>;
 							fixed-link {
-								speed = <1000>;
+								speed = <100>;
 								full-duplex;
 							};
 						};
@@ -169,7 +171,7 @@
 							reg = <7>;
 							label = "lan7";
 							fixed-link {
-								speed = <1000>;
+								speed = <100>;
 								full-duplex;
 							};
 						};
@@ -233,13 +235,13 @@
 			};
 
 			macb0: ethernet@f0028000 {
-				phy-mode = "rgmii-id";
+				phy-mode = "rmii";
 				#address-cells = <1>;
 				#size-cells = <0>;
 				status = "okay";
 
 				fixed-link {
-					speed = <1000>;
+					speed = <100>;
 					full-duplex;
 				};
 			};

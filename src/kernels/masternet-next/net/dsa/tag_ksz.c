@@ -3,7 +3,7 @@
  * net/dsa/tag_ksz.c - Microchip KSZ Switch tag format handling
  * Copyright (c) 2017 Microchip Technology
  */
-
+#define DEBUG
 #include <linux/etherdevice.h>
 #include <linux/list.h>
 #include <linux/slab.h>
@@ -249,17 +249,6 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
 #define LAN937X_TAIL_TAG_LOOKUP		BIT(12)
 #define LAN937X_TAIL_TAG_VALID		BIT(13)
 
-static int lan937x_get_phy_port(struct ksz_device *dev, int log_port)
-{
-	int i;
-
-	for (i = 0; i < dev->port_cnt; i++)
-		if (log_port == dev->logical_port_map[i])
-			return i;
-
-	return 0;
-}
-
 static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 				    struct net_device *dev)
 {
@@ -296,22 +285,30 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev,
 				   struct packet_type *pt)
 {
-	struct dsa_port *dp = dsa_slave_to_port(dev);
-	struct dsa_switch *ds = dp->ds;
-	struct ksz_device *lan937xpriv = ds->priv;
-
 	/* Tag decoding */
 	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
-
-	unsigned int port = lan937x_get_phy_port(lan937xpriv, tag[0] & 7);
 	unsigned int len = KSZ_EGRESS_TAG_LEN;
+
+	/*Logical port mapping is same for all SKUs*/
+	u8 logical_addr_map[10] = {1,2,8,3,7,4,5,6,0xff,0xff};
+	unsigned int port, i; 
+	unsigned int log_port = (tag[0] & 7) + 1;
+
+	/*Create temp net device for port0 to get priv data*/
+	struct net_device *netdev = dsa_master_find_slave(dev, 0, 0);
+	struct dsa_port *dp = dsa_slave_to_port(netdev);
+	struct dsa_switch *ds = dp->ds;
+	struct ksz_device *lan937xpriv = ds->priv;
+	
+	/*Find Physical Port*/
+	for (i = 0; i < 10; i++)
+		if (log_port == lan937xpriv->logical_port_map[i])
+			port = i;
 
 	/* Extra 4-bytes PTP timestamp */
 	if (tag[0] & KSZ9477_PTP_TAG_INDICATION)
 		len += KSZ9477_PTP_TAG_LEN;
 
-	pr_info("r");
-	
 	return ksz_common_rcv(skb, dev, port, len);
 }
 
