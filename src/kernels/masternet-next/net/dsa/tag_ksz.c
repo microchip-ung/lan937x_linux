@@ -289,8 +289,6 @@ static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev,
 	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
 	unsigned int len = KSZ_EGRESS_TAG_LEN;
 
-	/*Logical port mapping is same for all SKUs*/
-	u8 logical_addr_map[10] = {1,2,8,3,7,4,5,6,0xff,0xff};
 	unsigned int port, i; 
 	unsigned int log_port = (tag[0] & 7) + 1;
 
