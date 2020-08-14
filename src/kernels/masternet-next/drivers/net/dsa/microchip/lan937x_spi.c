@@ -31,7 +31,7 @@ static int lan937x_spi_probe(struct spi_device *spi)
 	dev = ksz_switch_alloc(&spi->dev, spi);
 	if (!dev)
 		return -ENOMEM;
-	pr_info("lan937x spi probe");
+
 	for (i = 0; i < ARRAY_SIZE(ksz9477_regmap_config); i++) {
 		rc = ksz9477_regmap_config[i];
 		rc.lock_arg = &dev->regmap_mutex;
@@ -49,16 +49,12 @@ static int lan937x_spi_probe(struct spi_device *spi)
 		dev->pdata = spi->dev.platform_data;
 
 	ret = lan937x_switch_register(dev);
-	
-	pr_info("lan937x spi probe done ret value %d",ret);
 
 	/* Main DSA driver may not be started yet. */
 	if (ret)
 		return ret;
 
 	spi_set_drvdata(spi, dev);
-	
-	pr_info("lan937x exit");
 
 	return 0;
 }
@@ -103,6 +99,6 @@ module_spi_driver(lan937x_spi_driver);
 
 MODULE_ALIAS("spi:lan937x");
 
-MODULE_AUTHOR("Woojung Huh <Woojung.Huh@microchip.com>");
+MODULE_AUTHOR("Ganesh Kumar Gurumurthy <GaneshKumar.Gurumurthy@microchip.com>");
 MODULE_DESCRIPTION("Microchip LAN937x Series Switch SPI access Driver");
 MODULE_LICENSE("GPL");

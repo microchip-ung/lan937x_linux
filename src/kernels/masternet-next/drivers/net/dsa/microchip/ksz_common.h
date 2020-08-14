@@ -76,9 +76,9 @@ struct ksz_device {
 	u32 regs_size;
 	bool phy_errata_9477;
 	bool synclko_125;
-	const u8  *logical_port_map;
-	u8 tx_phy_logical_prt_n;
-	u8 sgmii_port_num;
+	const u8  *log_prt_map;
+	u8 tx_phy_log_prt;
+	u8 sgmii_prt;
 
 	struct vlan_table *vlan_cache;
 
@@ -106,6 +106,25 @@ struct alu_struct {
 	/* entry 2 */
 	u8	is_override:1;
 	u8	is_use_fid:1;
+	u32	_reserv_1_1:23;
+	u8	port_forward:7;
+	/* entry 3 & 4*/
+	u32	_reserv_2_1:9;
+	u8	fid:7;
+	u8	mac[ETH_ALEN];
+};
+
+struct lan_alu_struct {
+	/* entry 1 */
+	u8	is_static:1;
+	u8	is_src_filter:1;
+	u8	is_dst_filter:1;
+	u8	prio_age:3;
+	u32	_reserv_0_1:23;
+	u8	mstp:3;
+	/* entry 2 */
+	u8	is_override:1;
+	u8	is_use_fid:1;
 	u32	_reserv_1_1:22;
 	u8	port_forward:8;
 	/* entry 3 & 4*/
@@ -113,7 +132,6 @@ struct alu_struct {
 	u8	fid:7;
 	u8	mac[ETH_ALEN];
 };
-
 struct ksz_dev_ops {
 	u32 (*get_port_addr)(int port, int offset);
 	void (*cfg_port_member)(struct ksz_device *dev, int port, u8 member);
@@ -179,12 +197,12 @@ int ksz_port_mdb_del(struct dsa_switch *ds, int port,
 int ksz_enable_port(struct dsa_switch *ds, int port, struct phy_device *phy);
 
 /* Common register access functions */
-//TODO:Remove pr_infos commented
+
 static inline int ksz_read8(struct ksz_device *dev, u32 reg, u8 *val)
 {
 	unsigned int value;
 	int ret = regmap_read(dev->regmap[0], reg, &value);
-	//pr_info ("ksz_read8=> reg:0x%x, val:0x%x",reg,value);
+
 	*val = value;
 	return ret;
 }
@@ -192,9 +210,8 @@ static inline int ksz_read8(struct ksz_device *dev, u32 reg, u8 *val)
 static inline int ksz_read16(struct ksz_device *dev, u32 reg, u16 *val)
 {
 	unsigned int value;
-	
 	int ret = regmap_read(dev->regmap[1], reg, &value);
-	//pr_info ("ksz_read16=> reg:0x%x, val:0x%x",reg,value);
+
 	*val = value;
 	return ret;
 }
@@ -202,10 +219,7 @@ static inline int ksz_read16(struct ksz_device *dev, u32 reg, u16 *val)
 static inline int ksz_read32(struct ksz_device *dev, u32 reg, u32 *val)
 {
 	unsigned int value;
-	
 	int ret = regmap_read(dev->regmap[2], reg, &value);
-	
-	//pr_info ("ksz_read16=> reg:0x%x, val:0x%x",reg,value);
 
 	*val = value;
 	return ret;
@@ -229,19 +243,16 @@ static inline int ksz_read64(struct ksz_device *dev, u32 reg, u64 *val)
 
 static inline int ksz_write8(struct ksz_device *dev, u32 reg, u8 value)
 {
-	//pr_info ("ksz_write8=> reg:0x%x, val:0x%x",reg,value);
 	return regmap_write(dev->regmap[0], reg, value);
 }
 
 static inline int ksz_write16(struct ksz_device *dev, u32 reg, u16 value)
 {
-	//pr_info ("ksz_write16=> reg:0x%x, val:0x%x",reg,value);
 	return regmap_write(dev->regmap[1], reg, value);
 }
 
 static inline int ksz_write32(struct ksz_device *dev, u32 reg, u32 value)
 {
-	//pr_info ("ksz_write32=> reg:0x%x, val:0x%x",reg,value);
 	return regmap_write(dev->regmap[2], reg, value);
 }
 

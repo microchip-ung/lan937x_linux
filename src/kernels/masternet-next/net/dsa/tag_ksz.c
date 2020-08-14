@@ -254,9 +254,7 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 {
 	struct dsa_port *dp = dsa_slave_to_port(dev);
 	struct dsa_switch *ds = dp->ds;
-	struct ksz_device *lan937xpriv = ds->priv;
-	u8 log_port = lan937xpriv->logical_port_map[dp->index] - 1;
-
+	struct ksz_device *ksz_dev = ds->priv;
 	struct sk_buff *nskb;
 	__be16 *tag;
 	u8 *addr;
@@ -270,12 +268,12 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	tag = skb_put(nskb, LAN937X_INGRESS_TAG_LEN);
 	addr = skb_mac_header(nskb);
 
-	val = BIT(log_port);
+	val = BIT(ksz_dev->log_prt_map[dp->index] - 1);
 
 	if (is_link_local_ether_addr(addr))
 		val |= LAN937X_TAIL_TAG_OVERRIDE;
 
-	/*Tail tag valid bit - This bit should always be set by the CPU*/
+	/* Tail tag valid bit - This bit should always be set by the CPU*/
 	val |= LAN937X_TAIL_TAG_VALID;
 
 	*tag = cpu_to_be16(val);
@@ -288,19 +286,18 @@ static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev,
 	/* Tag decoding */
 	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
 	unsigned int len = KSZ_EGRESS_TAG_LEN;
-
 	unsigned int port, i; 
-	unsigned int log_port = (tag[0] & 7) + 1;
+	unsigned int log_prt = (tag[0] & 7) + 1;
 
-	/*Create temp net device for port0 to get priv data*/
+	/* Create temp net device for port0 to get priv data*/
 	struct net_device *netdev = dsa_master_find_slave(dev, 0, 0);
 	struct dsa_port *dp = dsa_slave_to_port(netdev);
 	struct dsa_switch *ds = dp->ds;
-	struct ksz_device *lan937xpriv = ds->priv;
+	struct ksz_device *ksz_dev = ds->priv;
 	
-	/*Find Physical Port*/
+	/* Find Physical Port*/
 	for (i = 0; i < 10; i++)
-		if (log_port == lan937xpriv->logical_port_map[i])
+		if (log_prt == ksz_dev->log_prt_map[i])
 			port = i;
 
 	/* Extra 4-bytes PTP timestamp */
