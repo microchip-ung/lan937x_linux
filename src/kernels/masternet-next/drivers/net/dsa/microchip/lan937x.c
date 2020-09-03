@@ -1612,7 +1612,6 @@ static void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 		default:
 			lan937x_set_xmii(dev, 3, &data8);
 			lan937x_set_gbit(dev, true, &data8);
-			/* TODO: Only with 100Mbps RGMII works */
 			data8 |= PORT_MII_NOT_1GBIT;
 			data8 &= ~PORT_RGMII_ID_IG_ENABLE;
 			data8 &= ~PORT_RGMII_ID_EG_ENABLE;
@@ -1625,10 +1624,7 @@ static void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 			p->phydev.speed = SPEED_1000;
 			break;
 		}
-		/*TODO: proper write to be added for each interface
-		* Only with value 0x58, packets are able to transmit/receive
-		* even for RMII mode */
-		lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, 0x58);
+		lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, data8);
 		p->phydev.duplex = 1;
 	}
 	mutex_lock(&dev->dev_mutex);

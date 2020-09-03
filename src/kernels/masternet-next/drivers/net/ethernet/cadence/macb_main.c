@@ -4504,11 +4504,12 @@ static int macb_probe(struct platform_device *pdev)
 	}
 
 	/* MTU range: 68 - 1500 or 10240 */
+	/* EMAC is capable of supporting upto 1536 bytes, hence max_mtu incrementing it by 2*/
 	dev->min_mtu = GEM_MTU_MIN_SIZE;
 	if (bp->caps & MACB_CAPS_JUMBO)
 		dev->max_mtu = macb_config->jumbo_max_len - ETH_HLEN - ETH_FCS_LEN;
 	else
-		dev->max_mtu = ETH_DATA_LEN;
+		dev->max_mtu = ETH_DATA_LEN + 2;
 
 	if (bp->caps & MACB_CAPS_BD_RD_PREFETCH) {
 		val = GEM_BFEXT(RXBD_RDBUFF, gem_readl(bp, DCFG10));
