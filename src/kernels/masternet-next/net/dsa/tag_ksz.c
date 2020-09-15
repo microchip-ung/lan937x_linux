@@ -249,6 +249,27 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
 #define LAN937X_TAIL_TAG_LOOKUP		BIT(12)
 #define LAN937X_TAIL_TAG_VALID		BIT(13)
 
+static struct ksz_device *get_ksz_priv(struct net_device *dev,
+				       int device)
+{
+	struct dsa_port *cpu_dp = dev->dsa_ptr;
+	struct dsa_switch_tree *dst = cpu_dp->dst;
+	struct dsa_port *dp;
+	struct net_device *netdev;
+	struct dsa_switch *ds;
+
+	/*Find one of the slave port (0) to get priv data*/
+	list_for_each_entry(dp, &dst->ports, list)
+		if (dp->ds->index == device && dp->index == 0 &&
+		    dp->type == DSA_PORT_TYPE_USER){
+			netdev = dp->slave;
+			ds = dsa_slave_to_port(netdev)->ds;
+			return ds->priv;
+		}
+
+	return NULL;
+}
+
 static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 				    struct net_device *dev)
 {
@@ -280,21 +301,19 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 
 	return nskb;
 }
+
 static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev,
 				   struct packet_type *pt)
 {
 	/* Tag decoding */
 	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
 	unsigned int len = KSZ_EGRESS_TAG_LEN;
-	unsigned int port, i; 
+	unsigned int port, i;
 	unsigned int log_prt = (tag[0] & 7) + 1;
 
-	/* Create temp net device for port0 to get priv data*/
-	struct net_device *netdev = dsa_master_find_slave(dev, 0, 0);
-	struct dsa_port *dp = dsa_slave_to_port(netdev);
-	struct dsa_switch *ds = dp->ds;
-	struct ksz_device *ksz_dev = ds->priv;
-	
+	/*get lan937x priv data*/
+	struct ksz_device *ksz_dev = get_ksz_priv(dev, 0);
+
 	/* Find Physical Port*/
 	for (i = 0; i < 10; i++)
 		if (log_prt == ksz_dev->log_prt_map[i])

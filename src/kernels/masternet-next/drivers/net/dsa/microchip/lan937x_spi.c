@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-/*
- * Microchip KSZ9477 series register access through SPI
+/*Microchip KSZ9477 series register access through SPI
  *
  * Copyright (C) 2017-2019 Microchip Technology Inc.
  */
@@ -95,7 +94,6 @@ static struct spi_driver lan937x_spi_driver = {
 };
 
 module_spi_driver(lan937x_spi_driver);
-
 
 MODULE_ALIAS("spi:lan937x");
 
