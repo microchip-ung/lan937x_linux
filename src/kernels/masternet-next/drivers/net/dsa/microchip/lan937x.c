@@ -731,7 +731,7 @@ static void lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 	struct ksz_device *dev = ds->priv;
 	u32 vlan_table[3];
 	u16 vid;
-	
+
 	for (vid = vlan->vid_begin; vid <= vlan->vid_end; vid++) {
 		if (lan937x_get_vlan_table(dev, vid, vlan_table)) {
 			dev_dbg(dev->dev, "Failed to get vlan table\n");
@@ -740,7 +740,7 @@ static void lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 
 		vlan_table[0] = VLAN_VALID | (vid & VLAN_FID_M);
 
-		/* set/clear switch logical port number based on the port arg when 
+		/* set/clear switch logical port number based on the port arg when
 		 * updating vlan table registers */
 		if (untagged)
 			vlan_table[1] |= BIT(dev->log_prt_map[port] - 1);
@@ -779,7 +779,7 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 			dev_dbg(dev->dev, "Failed to get vlan table\n");
 			return -ETIMEDOUT;
 		}
-		/* clear switch logical port number based on the port arg when 
+		/* clear switch logical port number based on the port arg when
 		 * updating vlan table registers */
 		vlan_table[2] &= ~BIT(dev->log_prt_map[port] - 1);
 
@@ -807,7 +807,7 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 	u32 alu_table[4];
 	int ret;
 	u32 data;
-	
+
 	mutex_lock(&dev->alu_mutex);
 
 	/* find any entry with mac & vid */
@@ -834,7 +834,7 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 
 	/* update ALU entry */
 	alu_table[0] = ALU_V_STATIC_VALID;
-	/* switch logical port number has to be set based on the port arg when 
+	/* switch logical port number has to be set based on the port arg when
 	* updating alu table registers */
 	alu_table[1] |= BIT(dev->log_prt_map[port] - 1);
 	if (vid)
@@ -894,7 +894,7 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 		ksz_read32(dev, REG_SW_ALU_VAL_C, &alu_table[2]);
 		ksz_read32(dev, REG_SW_ALU_VAL_D, &alu_table[3]);
 
-		/* clear forwarding port - switch logical port number has to be set 
+		/* clear forwarding port - switch logical port number has to be set
 		 * based on the port arg when updating alu table registers */
 		alu_table[2] &= ~BIT(dev->log_prt_map[port] - 1);
 
@@ -1010,7 +1010,7 @@ static void lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 	u32 mac_hi, mac_lo;
 	int index;
 	u32 data;
-	
+
 	mac_hi = ((mdb->addr[0] << 8) | mdb->addr[1]);
 	mac_lo = ((mdb->addr[2] << 24) | (mdb->addr[3] << 16));
 	mac_lo |= ((mdb->addr[4] << 8) | mdb->addr[5]);
@@ -1052,7 +1052,7 @@ static void lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 
 	/* add entry */
 	static_table[0] = ALU_V_STATIC_VALID;
-	/* set logical port number based on the port arg */ 
+	/* set logical port number based on the port arg */
 	static_table[1] |= BIT(dev->log_prt_map[port] - 1);
 	if (mdb->vid)
 		static_table[1] |= ALU_V_USE_FID;
@@ -1081,7 +1081,7 @@ static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
 	u32 mac_hi, mac_lo;
 	int index, ret;
 	u32 data;
-		
+
 	mac_hi = ((mdb->addr[0] << 8) | mdb->addr[1]);
 	mac_lo = ((mdb->addr[2] << 24) | (mdb->addr[3] << 16));
 	mac_lo |= ((mdb->addr[4] << 8) | mdb->addr[5]);
@@ -1315,7 +1315,7 @@ static u32 lan937x_tx_phy_bank_read(struct ksz_device *dev, int port,
 	ctrl |= TX_IND_DATA_READ;
 	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_IND_CTRL, ctrl);
 
-	/* if bank is WOL value to be written again to reflect correct bank */ 
+	/* if bank is WOL value to be written again to reflect correct bank */
 	if (bank == TX_REG_BANK_SEL_WOL)
 		lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_IND_CTRL, ctrl);
 
@@ -1564,7 +1564,7 @@ static void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 	struct ksz_port *p = &dev->ports[port];
 	u8 data8, member;
 	u16 data16;
-	
+
 	/* enable tag tail for host port */
 	if (cpu_port) {
 		lan937x_port_cfg(dev, port, REG_PORT_CTRL_0, PORT_TAIL_TAG_ENABLE,
@@ -1789,8 +1789,8 @@ static int lan937x_change_mtu(struct dsa_switch *ds, int port, int mtu)
 
 static int lan937x_get_max_mtu(struct dsa_switch *ds, int port)
 {
-	/* Frame size is 9000 (= 0x2328) if   
-	 * jumbo frame support is enabled, PORT_JUMBO_EN bit will be enabled 
+	/* Frame size is 9000 (= 0x2328) if
+	 * jumbo frame support is enabled, PORT_JUMBO_EN bit will be enabled
 	 * in lan937x_change_mtu() API based on mtu */
 	return FR_MAX_SIZE;
 }
@@ -1814,7 +1814,7 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 		phylink_set_port_modes(mask);
 		phylink_set(mask, Pause);
 		phylink_set(mask, Asym_Pause);
-	} 
+	}
 	/*  For RGMII & SGMII interfaces */
 	if (phy_interface_mode_is_rgmii(state->interface) ||
 	    state->interface == PHY_INTERFACE_MODE_SGMII) {
@@ -1823,12 +1823,11 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 	}
 	/* For T1 PHY */
 	if (!lan937x_is_tx_phy_port(dev, port) &&
-		port < dev->phy_port_cnt) {
+	    port < dev->phy_port_cnt) {
 		phylink_set(mask, 100baseT_Full);
 		phylink_set_port_modes(mask);
 	}
-	
-	
+
 	bitmap_and(supported, supported, mask,
 		   __ETHTOOL_LINK_MODE_MASK_NBITS);
 	bitmap_and(state->advertising, state->advertising, mask,
