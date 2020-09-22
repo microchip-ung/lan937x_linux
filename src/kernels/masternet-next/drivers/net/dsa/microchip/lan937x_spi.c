@@ -77,7 +77,11 @@ static void lan937x_spi_shutdown(struct spi_device *spi)
 }
 
 static const struct of_device_id lan937x_dt_ids[] = {
-	{ .compatible = "microchip,lan937x"},
+	{ .compatible = "microchip,lan9370"},
+	{ .compatible = "microchip,lan9371"},
+	{ .compatible = "microchip,lan9372"},
+	{ .compatible = "microchip,lan9373"},
+	{ .compatible = "microchip,lan9374"},
 	{},
 };
 MODULE_DEVICE_TABLE(of, lan937x_dt_ids);
