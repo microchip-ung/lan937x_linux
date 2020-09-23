@@ -1,6 +1,6 @@
-/* SPDX-License-Identifier: GPL-2.0
- *Microchip LAN937X register definitions
- *Copyright (C) 2017 - 2018 Microchip Technology Inc.
+// SPDX-License-Identifier: GPL-2.0
+/* Microchip LAN937X switch register definitions
+ * Copyright (C) 2019-2020 Microchip Technology Inc.
  */
 
 #ifndef __LAN937X_REG_H

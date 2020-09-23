@@ -114,24 +114,6 @@ struct alu_struct {
 	u8	mac[ETH_ALEN];
 };
 
-struct lan_alu_struct {
-	/* entry 1 */
-	u8	is_static:1;
-	u8	is_src_filter:1;
-	u8	is_dst_filter:1;
-	u8	prio_age:3;
-	u32	_reserv_0_1:23;
-	u8	mstp:3;
-	/* entry 2 */
-	u8	is_override:1;
-	u8	is_use_fid:1;
-	u32	_reserv_1_1:22;
-	u8	port_forward:8;
-	/* entry 3 & 4*/
-	u32	_reserv_2_1:9;
-	u8	fid:7;
-	u8	mac[ETH_ALEN];
-};
 struct ksz_dev_ops {
 	u32 (*get_port_addr)(int port, int offset);
 	void (*cfg_port_member)(struct ksz_device *dev, int port, u8 member);

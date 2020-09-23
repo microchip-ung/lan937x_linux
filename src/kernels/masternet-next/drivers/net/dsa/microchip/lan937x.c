@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Microchip LAN937X switch driver main logic
- * Copyright (C) 2017-2020 Microchip Technology Inc.
+ * Copyright (C) 2019-2020 Microchip Technology Inc.
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -13,11 +13,6 @@
 
 #include "lan937x_reg.h"
 #include "ksz_common.h"
-
-/* Used with variable features to indicate capabilities. */
-#define GBIT_SUPPORT			BIT(0)
-#define NEW_XMII			BIT(1)
-#define IS_9893				BIT(2)
 
 static const struct {
 	int index;
@@ -59,6 +54,25 @@ static const struct {
 	{ 0x81, "tx_total" },
 	{ 0x82, "rx_discards" },
 	{ 0x83, "tx_discards" },
+};
+
+struct lan_alu_struct {
+	/* entry 1 */
+	u8	is_static:1;
+	u8	is_src_filter:1;
+	u8	is_dst_filter:1;
+	u8	prio_age:3;
+	u32	_reserv_0_1:23;
+	u8	mstp:3;
+	/* entry 2 */
+	u8	is_override:1;
+	u8	is_use_fid:1;
+	u32	_reserv_1_1:22;
+	u8	port_forward:8;
+	/* entry 3 & 4*/
+	u32	_reserv_2_1:9;
+	u8	fid:7;
+	u8	mac[ETH_ALEN];
 };
 
 static void lan937x_cfg(struct ksz_device *dev, u32 addr, u8 bits, bool set)
@@ -340,9 +354,7 @@ static enum dsa_tag_protocol lan937x_get_tag_protocol(struct dsa_switch *ds,
 						      int port,
 						      enum dsa_tag_protocol mp)
 {
-	enum dsa_tag_protocol proto = DSA_TAG_PROTO_LAN937X_VALUE;
-
-	return proto;
+	return DSA_TAG_PROTO_LAN937X_VALUE;
 }
 
 static int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
@@ -1346,13 +1358,11 @@ static void lan937x_tx_phy_bank_write(struct ksz_device *dev, int port,
 static void tx_phy_setup(struct ksz_device *dev, int port)
 {
 	u16 data_lo;
-	u16 cfg;
 
 	lan937x_t1_tx_phy_read(dev, port, REG_PORT_TX_SPECIAL_MODES, &data_lo);
-	cfg = (data_lo >> TX_SPECIAL_CFG_S) & TX_SPECIAL_CFG_M;
-
 	/* Need to change configuration from 6 to other value. */
 	data_lo &= TX_PHYADDR_M;
+
 	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_SPECIAL_MODES, data_lo);
 
     /* Need to toggle test_mode bit to enable DSP access. */
@@ -1369,7 +1379,7 @@ static void tx_phy_port_init(struct ksz_device *dev, int port)
 	u32 data;
 
 	/* Software reset. */
-	//lan937x_t1_tx_phy_mod_bits(dev, port, MII_BMCR, BMCR_RESET, true);
+	lan937x_t1_tx_phy_mod_bits(dev, port, MII_BMCR, BMCR_RESET, true);
 
 	/* tx phy setup */
 	tx_phy_setup(dev, port);
@@ -2112,6 +2122,6 @@ int lan937x_switch_register(struct ksz_device *dev)
 }
 EXPORT_SYMBOL(lan937x_switch_register);
 
-MODULE_AUTHOR("Prasanna Vengateshan Varadharajan<Prasanna.VengateshanVaradharajan@microchip.com>");
+MODULE_AUTHOR("Prasanna Vengateshan Varadharajan<Prasanna.Vengateshan@microchip.com>");
 MODULE_DESCRIPTION("Microchip LAN937x Series Switch DSA Driver");
 MODULE_LICENSE("GPL");

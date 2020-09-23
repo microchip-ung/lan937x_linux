@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
-/*Microchip KSZ9477 series register access through SPI
- *
- * Copyright (C) 2017-2019 Microchip Technology Inc.
+/* Microchip LAN937X switch driver register access through SPI
+ * Copyright (C) 2019-2020 Microchip Technology Inc.
  */
-
 #include <asm/unaligned.h>
 
 #include <linux/delay.h>
