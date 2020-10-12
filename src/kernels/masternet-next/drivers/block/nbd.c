@@ -1363,6 +1363,8 @@ static void nbd_set_cmd_timeout(struct nbd_device *nbd, u64 timeout)
 	nbd->tag_set.timeout = timeout * HZ;
 	if (timeout)
 		blk_queue_rq_timeout(nbd->disk->queue, timeout * HZ);
+	else
+		blk_queue_rq_timeout(nbd->disk->queue, 30 * HZ);
 }
 
 /* Must be called with config_lock held */
@@ -2181,7 +2183,7 @@ out:
 	return ret;
 }
 
-static const struct genl_ops nbd_connect_genl_ops[] = {
+static const struct genl_small_ops nbd_connect_genl_ops[] = {
 	{
 		.cmd	= NBD_CMD_CONNECT,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
@@ -2213,8 +2215,8 @@ static struct genl_family nbd_genl_family __ro_after_init = {
 	.name		= NBD_GENL_FAMILY_NAME,
 	.version	= NBD_GENL_VERSION,
 	.module		= THIS_MODULE,
-	.ops		= nbd_connect_genl_ops,
-	.n_ops		= ARRAY_SIZE(nbd_connect_genl_ops),
+	.small_ops	= nbd_connect_genl_ops,
+	.n_small_ops	= ARRAY_SIZE(nbd_connect_genl_ops),
 	.maxattr	= NBD_ATTR_MAX,
 	.policy = nbd_attr_policy,
 	.mcgrps		= nbd_mcast_grps,

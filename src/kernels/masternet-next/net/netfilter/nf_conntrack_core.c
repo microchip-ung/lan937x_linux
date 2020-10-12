@@ -180,7 +180,7 @@ EXPORT_SYMBOL_GPL(nf_conntrack_htable_size);
 
 unsigned int nf_conntrack_max __read_mostly;
 EXPORT_SYMBOL_GPL(nf_conntrack_max);
-seqcount_t nf_conntrack_generation __read_mostly;
+seqcount_spinlock_t nf_conntrack_generation __read_mostly;
 static unsigned int nf_conntrack_hash_rnd __read_mostly;
 
 static u32 hash_conntrack_raw(const struct nf_conntrack_tuple *tuple,
@@ -859,7 +859,6 @@ nf_conntrack_hash_check_insert(struct nf_conn *ct)
 
 out:
 	nf_conntrack_double_unlock(hash, reply_hash);
-	NF_CT_STAT_INC(net, insert_failed);
 	local_bh_enable();
 	return -EEXIST;
 }
@@ -909,6 +908,7 @@ static void __nf_conntrack_insert_prepare(struct nf_conn *ct)
 		tstamp->start = ktime_get_real_ns();
 }
 
+/* caller must hold locks to prevent concurrent changes */
 static int __nf_ct_resolve_clash(struct sk_buff *skb,
 				 struct nf_conntrack_tuple_hash *h)
 {
@@ -922,23 +922,21 @@ static int __nf_ct_resolve_clash(struct sk_buff *skb,
 	if (nf_ct_is_dying(ct))
 		return NF_DROP;
 
-	if (!atomic_inc_not_zero(&ct->ct_general.use))
-		return NF_DROP;
-
 	if (((ct->status & IPS_NAT_DONE_MASK) == 0) ||
 	    nf_ct_match(ct, loser_ct)) {
 		struct net *net = nf_ct_net(ct);
+
+		nf_conntrack_get(&ct->ct_general);
 
 		nf_ct_acct_merge(ct, ctinfo, loser_ct);
 		nf_ct_add_to_dying_list(loser_ct);
 		nf_conntrack_put(&loser_ct->ct_general);
 		nf_ct_set(skb, ct, ctinfo);
 
-		NF_CT_STAT_INC(net, insert_failed);
+		NF_CT_STAT_INC(net, clash_resolve);
 		return NF_ACCEPT;
 	}
 
-	nf_ct_put(ct);
 	return NF_DROP;
 }
 
@@ -998,6 +996,8 @@ static int nf_ct_resolve_clash_harder(struct sk_buff *skb, u32 repl_idx)
 
 	hlist_nulls_add_head_rcu(&loser_ct->tuplehash[IP_CT_DIR_REPLY].hnnode,
 				 &nf_conntrack_hash[repl_idx]);
+
+	NF_CT_STAT_INC(net, clash_resolve);
 	return NF_ACCEPT;
 }
 
@@ -1027,10 +1027,10 @@ static int nf_ct_resolve_clash_harder(struct sk_buff *skb, u32 repl_idx)
  *
  * Failing that, the new, unconfirmed conntrack is still added to the table
  * provided that the collision only occurs in the ORIGINAL direction.
- * The new entry will be added after the existing one in the hash list,
+ * The new entry will be added only in the non-clashing REPLY direction,
  * so packets in the ORIGINAL direction will continue to match the existing
  * entry.  The new entry will also have a fixed timeout so it expires --
- * due to the collision, it will not see bidirectional traffic.
+ * due to the collision, it will only see reply traffic.
  *
  * Returns NF_DROP if the clash could not be resolved.
  */
@@ -1725,10 +1725,8 @@ nf_conntrack_handle_icmp(struct nf_conn *tmpl,
 	else
 		return NF_ACCEPT;
 
-	if (ret <= 0) {
+	if (ret <= 0)
 		NF_CT_STAT_INC_ATOMIC(state->net, error);
-		NF_CT_STAT_INC_ATOMIC(state->net, invalid);
-	}
 
 	return ret;
 }
@@ -1802,10 +1800,8 @@ nf_conntrack_in(struct sk_buff *skb, const struct nf_hook_state *state)
 	if (tmpl || ctinfo == IP_CT_UNTRACKED) {
 		/* Previously seen (loopback or untracked)?  Ignore. */
 		if ((tmpl && !nf_ct_is_template(tmpl)) ||
-		     ctinfo == IP_CT_UNTRACKED) {
-			NF_CT_STAT_INC_ATOMIC(state->net, ignore);
+		     ctinfo == IP_CT_UNTRACKED)
 			return NF_ACCEPT;
-		}
 		skb->_nfct = 0;
 	}
 
@@ -1813,7 +1809,6 @@ nf_conntrack_in(struct sk_buff *skb, const struct nf_hook_state *state)
 	dataoff = get_l4proto(skb, skb_network_offset(skb), state->pf, &protonum);
 	if (dataoff <= 0) {
 		pr_debug("not prepared to track yet or error occurred\n");
-		NF_CT_STAT_INC_ATOMIC(state->net, error);
 		NF_CT_STAT_INC_ATOMIC(state->net, invalid);
 		ret = NF_ACCEPT;
 		goto out;
@@ -2588,7 +2583,8 @@ int nf_conntrack_init_start(void)
 	/* struct nf_ct_ext uses u8 to store offsets/size */
 	BUILD_BUG_ON(total_extension_size() > 255u);
 
-	seqcount_init(&nf_conntrack_generation);
+	seqcount_spinlock_init(&nf_conntrack_generation,
+			       &nf_conntrack_locks_all_lock);
 
 	for (i = 0; i < CONNTRACK_LOCKS; i++)
 		spin_lock_init(&nf_conntrack_locks[i]);

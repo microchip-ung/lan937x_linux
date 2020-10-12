@@ -236,7 +236,9 @@ void cfg80211_stop_p2p_device(struct cfg80211_registered_device *rdev,
 	rdev->opencount--;
 
 	if (rdev->scan_req && rdev->scan_req->wdev == wdev) {
-		if (WARN_ON(!rdev->scan_req->notified))
+		if (WARN_ON(!rdev->scan_req->notified &&
+			    (!rdev->int_scan_req ||
+			     !rdev->int_scan_req->notified)))
 			rdev->scan_req->info.aborted = true;
 		___cfg80211_scan_done(rdev, false);
 	}
@@ -1125,7 +1127,7 @@ static void __cfg80211_unregister_wdev(struct wireless_dev *wdev, bool sync)
 	}
 
 #ifdef CONFIG_CFG80211_WEXT
-	kzfree(wdev->wext.keys);
+	kfree_sensitive(wdev->wext.keys);
 	wdev->wext.keys = NULL;
 #endif
 	/* only initialized if we have a netdev */
@@ -1336,7 +1338,9 @@ static int cfg80211_netdev_notifier_call(struct notifier_block *nb,
 	case NETDEV_DOWN:
 		cfg80211_update_iface_num(rdev, wdev->iftype, -1);
 		if (rdev->scan_req && rdev->scan_req->wdev == wdev) {
-			if (WARN_ON(!rdev->scan_req->notified))
+			if (WARN_ON(!rdev->scan_req->notified &&
+				    (!rdev->int_scan_req ||
+				     !rdev->int_scan_req->notified)))
 				rdev->scan_req->info.aborted = true;
 			___cfg80211_scan_done(rdev, false);
 		}

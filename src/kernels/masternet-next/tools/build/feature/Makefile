@@ -25,7 +25,7 @@ FILES=                                          \
          test-libelf-getphdrnum.bin             \
          test-libelf-gelf_getnote.bin           \
          test-libelf-getshdrstrndx.bin          \
-         test-libelf-mmap.bin                   \
+         test-libdebuginfod.bin                 \
          test-libnuma.bin                       \
          test-numa_num_possible_cpus.bin        \
          test-libperl.bin                       \
@@ -74,8 +74,6 @@ FILES=                                          \
 
 FILES := $(addprefix $(OUTPUT),$(FILES))
 
-CC ?= $(CROSS_COMPILE)gcc
-CXX ?= $(CROSS_COMPILE)g++
 PKG_CONFIG ?= $(CROSS_COMPILE)pkg-config
 LLVM_CONFIG ?= llvm-config
 CLANG ?= clang
@@ -147,9 +145,6 @@ $(OUTPUT)test-dwarf.bin:
 $(OUTPUT)test-dwarf_getlocations.bin:
 	$(BUILD) $(DWARFLIBS)
 
-$(OUTPUT)test-libelf-mmap.bin:
-	$(BUILD) -lelf
-
 $(OUTPUT)test-libelf-getphdrnum.bin:
 	$(BUILD) -lelf
 
@@ -158,6 +153,9 @@ $(OUTPUT)test-libelf-gelf_getnote.bin:
 
 $(OUTPUT)test-libelf-getshdrstrndx.bin:
 	$(BUILD) -lelf
+
+$(OUTPUT)test-libdebuginfod.bin:
+	$(BUILD) -ldebuginfod
 
 $(OUTPUT)test-libnuma.bin:
 	$(BUILD) -lnuma

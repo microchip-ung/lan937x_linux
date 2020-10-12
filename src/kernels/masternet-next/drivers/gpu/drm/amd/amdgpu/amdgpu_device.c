@@ -80,8 +80,6 @@ MODULE_FIRMWARE("amdgpu/renoir_gpu_info.bin");
 MODULE_FIRMWARE("amdgpu/navi10_gpu_info.bin");
 MODULE_FIRMWARE("amdgpu/navi14_gpu_info.bin");
 MODULE_FIRMWARE("amdgpu/navi12_gpu_info.bin");
-MODULE_FIRMWARE("amdgpu/sienna_cichlid_gpu_info.bin");
-MODULE_FIRMWARE("amdgpu/navy_flounder_gpu_info.bin");
 
 #define AMDGPU_RESUME_MS		2000
 
@@ -1600,6 +1598,8 @@ static int amdgpu_device_parse_gpu_info_fw(struct amdgpu_device *adev)
 	case CHIP_CARRIZO:
 	case CHIP_STONEY:
 	case CHIP_VEGA20:
+	case CHIP_SIENNA_CICHLID:
+	case CHIP_NAVY_FLOUNDER:
 	default:
 		return 0;
 	case CHIP_VEGA10:
@@ -1630,12 +1630,6 @@ static int amdgpu_device_parse_gpu_info_fw(struct amdgpu_device *adev)
 		break;
 	case CHIP_NAVI12:
 		chip_name = "navi12";
-		break;
-	case CHIP_SIENNA_CICHLID:
-		chip_name = "sienna_cichlid";
-		break;
-	case CHIP_NAVY_FLOUNDER:
-		chip_name = "navy_flounder";
 		break;
 	}
 
@@ -2574,6 +2568,9 @@ static int amdgpu_device_ip_reinit_early_sriov(struct amdgpu_device *adev)
 		AMD_IP_BLOCK_TYPE_IH,
 	};
 
+	for (i = 0; i < adev->num_ip_blocks; i++)
+		adev->ip_blocks[i].status.hw = false;
+
 	for (i = 0; i < ARRAY_SIZE(ip_order); i++) {
 		int j;
 		struct amdgpu_ip_block *block;
@@ -2581,7 +2578,6 @@ static int amdgpu_device_ip_reinit_early_sriov(struct amdgpu_device *adev)
 		for (j = 0; j < adev->num_ip_blocks; j++) {
 			block = &adev->ip_blocks[j];
 
-			block->status.hw = false;
 			if (block->version->type != ip_order[i] ||
 				!block->status.valid)
 				continue;

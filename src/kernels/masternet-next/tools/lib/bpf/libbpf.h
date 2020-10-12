@@ -198,8 +198,9 @@ LIBBPF_API void bpf_program__set_ifindex(struct bpf_program *prog,
 					 __u32 ifindex);
 
 LIBBPF_API const char *bpf_program__name(const struct bpf_program *prog);
-LIBBPF_API const char *bpf_program__title(const struct bpf_program *prog,
-					  bool needs_copy);
+LIBBPF_API const char *bpf_program__section_name(const struct bpf_program *prog);
+LIBBPF_API LIBBPF_DEPRECATED("BPF program title is confusing term; please use bpf_program__section_name() instead")
+const char *bpf_program__title(const struct bpf_program *prog, bool needs_copy);
 LIBBPF_API bool bpf_program__autoload(const struct bpf_program *prog);
 LIBBPF_API int bpf_program__set_autoload(struct bpf_program *prog, bool autoload);
 
@@ -260,6 +261,9 @@ LIBBPF_API struct bpf_link *
 bpf_program__attach_netns(struct bpf_program *prog, int netns_fd);
 LIBBPF_API struct bpf_link *
 bpf_program__attach_xdp(struct bpf_program *prog, int ifindex);
+LIBBPF_API struct bpf_link *
+bpf_program__attach_freplace(struct bpf_program *prog,
+			     int target_fd, const char *attach_func_name);
 
 struct bpf_map;
 
@@ -267,9 +271,10 @@ LIBBPF_API struct bpf_link *bpf_map__attach_struct_ops(struct bpf_map *map);
 
 struct bpf_iter_attach_opts {
 	size_t sz; /* size of this struct for forward/backward compatibility */
-	__u32 map_fd;
+	union bpf_iter_link_info *link_info;
+	__u32 link_info_len;
 };
-#define bpf_iter_attach_opts__last_field map_fd
+#define bpf_iter_attach_opts__last_field link_info_len
 
 LIBBPF_API struct bpf_link *
 bpf_program__attach_iter(struct bpf_program *prog,
@@ -587,8 +592,12 @@ perf_buffer__new_raw(int map_fd, size_t page_cnt,
 		     const struct perf_buffer_raw_opts *opts);
 
 LIBBPF_API void perf_buffer__free(struct perf_buffer *pb);
+LIBBPF_API int perf_buffer__epoll_fd(const struct perf_buffer *pb);
 LIBBPF_API int perf_buffer__poll(struct perf_buffer *pb, int timeout_ms);
 LIBBPF_API int perf_buffer__consume(struct perf_buffer *pb);
+LIBBPF_API int perf_buffer__consume_buffer(struct perf_buffer *pb, size_t buf_idx);
+LIBBPF_API size_t perf_buffer__buffer_cnt(const struct perf_buffer *pb);
+LIBBPF_API int perf_buffer__buffer_fd(const struct perf_buffer *pb, size_t buf_idx);
 
 typedef enum bpf_perf_event_ret
 	(*bpf_perf_event_print_t)(struct perf_event_header *hdr,

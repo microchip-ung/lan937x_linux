@@ -23,7 +23,6 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/dma-mapping.h>
-#include <linux/platform_data/macb.h>
 #include <linux/platform_device.h>
 #include <linux/phylink.h>
 #include <linux/of.h>
@@ -458,9 +457,9 @@ static void macb_init_buffers(struct macb *bp)
 
 /**
  * macb_set_tx_clk() - Set a clock to a new frequency
- * @clk		Pointer to the clock to change
- * @rate	New frequency in Hz
- * @dev		Pointer to the struct net_device
+ * @clk:	Pointer to the clock to change
+ * @speed:	New frequency in Hz
+ * @dev:	Pointer to the struct net_device
  */
 static void macb_set_tx_clk(struct clk *clk, int speed, struct net_device *dev)
 {
@@ -647,8 +646,7 @@ static void macb_mac_link_up(struct phylink_config *config,
 				ctrl |= GEM_BIT(GBE);
 		}
 
-		/* We do not support MLO_PAUSE_RX yet */
-		if (tx_pause)
+		if (rx_pause)
 			ctrl |= MACB_BIT(PAE);
 
 		macb_set_tx_clk(bp->tx_clk, speed, ndev);
@@ -1466,9 +1464,9 @@ static int macb_poll(struct napi_struct *napi, int budget)
 	return work_done;
 }
 
-static void macb_hresp_error_task(unsigned long data)
+static void macb_hresp_error_task(struct tasklet_struct *t)
 {
-	struct macb *bp = (struct macb *)data;
+	struct macb *bp = from_tasklet(bp, t, hresp_err_tasklet);
 	struct net_device *dev = bp->dev;
 	struct macb_queue *queue;
 	unsigned int q;
@@ -4504,12 +4502,11 @@ static int macb_probe(struct platform_device *pdev)
 	}
 
 	/* MTU range: 68 - 1500 or 10240 */
-	/* EMAC is capable of supporting upto 1536 bytes, hence max_mtu incrementing it by 2*/
 	dev->min_mtu = GEM_MTU_MIN_SIZE;
 	if (bp->caps & MACB_CAPS_JUMBO)
-		dev->max_mtu = macb_config->jumbo_max_len - ETH_HLEN - ETH_FCS_LEN;
+		dev->max_mtu = gem_readl(bp, JML) - ETH_HLEN - ETH_FCS_LEN;
 	else
-		dev->max_mtu = ETH_DATA_LEN + 2;
+		dev->max_mtu = ETH_DATA_LEN;
 
 	if (bp->caps & MACB_CAPS_BD_RD_PREFETCH) {
 		val = GEM_BFEXT(RXBD_RDBUFF, gem_readl(bp, DCFG10));
@@ -4561,8 +4558,7 @@ static int macb_probe(struct platform_device *pdev)
 		goto err_out_unregister_mdio;
 	}
 
-	tasklet_init(&bp->hresp_err_tasklet, macb_hresp_error_task,
-		     (unsigned long)bp);
+	tasklet_setup(&bp->hresp_err_tasklet, macb_hresp_error_task);
 
 	netdev_info(dev, "Cadence %s rev 0x%08x at 0x%08lx irq %d (%pM)\n",
 		    macb_is_gem(bp) ? "GEM" : "MACB", macb_readl(bp, MID),

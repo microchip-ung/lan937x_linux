@@ -7,6 +7,7 @@
 #include "bpf_iter_task.skel.h"
 #include "bpf_iter_task_stack.skel.h"
 #include "bpf_iter_task_file.skel.h"
+#include "bpf_iter_task_btf.skel.h"
 #include "bpf_iter_tcp4.skel.h"
 #include "bpf_iter_tcp6.skel.h"
 #include "bpf_iter_udp4.skel.h"
@@ -132,18 +133,116 @@ static void test_task_stack(void)
 	bpf_iter_task_stack__destroy(skel);
 }
 
+static void *do_nothing(void *arg)
+{
+	pthread_exit(arg);
+}
+
 static void test_task_file(void)
 {
 	struct bpf_iter_task_file *skel;
+	pthread_t thread_id;
+	void *ret;
 
 	skel = bpf_iter_task_file__open_and_load();
 	if (CHECK(!skel, "bpf_iter_task_file__open_and_load",
 		  "skeleton open_and_load failed\n"))
 		return;
 
+	skel->bss->tgid = getpid();
+
+	if (CHECK(pthread_create(&thread_id, NULL, &do_nothing, NULL),
+		  "pthread_create", "pthread_create failed\n"))
+		goto done;
+
 	do_dummy_read(skel->progs.dump_task_file);
 
+	if (CHECK(pthread_join(thread_id, &ret) || ret != NULL,
+		  "pthread_join", "pthread_join failed\n"))
+		goto done;
+
+	CHECK(skel->bss->count != 0, "check_count",
+	      "invalid non pthread file visit count %d\n", skel->bss->count);
+
+done:
 	bpf_iter_task_file__destroy(skel);
+}
+
+#define TASKBUFSZ		32768
+
+static char taskbuf[TASKBUFSZ];
+
+static int do_btf_read(struct bpf_iter_task_btf *skel)
+{
+	struct bpf_program *prog = skel->progs.dump_task_struct;
+	struct bpf_iter_task_btf__bss *bss = skel->bss;
+	int iter_fd = -1, len = 0, bufleft = TASKBUFSZ;
+	struct bpf_link *link;
+	char *buf = taskbuf;
+	int ret = 0;
+
+	link = bpf_program__attach_iter(prog, NULL);
+	if (CHECK(IS_ERR(link), "attach_iter", "attach_iter failed\n"))
+		return ret;
+
+	iter_fd = bpf_iter_create(bpf_link__fd(link));
+	if (CHECK(iter_fd < 0, "create_iter", "create_iter failed\n"))
+		goto free_link;
+
+	do {
+		len = read(iter_fd, buf, bufleft);
+		if (len > 0) {
+			buf += len;
+			bufleft -= len;
+		}
+	} while (len > 0);
+
+	if (bss->skip) {
+		printf("%s:SKIP:no __builtin_btf_type_id\n", __func__);
+		ret = 1;
+		test__skip();
+		goto free_link;
+	}
+
+	if (CHECK(len < 0, "read", "read failed: %s\n", strerror(errno)))
+		goto free_link;
+
+	CHECK(strstr(taskbuf, "(struct task_struct)") == NULL,
+	      "check for btf representation of task_struct in iter data",
+	      "struct task_struct not found");
+free_link:
+	if (iter_fd > 0)
+		close(iter_fd);
+	bpf_link__destroy(link);
+	return ret;
+}
+
+static void test_task_btf(void)
+{
+	struct bpf_iter_task_btf__bss *bss;
+	struct bpf_iter_task_btf *skel;
+	int ret;
+
+	skel = bpf_iter_task_btf__open_and_load();
+	if (CHECK(!skel, "bpf_iter_task_btf__open_and_load",
+		  "skeleton open_and_load failed\n"))
+		return;
+
+	bss = skel->bss;
+
+	ret = do_btf_read(skel);
+	if (ret)
+		goto cleanup;
+
+	if (CHECK(bss->tasks == 0, "check if iterated over tasks",
+		  "no task iteration, did BPF program run?\n"))
+		goto cleanup;
+
+	CHECK(bss->seq_err != 0, "check for unexpected err",
+	      "bpf_seq_printf_btf returned %ld", bss->seq_err);
+
+cleanup:
+	bpf_iter_task_btf__destroy(skel);
 }
 
 static void test_tcp4(void)
@@ -331,7 +430,7 @@ static void test_overflow(bool test_e2big_overflow, bool ret1)
 	struct bpf_map_info map_info = {};
 	struct bpf_iter_test_kern4 *skel;
 	struct bpf_link *link;
-	__u32 page_size;
+	__u32 iter_size;
 	char *buf;
 
 	skel = bpf_iter_test_kern4__open();
@@ -353,19 +452,19 @@ static void test_overflow(bool test_e2big_overflow, bool ret1)
 		  "map_creation failed: %s\n", strerror(errno)))
 		goto free_map1;
 
-	/* bpf_seq_printf kernel buffer is one page, so one map
+	/* bpf_seq_printf kernel buffer is 8 pages, so one map
 	 * bpf_seq_write will mostly fill it, and the other map
 	 * will partially fill and then trigger overflow and need
 	 * bpf_seq_read restart.
 	 */
-	page_size = sysconf(_SC_PAGE_SIZE);
+	iter_size = sysconf(_SC_PAGE_SIZE) << 3;
 
 	if (test_e2big_overflow) {
-		skel->rodata->print_len = (page_size + 8) / 8;
-		expected_read_len = 2 * (page_size + 8);
+		skel->rodata->print_len = (iter_size + 8) / 8;
+		expected_read_len = 2 * (iter_size + 8);
 	} else if (!ret1) {
-		skel->rodata->print_len = (page_size - 8) / 8;
-		expected_read_len = 2 * (page_size - 8);
+		skel->rodata->print_len = (iter_size - 8) / 8;
+		expected_read_len = 2 * (iter_size - 8);
 	} else {
 		skel->rodata->print_len = 1;
 		expected_read_len = 2 * 8;
@@ -468,6 +567,7 @@ static void test_bpf_hash_map(void)
 	DECLARE_LIBBPF_OPTS(bpf_iter_attach_opts, opts);
 	struct bpf_iter_bpf_hash_map *skel;
 	int err, i, len, map_fd, iter_fd;
+	union bpf_iter_link_info linfo;
 	__u64 val, expected_val = 0;
 	struct bpf_link *link;
 	struct key_t {
@@ -490,13 +590,16 @@ static void test_bpf_hash_map(void)
 		goto out;
 
 	/* iterator with hashmap2 and hashmap3 should fail */
-	opts.map_fd = bpf_map__fd(skel->maps.hashmap2);
+	memset(&linfo, 0, sizeof(linfo));
+	linfo.map.map_fd = bpf_map__fd(skel->maps.hashmap2);
+	opts.link_info = &linfo;
+	opts.link_info_len = sizeof(linfo);
 	link = bpf_program__attach_iter(skel->progs.dump_bpf_hash_map, &opts);
 	if (CHECK(!IS_ERR(link), "attach_iter",
 		  "attach_iter for hashmap2 unexpected succeeded\n"))
 		goto out;
 
-	opts.map_fd = bpf_map__fd(skel->maps.hashmap3);
+	linfo.map.map_fd = bpf_map__fd(skel->maps.hashmap3);
 	link = bpf_program__attach_iter(skel->progs.dump_bpf_hash_map, &opts);
 	if (CHECK(!IS_ERR(link), "attach_iter",
 		  "attach_iter for hashmap3 unexpected succeeded\n"))
@@ -519,7 +622,7 @@ static void test_bpf_hash_map(void)
 			goto out;
 	}
 
-	opts.map_fd = map_fd;
+	linfo.map.map_fd = map_fd;
 	link = bpf_program__attach_iter(skel->progs.dump_bpf_hash_map, &opts);
 	if (CHECK(IS_ERR(link), "attach_iter", "attach_iter failed\n"))
 		goto out;
@@ -562,6 +665,7 @@ static void test_bpf_percpu_hash_map(void)
 	DECLARE_LIBBPF_OPTS(bpf_iter_attach_opts, opts);
 	struct bpf_iter_bpf_percpu_hash_map *skel;
 	int err, i, j, len, map_fd, iter_fd;
+	union bpf_iter_link_info linfo;
 	__u32 expected_val = 0;
 	struct bpf_link *link;
 	struct key_t {
@@ -606,7 +710,10 @@ static void test_bpf_percpu_hash_map(void)
 			goto out;
 	}
 
-	opts.map_fd = map_fd;
+	memset(&linfo, 0, sizeof(linfo));
+	linfo.map.map_fd = map_fd;
+	opts.link_info = &linfo;
+	opts.link_info_len = sizeof(linfo);
 	link = bpf_program__attach_iter(skel->progs.dump_bpf_percpu_hash_map, &opts);
 	if (CHECK(IS_ERR(link), "attach_iter", "attach_iter failed\n"))
 		goto out;
@@ -649,6 +756,7 @@ static void test_bpf_array_map(void)
 	DECLARE_LIBBPF_OPTS(bpf_iter_attach_opts, opts);
 	__u32 expected_key = 0, res_first_key;
 	struct bpf_iter_bpf_array_map *skel;
+	union bpf_iter_link_info linfo;
 	int err, i, map_fd, iter_fd;
 	struct bpf_link *link;
 	char buf[64] = {};
@@ -673,7 +781,10 @@ static void test_bpf_array_map(void)
 			goto out;
 	}
 
-	opts.map_fd = map_fd;
+	memset(&linfo, 0, sizeof(linfo));
+	linfo.map.map_fd = map_fd;
+	opts.link_info = &linfo;
+	opts.link_info_len = sizeof(linfo);
 	link = bpf_program__attach_iter(skel->progs.dump_bpf_array_map, &opts);
 	if (CHECK(IS_ERR(link), "attach_iter", "attach_iter failed\n"))
 		goto out;
@@ -730,6 +841,7 @@ static void test_bpf_percpu_array_map(void)
 	DECLARE_LIBBPF_OPTS(bpf_iter_attach_opts, opts);
 	struct bpf_iter_bpf_percpu_array_map *skel;
 	__u32 expected_key = 0, expected_val = 0;
+	union bpf_iter_link_info linfo;
 	int err, i, j, map_fd, iter_fd;
 	struct bpf_link *link;
 	char buf[64];
@@ -765,7 +877,10 @@ static void test_bpf_percpu_array_map(void)
 			goto out;
 	}
 
-	opts.map_fd = map_fd;
+	memset(&linfo, 0, sizeof(linfo));
+	linfo.map.map_fd = map_fd;
+	opts.link_info = &linfo;
+	opts.link_info_len = sizeof(linfo);
 	link = bpf_program__attach_iter(skel->progs.dump_bpf_percpu_array_map, &opts);
 	if (CHECK(IS_ERR(link), "attach_iter", "attach_iter failed\n"))
 		goto out;
@@ -803,6 +918,7 @@ static void test_bpf_sk_storage_map(void)
 	DECLARE_LIBBPF_OPTS(bpf_iter_attach_opts, opts);
 	int err, i, len, map_fd, iter_fd, num_sockets;
 	struct bpf_iter_bpf_sk_storage_map *skel;
+	union bpf_iter_link_info linfo;
 	int sock_fd[3] = {-1, -1, -1};
 	__u32 val, expected_val = 0;
 	struct bpf_link *link;
@@ -829,7 +945,10 @@ static void test_bpf_sk_storage_map(void)
 			goto out;
 	}
 
-	opts.map_fd = map_fd;
+	memset(&linfo, 0, sizeof(linfo));
+	linfo.map.map_fd = map_fd;
+	opts.link_info = &linfo;
+	opts.link_info_len = sizeof(linfo);
 	link = bpf_program__attach_iter(skel->progs.dump_bpf_sk_storage_map, &opts);
 	if (CHECK(IS_ERR(link), "attach_iter", "attach_iter failed\n"))
 		goto out;
@@ -871,6 +990,7 @@ static void test_rdonly_buf_out_of_bound(void)
 {
 	DECLARE_LIBBPF_OPTS(bpf_iter_attach_opts, opts);
 	struct bpf_iter_test_kern5 *skel;
+	union bpf_iter_link_info linfo;
 	struct bpf_link *link;
 
 	skel = bpf_iter_test_kern5__open_and_load();
@@ -878,7 +998,10 @@ static void test_rdonly_buf_out_of_bound(void)
 		  "skeleton open_and_load failed\n"))
 		return;
 
-	opts.map_fd = bpf_map__fd(skel->maps.hashmap1);
+	memset(&linfo, 0, sizeof(linfo));
+	linfo.map.map_fd = bpf_map__fd(skel->maps.hashmap1);
+	opts.link_info = &linfo;
+	opts.link_info_len = sizeof(linfo);
 	link = bpf_program__attach_iter(skel->progs.dump_bpf_hash_map, &opts);
 	if (CHECK(!IS_ERR(link), "attach_iter", "unexpected success\n"))
 		bpf_link__destroy(link);
@@ -912,6 +1035,8 @@ void test_bpf_iter(void)
 		test_task_stack();
 	if (test__start_subtest("task_file"))
 		test_task_file();
+	if (test__start_subtest("task_btf"))
+		test_task_btf();
 	if (test__start_subtest("tcp4"))
 		test_tcp4();
 	if (test__start_subtest("tcp6"))

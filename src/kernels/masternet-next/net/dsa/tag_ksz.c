@@ -3,7 +3,7 @@
  * net/dsa/tag_ksz.c - Microchip KSZ Switch tag format handling
  * Copyright (c) 2017 Microchip Technology
  */
-#define DEBUG
+
 #include <linux/etherdevice.h>
 #include <linux/list.h>
 #include <linux/slab.h>
@@ -238,6 +238,7 @@ static const struct dsa_device_ops ksz9893_netdev_ops = {
 	.xmit	= ksz9893_xmit,
 	.rcv	= ksz9477_rcv,
 	.overhead = KSZ_INGRESS_TAG_LEN,
+	.tail_tag = true,
 };
 
 DSA_TAG_DRIVER(ksz9893_netdev_ops);

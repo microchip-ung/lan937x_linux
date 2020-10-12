@@ -837,7 +837,7 @@ static int unix_create(struct net *net, struct socket *sock, int protocol,
 		 */
 	case SOCK_RAW:
 		sock->type = SOCK_DGRAM;
-		/* fall through */
+		fallthrough;
 	case SOCK_DGRAM:
 		sock->ops = &unix_dgram_ops;
 		break;
@@ -878,7 +878,6 @@ static int unix_autobind(struct socket *sock)
 	if (err)
 		return err;
 
-	err = 0;
 	if (u->addr)
 		goto out;
 
