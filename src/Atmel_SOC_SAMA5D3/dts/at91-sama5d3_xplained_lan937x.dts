@@ -167,7 +167,6 @@
 				lan9370: lan9370@3 {
 					compatible = "microchip,lan9370";
 					reg = <3>;
-					phy-mode = "rmii";
 					spi-max-frequency = <44000000>;
 					spi-cpha;
 					spi-cpol;
@@ -195,6 +194,7 @@
 						};
 						port@4 {
 							reg = <4>;
+							phy-mode = "rmii";
 							label = "cpu";
 							ethernet = <&macb1>;
 							fixed-link {
@@ -208,7 +208,6 @@
 				lan9371: lan9371@3 {
 					compatible = "microchip,lan9371";
 					reg = <3>;
-					phy-mode = "rmii";
 					spi-max-frequency = <44000000>;
 					spi-cpha;
 					spi-cpol;
@@ -236,6 +235,7 @@
 						};
 						port@4 {
 							reg = <4>;
+							phy-mode = "rmii";
 							label = "cpu";
 							ethernet = <&macb1>;
 							fixed-link {
@@ -245,6 +245,7 @@
 						};
 						port@5 {
 							reg = <5>;
+							phy-mode = "rmii";
 							label = "lan5";
 							fixed-link {
 								speed = <100>;
@@ -294,6 +295,7 @@
 						port@6 {
 							reg = <6>;
 							label = "cpu";
+							phy-mode = "rmii";							
 							ethernet = <&macb0>;
 							fixed-link {
 								speed = <100>;
@@ -303,6 +305,7 @@
 						port@7 {
 							reg = <7>;
 							label = "lan7";
+							phy-mode = "rmii";
 							fixed-link {
 								speed = <100>;
 								full-duplex;
@@ -314,7 +317,6 @@
 				lan9373: lan9373@3 {
 					compatible = "microchip,lan9373";
 					reg = <3>;
-					phy-mode = "rmii";
 					spi-max-frequency = <44000000>;
 					spi-cpha;
 					spi-cpol;
@@ -355,6 +357,7 @@
 						};
 						port@6 {
 							reg = <6>;
+							phy-mode = "rmii";
 							label = "cpu";
 							ethernet = <&macb0>;
 							fixed-link {
@@ -365,6 +368,7 @@
 						port@7 {
 							reg = <7>;
 							label = "lan7";
+							phy-mode = "rmii";
 							fixed-link {
 								speed = <100>;
 								full-duplex;
@@ -376,7 +380,6 @@
 				lan9374: lan9374@3 {
 					compatible = "microchip,lan9374";
 					reg = <3>;
-					phy-mode = "rmii";
 					spi-max-frequency = <44000000>;
 					spi-cpha;
 					spi-cpol;
@@ -412,6 +415,7 @@
 						};
 						port@6 {
 							reg = <6>;
+							phy-mode = "rmii";
 							label = "cpu";
 							ethernet = <&macb0>;
 							fixed-link {
@@ -421,6 +425,7 @@
 						};
 						port@7 {
 							reg = <7>;
+							phy-mode = "rmii";
 							label = "lan7";
 							fixed-link {
 								speed = <100>;
