@@ -1952,7 +1952,6 @@ struct lan937x_chip_data {
 	int phy_port_cnt;
 	int mib_port_cnt;
 	u8 tx_phy_log_prt;
-	u8 sgmii_log_prt;
 	u8  log_addr_map[10];
 };
 
@@ -1970,7 +1969,6 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.mib_port_cnt = 5,
 		.phy_port_cnt = 4,
 		.tx_phy_log_prt = NO_TX_PHY_PRESENT,
-		.sgmii_log_prt = NO_SGMII_PRESENT,
 		/* AFE0, AFE1, AFE3, AFE4, RGMII2*/
 		.log_addr_map = {1, 2, 3, 4, 5, 0xff, 0xff, 0xff, 0xff, 0xff},
 	},
@@ -1988,7 +1986,6 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.phy_port_cnt = 4,
 		/* Tx Phy logical port number */
 		.tx_phy_log_prt = 4,
-		.sgmii_log_prt = NO_SGMII_PRESENT,
 		/* AFE0, AFE1, AFE3, TxPHY, RGMII2, RGMII1 */
 		.log_addr_map = {1, 2, 3, 4, 5, 6, 0xff, 0xff, 0xff, 0xff },
 	},
@@ -2006,7 +2003,6 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.phy_port_cnt = 6,
 		/* Tx Phy logical port number */
 		.tx_phy_log_prt = 4,
-		.sgmii_log_prt = NO_SGMII_PRESENT,
 		/* AFE0, AFE1, AFE2, AFE3, AFE4, TxPHY, RGMII2, RGMII1 */
 		.log_addr_map = {1, 2, 8, 3, 7, 4, 5, 6, 0xff, 0xff},
 	},
@@ -2022,8 +2018,8 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.port_cnt = 5,
 		.mib_port_cnt = 5,
 		.phy_port_cnt = 3,
+		/* Tx Phy logical port number */
 		.tx_phy_log_prt = NO_TX_PHY_PRESENT,
-		.sgmii_log_prt = 4,
 		/* AFE0  AFE1  AFE2  AFE3  AFE4 SGMII  RGMII2  RGMII1 */
 		.log_addr_map = {1, 2, 8, 3, 7, 4, 5, 6, 0xff, 0xff},
 	},
@@ -2039,8 +2035,8 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.port_cnt = 8,
 		.mib_port_cnt = 8,
 		.phy_port_cnt = 6,
+		/* Tx Phy logical port number */
 		.tx_phy_log_prt = NO_TX_PHY_PRESENT,
-		.sgmii_log_prt = NO_SGMII_PRESENT,
 		 /* AFE0  AFE1  AFE2  AFE3  AFE4  AFE5 RGMII2/Port6/CPU  RGMII1/Port7 */
 		.log_addr_map = {1,	2, 8, 3, 7, 4, 5, 6, 0xff, 0xff},
 	},
@@ -2067,7 +2063,6 @@ static int lan937x_switch_init(struct ksz_device *dev)
 			dev->log_prt_map = chip->log_addr_map;
 			dev->phy_port_cnt = chip->phy_port_cnt;
 			dev->tx_phy_log_prt = chip->tx_phy_log_prt;
-			dev->sgmii_log_prt = chip->sgmii_log_prt;
 			break;
 		}
 	}
