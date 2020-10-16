@@ -7,7 +7,7 @@
 #include <linux/etherdevice.h>
 #include <linux/list.h>
 #include <linux/slab.h>
-#include <../drivers/net/dsa/microchip/ksz_common.h>
+#include <linux/dsa/lan937x.h>
 #include <net/dsa.h>
 #include "dsa_priv.h"
 
@@ -250,22 +250,21 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
 #define LAN937X_TAIL_TAG_LOOKUP		BIT(12)
 #define LAN937X_TAIL_TAG_VALID		BIT(13)
 
-static struct ksz_device *get_ksz_priv(struct net_device *dev,
-				       int device)
+static struct dsa_port *ksz_get_dsa_phy_port(struct net_device *dev,
+				       int device, int log_prt)
 {
 	struct dsa_port *cpu_dp = dev->dsa_ptr;
 	struct dsa_switch_tree *dst = cpu_dp->dst;
 	struct dsa_port *dp;
-	struct net_device *netdev;
-	struct dsa_switch *ds;
+	struct ksz_port_ext *kp;
 
-	/*Find one of the slave port (0) to get priv data*/
+	/*Find slave based on log_prt*/
 	list_for_each_entry(dp, &dst->ports, list)
-		if (dp->ds->index == device && dp->index == 0 &&
+		if (dp->ds->index == device &&
 		    dp->type == DSA_PORT_TYPE_USER){
-			netdev = dp->slave;
-			ds = dsa_slave_to_port(netdev)->ds;
-			return ds->priv;
+			kp = dp->priv;
+			if (kp->lp_num == log_prt)
+				return dp;
 		}
 
 	return NULL;
@@ -275,8 +274,7 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 				    struct net_device *dev)
 {
 	struct dsa_port *dp = dsa_slave_to_port(dev);
-	struct dsa_switch *ds = dp->ds;
-	struct ksz_device *ksz_dev = ds->priv;
+	struct ksz_port_ext *kp = dp->priv;
 	struct sk_buff *nskb;
 	__be16 *tag;
 	u8 *addr;
@@ -290,7 +288,7 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	tag = skb_put(nskb, LAN937X_INGRESS_TAG_LEN);
 	addr = skb_mac_header(nskb);
 
-	val = BIT(ksz_dev->log_prt_map[dp->index] - 1);
+	val = BIT(kp->lp_num - 1);
 
 	if (is_link_local_ether_addr(addr))
 		val |= LAN937X_TAIL_TAG_OVERRIDE;
@@ -309,22 +307,16 @@ static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev,
 	/* Tag decoding */
 	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
 	unsigned int len = KSZ_EGRESS_TAG_LEN;
-	unsigned int port, i;
 	unsigned int log_prt = (tag[0] & 7) + 1;
 
-	/*get lan937x priv data*/
-	struct ksz_device *ksz_dev = get_ksz_priv(dev, 0);
-
-	/* Find Physical Port*/
-	for (i = 0; i < 10; i++)
-		if (log_prt == ksz_dev->log_prt_map[i])
-			port = i;
+	/*get lan937x physical port, tag[0] contains logical number*/
+	struct dsa_port *kp = ksz_get_dsa_phy_port(dev, 0, log_prt);
 
 	/* Extra 4-bytes PTP timestamp */
 	if (tag[0] & KSZ9477_PTP_TAG_INDICATION)
 		len += KSZ9477_PTP_TAG_LEN;
 
-	return ksz_common_rcv(skb, dev, port, len);
+	return ksz_common_rcv(skb, dev, kp->index, len);
 }
 
 static const struct dsa_device_ops lan937x_netdev_ops = {

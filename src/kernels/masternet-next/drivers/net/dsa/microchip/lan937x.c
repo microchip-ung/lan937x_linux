@@ -10,6 +10,7 @@
 #include <linux/if_bridge.h>
 #include <net/dsa.h>
 #include <net/switchdev.h>
+#include <linux/dsa/lan937x.h>
 
 #include "lan937x_reg.h"
 #include "ksz_common.h"
@@ -74,6 +75,16 @@ struct lan_alu_struct {
 	u8	fid:7;
 	u8	mac[ETH_ALEN];
 };
+
+static u8 lan937x_phyto_log(struct ksz_device *dev, int port)
+{
+	return dev->log_prt_map[port];
+}
+
+static u32 lan937x_get_reg_mask(struct ksz_device *dev, int port)
+{
+	return BIT(dev->log_prt_map[port] - 1);
+}
 
 static void lan937x_cfg(struct ksz_device *dev, u32 addr, u8 bits, bool set)
 {
@@ -2042,7 +2053,28 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 	},
 
 };
+static void lan937x_port_init(struct ksz_device *dev)
+{
+	struct ksz_port_ext *kp;
+	struct dsa_port *dp;
+	int i;
 
+	for (i = 0; i < dev->mib_port_cnt; i++) {
+		
+		if (!dsa_is_user_port(dev->ds, i))
+			continue;
+
+		dp = dsa_to_port(dev->ds, i);
+		kp = &dev->prts_ext[i];
+
+		dp->priv = kp;
+		kp->dp = dp;
+
+		kp->lp_num = dev->log_prt_map[i];
+		kp->tx_phy_log_prt = dev->tx_phy_log_prt;
+	}
+
+}
 static int lan937x_switch_init(struct ksz_device *dev)
 {
 	int i;
@@ -2081,6 +2113,12 @@ static int lan937x_switch_init(struct ksz_device *dev)
 				  GFP_KERNEL);
 	if (!dev->ports)
 		return -ENOMEM;
+	
+	dev->prts_ext = devm_kzalloc(dev->dev, sizeof(struct ksz_port_ext) * i,
+				  GFP_KERNEL);
+
+	if (!dev->prts_ext)
+		return -ENOMEM;	
 
 	for (i = 0; i < dev->mib_port_cnt; i++) {
 		mutex_init(&dev->ports[i].mib.cnt_mutex);
@@ -2126,6 +2164,8 @@ int lan937x_switch_register(struct ksz_device *dev)
 	ret = ksz_switch_register(dev, &lan937x_dev_ops);
 	if (ret)
 		return ret;
+
+	lan937x_port_init(dev);
 
 	for (i = 0; i < dev->phy_port_cnt; ++i) {
 		if (!dsa_is_user_port(dev->ds, i))
