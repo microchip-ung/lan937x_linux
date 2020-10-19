@@ -78,7 +78,7 @@ struct ksz_device {
 	bool phy_errata_9477;
 	bool synclko_125;
 	const u8 *log_prt_map;
-    	u8 tx_phy_log_prt;
+	u8 tx_phy_log_prt;
 
 
 	struct vlan_table *vlan_cache;

@@ -76,16 +76,6 @@ struct lan_alu_struct {
 	u8	mac[ETH_ALEN];
 };
 
-static u8 lan937x_phyto_log(struct ksz_device *dev, int port)
-{
-	return dev->log_prt_map[port];
-}
-
-static u32 lan937x_get_reg_mask(struct ksz_device *dev, int port)
-{
-	return BIT(dev->log_prt_map[port] - 1);
-}
-
 static void lan937x_cfg(struct ksz_device *dev, u32 addr, u8 bits, bool set)
 {
 	regmap_update_bits(dev->regmap[0], addr, bits, set ? bits : 0);
@@ -768,7 +758,8 @@ static void lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 		vlan_table[0] = VLAN_VALID | (vid & VLAN_FID_M);
 
 		/* set/clear switch logical port number based on the port arg when
-		 * updating vlan table registers */
+		 * updating vlan table registers
+		 */
 		if (untagged)
 			vlan_table[1] |= BIT(dev->log_prt_map[port] - 1);
 		else
@@ -807,7 +798,8 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 			return -ETIMEDOUT;
 		}
 		/* clear switch logical port number based on the port arg when
-		 * updating vlan table registers */
+		 * updating vlan table registers
+		 */
 		vlan_table[2] &= ~BIT(dev->log_prt_map[port] - 1);
 
 		if (pvid == vid)
@@ -862,7 +854,8 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 	/* update ALU entry */
 	alu_table[0] = ALU_V_STATIC_VALID;
 	/* switch logical port number has to be set based on the port arg when
-	* updating alu table registers */
+	 * updating alu table registers
+	 */
 	alu_table[1] |= BIT(dev->log_prt_map[port] - 1);
 	if (vid)
 		alu_table[1] |= ALU_V_USE_FID;
@@ -922,7 +915,8 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 		ksz_read32(dev, REG_SW_ALU_VAL_D, &alu_table[3]);
 
 		/* clear forwarding port - switch logical port number has to be set
-		 * based on the port arg when updating alu table registers */
+		 * based on the port arg when updating alu table registers
+		 */
 		alu_table[2] &= ~BIT(dev->log_prt_map[port] - 1);
 
 		/* if there is no port to forward, clear table */
@@ -1836,7 +1830,8 @@ static int lan937x_get_max_mtu(struct dsa_switch *ds, int port)
 {
 	/* Frame size is 9000 (= 0x2328) if
 	 * jumbo frame support is enabled, PORT_JUMBO_EN bit will be enabled
-	 * in lan937x_change_mtu() API based on mtu */
+	 * in lan937x_change_mtu() API based on mtu
+	 */
 	return FR_MAX_SIZE;
 }
 
@@ -2053,6 +2048,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 	},
 
 };
+
 static void lan937x_port_init(struct ksz_device *dev)
 {
 	struct ksz_port_ext *kp;
@@ -2060,7 +2056,6 @@ static void lan937x_port_init(struct ksz_device *dev)
 	int i;
 
 	for (i = 0; i < dev->mib_port_cnt; i++) {
-		
 		if (!dsa_is_user_port(dev->ds, i))
 			continue;
 
@@ -2073,8 +2068,8 @@ static void lan937x_port_init(struct ksz_device *dev)
 		kp->lp_num = dev->log_prt_map[i];
 		kp->tx_phy_log_prt = dev->tx_phy_log_prt;
 	}
-
 }
+
 static int lan937x_switch_init(struct ksz_device *dev)
 {
 	int i;
@@ -2113,12 +2108,12 @@ static int lan937x_switch_init(struct ksz_device *dev)
 				  GFP_KERNEL);
 	if (!dev->ports)
 		return -ENOMEM;
-	
+
 	dev->prts_ext = devm_kzalloc(dev->dev, sizeof(struct ksz_port_ext) * i,
-				  GFP_KERNEL);
+				     GFP_KERNEL);
 
 	if (!dev->prts_ext)
-		return -ENOMEM;	
+		return -ENOMEM;
 
 	for (i = 0; i < dev->mib_port_cnt; i++) {
 		mutex_init(&dev->ports[i].mib.cnt_mutex);

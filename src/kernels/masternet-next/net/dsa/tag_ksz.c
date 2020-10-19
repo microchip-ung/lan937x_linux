@@ -251,7 +251,7 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
 #define LAN937X_TAIL_TAG_VALID		BIT(13)
 
 static struct dsa_port *ksz_get_dsa_phy_port(struct net_device *dev,
-				       int device, int log_prt)
+					     int device, int log_prt)
 {
 	struct dsa_port *cpu_dp = dev->dsa_ptr;
 	struct dsa_switch_tree *dst = cpu_dp->dst;

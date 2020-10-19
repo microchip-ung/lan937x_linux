@@ -27,17 +27,17 @@ Ethernet switch connected via SPI to the host, CPU port wired to eth1:
 	eth1: ethernet@f802c000 {
 		#address-cells = <1>;
 		#size-cells = <0>;
-		
+
 		fixed-link {
 			speed = <100>;
 			full-duplex;
 		};
 	};
-	
+
 	spi1: spi@f8008000 {
 		cs-gpios = <0>, <0>, <0>, <&pioC 28 0>;
 		id = <1>;
-		
+
 		lan9370: lan9370@3 {
 			compatible = "microchip,lan9370";
 			reg = <3>;
@@ -45,7 +45,7 @@ Ethernet switch connected via SPI to the host, CPU port wired to eth1:
 			spi-max-frequency = <44000000>;
 			spi-cpha;
 			spi-cpol;
-	
+
 			ports {
 				#address-cells = <1>;
 				#size-cells = <0>;
