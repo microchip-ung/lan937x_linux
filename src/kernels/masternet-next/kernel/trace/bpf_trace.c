@@ -1327,6 +1327,10 @@ bpf_tracing_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 		return prog->aux->sleepable ? &bpf_copy_from_user_proto : NULL;
 	case BPF_FUNC_snprintf_btf:
 		return &bpf_snprintf_btf_proto;
+	case BPF_FUNC_bpf_per_cpu_ptr:
+		return &bpf_per_cpu_ptr_proto;
+	case BPF_FUNC_bpf_this_cpu_ptr:
+		return &bpf_this_cpu_ptr_proto;
 	default:
 		return NULL;
 	}
@@ -1776,7 +1780,9 @@ const struct bpf_verifier_ops raw_tracepoint_verifier_ops = {
 };
 
 const struct bpf_prog_ops raw_tracepoint_prog_ops = {
+#ifdef CONFIG_NET
 	.test_run = bpf_prog_test_run_raw_tp,
+#endif
 };
 
 const struct bpf_verifier_ops tracing_verifier_ops = {
@@ -2179,10 +2185,11 @@ static int bpf_event_notify(struct notifier_block *nb, unsigned long op,
 {
 	struct bpf_trace_module *btm, *tmp;
 	struct module *mod = module;
+	int ret = 0;
 
 	if (mod->num_bpf_raw_events == 0 ||
 	    (op != MODULE_STATE_COMING && op != MODULE_STATE_GOING))
-		return 0;
+		goto out;
 
 	mutex_lock(&bpf_module_mutex);
 
@@ -2192,6 +2199,8 @@ static int bpf_event_notify(struct notifier_block *nb, unsigned long op,
 		if (btm) {
 			btm->module = module;
 			list_add(&btm->list, &bpf_trace_modules);
+		} else {
+			ret = -ENOMEM;
 		}
 		break;
 	case MODULE_STATE_GOING:
@@ -2207,7 +2216,8 @@ static int bpf_event_notify(struct notifier_block *nb, unsigned long op,
 
 	mutex_unlock(&bpf_module_mutex);
 
-	return 0;
+out:
+	return notifier_from_errno(ret);
 }
 
 static struct notifier_block bpf_module_nb = {

@@ -14,6 +14,8 @@
 #include <net/netlink.h>
 #include <net/flow_offload.h>
 
+#define NFT_MAX_HOOKS	(NF_INET_INGRESS + 1)
+
 struct module;
 
 #define NFT_JUMP_STACK_SIZE	16
@@ -979,7 +981,7 @@ struct nft_chain_type {
 	int				family;
 	struct module			*owner;
 	unsigned int			hook_mask;
-	nf_hookfn			*hooks[NF_MAX_HOOKS];
+	nf_hookfn			*hooks[NFT_MAX_HOOKS];
 	int				(*ops_register)(struct net *net, const struct nf_hook_ops *ops);
 	void				(*ops_unregister)(struct net *net, const struct nf_hook_ops *ops);
 };
@@ -1080,6 +1082,12 @@ struct nft_table {
 	u16				udlen;
 	u8				*udata;
 };
+
+static inline bool nft_base_chain_netdev(int family, u32 hooknum)
+{
+	return family == NFPROTO_NETDEV ||
+	       (family == NFPROTO_INET && hooknum == NF_INET_INGRESS);
+}
 
 void nft_register_chain_type(const struct nft_chain_type *);
 void nft_unregister_chain_type(const struct nft_chain_type *);

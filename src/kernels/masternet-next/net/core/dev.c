@@ -4930,7 +4930,7 @@ EXPORT_SYMBOL_GPL(br_fdb_test_addr_hook);
 
 static inline struct sk_buff *
 sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
-		   struct net_device *orig_dev)
+		   struct net_device *orig_dev, bool *another)
 {
 #ifdef CONFIG_NET_CLS_ACT
 	struct mini_Qdisc *miniq = rcu_dereference_bh(skb->dev->miniq_ingress);
@@ -4974,7 +4974,11 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 		 * redirecting to another netdev
 		 */
 		__skb_push(skb, skb->mac_len);
-		skb_do_redirect(skb);
+		if (skb_do_redirect(skb) == -EAGAIN) {
+			__skb_pull(skb, skb->mac_len);
+			*another = true;
+			break;
+		}
 		return NULL;
 	case TC_ACT_CONSUMED:
 		return NULL;
@@ -5163,7 +5167,12 @@ another_round:
 skip_taps:
 #ifdef CONFIG_NET_INGRESS
 	if (static_branch_unlikely(&ingress_needed_key)) {
-		skb = sch_handle_ingress(skb, &pt_prev, &ret, orig_dev);
+		bool another = false;
+
+		skb = sch_handle_ingress(skb, &pt_prev, &ret, orig_dev,
+					 &another);
+		if (another)
+			goto another_round;
 		if (!skb)
 			goto out;
 
@@ -10318,6 +10327,40 @@ struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
 	return storage;
 }
 EXPORT_SYMBOL(dev_get_stats);
+
+/**
+ *	dev_fetch_sw_netstats - get per-cpu network device statistics
+ *	@s: place to store stats
+ *	@netstats: per-cpu network stats to read from
+ *
+ *	Read per-cpu network statistics and populate the related fields in @s.
+ */
+void dev_fetch_sw_netstats(struct rtnl_link_stats64 *s,
+			   const struct pcpu_sw_netstats __percpu *netstats)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		const struct pcpu_sw_netstats *stats;
+		struct pcpu_sw_netstats tmp;
+		unsigned int start;
+
+		stats = per_cpu_ptr(netstats, cpu);
+		do {
+			start = u64_stats_fetch_begin_irq(&stats->syncp);
+			tmp.rx_packets = stats->rx_packets;
+			tmp.rx_bytes   = stats->rx_bytes;
+			tmp.tx_packets = stats->tx_packets;
+			tmp.tx_bytes   = stats->tx_bytes;
+		} while (u64_stats_fetch_retry_irq(&stats->syncp, start));
+
+		s->rx_packets += tmp.rx_packets;
+		s->rx_bytes   += tmp.rx_bytes;
+		s->tx_packets += tmp.tx_packets;
+		s->tx_bytes   += tmp.tx_bytes;
+	}
+}
+EXPORT_SYMBOL_GPL(dev_fetch_sw_netstats);
 
 struct netdev_queue *dev_ingress_queue_create(struct net_device *dev)
 {
