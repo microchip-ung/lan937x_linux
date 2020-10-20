@@ -251,7 +251,7 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
  * ---------------------------------------------------------------------------
  * tag0 : Prioritization (not used now)
  * tag1 : each bit represents port (eg, 0x01=port1, 0x02=port2, 0x10=port5)
- * 
+ *
  * For Egress (LAN937x -> Host), 1 byte is added before FCS.
  * ---------------------------------------------------------------------------
  * DA(6bytes)|SA(6bytes)|....|Data(nbytes)|tag0(1byte)|FCS(4bytes)
@@ -259,18 +259,18 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
  * tag0 : zero-based value represents port
  *	  (eg, 0x00=port1, 0x02=port3, 0x06=port7)
  *
- * As per LAN937x design, logical port numbering(1 to max_port) need to be 
- * used for register access based on physical port number (0 based value, 
- * Ex, equals to the number mentioned in the hardware pins TXP4,RXP4...). 
- * A simple conversion is followed when referring the LAN937x registers, 
- * so that the user can configure the device tree as usual just by seeing 
- * the physical port numbers in the board.  
- * 
+ * As per LAN937x design, logical port numbering(1 to max_port) need to be
+ * used for register access based on physical port number (0 based value,
+ * Ex, equals to the number mentioned in the hardware pins TXP4,RXP4...).
+ * A simple conversion is followed when referring the LAN937x registers,
+ * so that the user can configure the device tree as usual just by seeing
+ * the physical port numbers in the board.
+ *
  * For Ingress, appropriate Logical port number value must be set in
  * tag bytes from physical port number.
- * 
- * For Egress, tag bytes from switch will have logical port number, 
- * so get the right physical port
+ *
+ * For Egress, tag bytes from switch will have logical port number,
+ * so get the right physical port.
  */
 #define LAN937X_INGRESS_TAG_LEN		2
 
