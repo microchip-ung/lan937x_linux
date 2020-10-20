@@ -548,7 +548,7 @@ static int lan937x_get_link_status(struct ksz_device *dev, int port)
 {
 	u16 val1, val2;
 
-	lan937x_t1_tx_phy_read(dev, port, REG_PORT_T1_PHY_MASTER_STATUS,
+	lan937x_t1_tx_phy_read(dev, port, REG_PORT_T1_PHY_INITIATOR_STATUS,
 			       &val1);
 
 	lan937x_t1_tx_phy_read(dev, port, REG_PORT_T1_MODE_STAT, &val2);
@@ -1483,10 +1483,6 @@ static void t1_phy_port_init(struct ksz_device *dev, int port)
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_POWER_DOWN_CTRL,
 				   T1_HW_INIT_SEQ_ENABLE, false);
 
-	/*TODO: Configure master/slave. true=master, false=slave */
-	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_MASTER_CTRL,
-				   PORT_T1_MASTER_CFG, true);
-
 	/* Software reset. */
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_BASIC_CTRL,
 				   PORT_T1_PHY_RESET, true);
@@ -1556,7 +1552,7 @@ static void t1_phy_port_init(struct ksz_device *dev, int port)
 	/* MANUAL STD POLARITY */
 	lan937x_t1_tx_phy_write(dev, port, 0x17, 0x0080);
 
-	/* disable master mode energy detect */
+	/* disable INITIATOR mode energy detect */
 	lan937x_t1_tx_phy_mod_bits(dev, port, 0x10, 0x0040, false);
 
 	lan937x_t1_phy_bank_read(dev, port, T1_REG_BANK_SEL_AFE, 0x0B, &val);
@@ -2051,7 +2047,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 
 static void lan937x_port_init(struct ksz_device *dev)
 {
-	struct ksz_port_ext *kp;
+	struct lan937x_port_ext *kp;
 	struct dsa_port *dp;
 	int i;
 
@@ -2109,7 +2105,7 @@ static int lan937x_switch_init(struct ksz_device *dev)
 	if (!dev->ports)
 		return -ENOMEM;
 
-	dev->prts_ext = devm_kzalloc(dev->dev, sizeof(struct ksz_port_ext) * i,
+	dev->prts_ext = devm_kzalloc(dev->dev, sizeof(struct lan937x_port_ext) * i,
 				     GFP_KERNEL);
 
 	if (!dev->prts_ext)

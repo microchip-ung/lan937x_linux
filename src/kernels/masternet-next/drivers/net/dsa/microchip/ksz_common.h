@@ -80,11 +80,10 @@ struct ksz_device {
 	const u8 *log_prt_map;
 	u8 tx_phy_log_prt;
 
-
 	struct vlan_table *vlan_cache;
 
 	struct ksz_port *ports;
-	struct ksz_port_ext *prts_ext; /*port extended information*/
+	struct lan937x_port_ext *prts_ext; /*port extended information*/
 	struct delayed_work mib_read;
 	unsigned long mib_read_interval;
 	u16 br_member;

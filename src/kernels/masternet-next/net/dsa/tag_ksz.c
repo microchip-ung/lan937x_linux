@@ -244,21 +244,53 @@ static const struct dsa_device_ops ksz9893_netdev_ops = {
 DSA_TAG_DRIVER(ksz9893_netdev_ops);
 MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
 
+/*
+ * For Ingress (Host -> LAN937x), 2 bytes are added before FCS.
+ * ---------------------------------------------------------------------------
+ * DA(6bytes)|SA(6bytes)|....|Data(nbytes)|tag0(1byte)|tag1(1byte)|FCS(4bytes)
+ * ---------------------------------------------------------------------------
+ * tag0 : Prioritization (not used now)
+ * tag1 : each bit represents port (eg, 0x01=port1, 0x02=port2, 0x10=port5)
+ * 
+ * For Egress (LAN937x -> Host), 1 byte is added before FCS.
+ * ---------------------------------------------------------------------------
+ * DA(6bytes)|SA(6bytes)|....|Data(nbytes)|tag0(1byte)|FCS(4bytes)
+ * ---------------------------------------------------------------------------
+ * tag0 : zero-based value represents port
+ *	  (eg, 0x00=port1, 0x02=port3, 0x06=port7)
+ *
+ * As per LAN937x design, logical port numbering(1 to max_port) need to be 
+ * used for register access based on physical port number (0 based value, 
+ * Ex, equals to the number mentioned in the hardware pins TXP4,RXP4...). 
+ * A simple conversion is followed when referring the LAN937x registers, 
+ * so that the user can configure the device tree as usual just by seeing 
+ * the physical port numbers in the board.  
+ * 
+ * For Ingress, appropriate Logical port number value must be set in
+ * tag bytes from physical port number.
+ * 
+ * For Egress, tag bytes from switch will have logical port number, 
+ * so get the right physical port
+ */
 #define LAN937X_INGRESS_TAG_LEN		2
 
 #define LAN937X_TAIL_TAG_OVERRIDE	BIT(11)
 #define LAN937X_TAIL_TAG_LOOKUP		BIT(12)
 #define LAN937X_TAIL_TAG_VALID		BIT(13)
 
+/* Find appropriate slave based on the logical port.
+ * Logical port number is stored for each slave of dsa_port priv data 
+ * during probe
+ */
 static struct dsa_port *ksz_get_dsa_phy_port(struct net_device *dev,
 					     int device, int log_prt)
 {
 	struct dsa_port *cpu_dp = dev->dsa_ptr;
 	struct dsa_switch_tree *dst = cpu_dp->dst;
 	struct dsa_port *dp;
-	struct ksz_port_ext *kp;
+	struct lan937x_port_ext *kp;
 
-	/*Find slave based on log_prt*/
+	/*Find right target based on log_prt number*/
 	list_for_each_entry(dp, &dst->ports, list)
 		if (dp->ds->index == device &&
 		    dp->type == DSA_PORT_TYPE_USER){
@@ -274,7 +306,7 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 				    struct net_device *dev)
 {
 	struct dsa_port *dp = dsa_slave_to_port(dev);
-	struct ksz_port_ext *kp = dp->priv;
+	struct lan937x_port_ext *kp = dp->priv;
 	struct sk_buff *nskb;
 	__be16 *tag;
 	u8 *addr;
@@ -288,6 +320,7 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	tag = skb_put(nskb, LAN937X_INGRESS_TAG_LEN);
 	addr = skb_mac_header(nskb);
 
+	/* Set appropriate bit mask for logical port number */
 	val = BIT(kp->lp_num - 1);
 
 	if (is_link_local_ether_addr(addr))
@@ -309,7 +342,7 @@ static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev,
 	unsigned int len = KSZ_EGRESS_TAG_LEN;
 	unsigned int log_prt = (tag[0] & 7) + 1;
 
-	/*get lan937x physical port, tag[0] contains logical number*/
+	/* tag[0] contains logical number, find the right target*/
 	struct dsa_port *kp = ksz_get_dsa_phy_port(dev, 0, log_prt);
 
 	/* Extra 4-bytes PTP timestamp */

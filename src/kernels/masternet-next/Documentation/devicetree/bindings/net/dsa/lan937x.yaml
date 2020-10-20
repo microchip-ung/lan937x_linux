@@ -1,0 +1,137 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/dsa/lan937x.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: LAN937x Ethernet Switch Series Tree Bindings
+
+maintainers:
+  - prasanna.vengateshan@microchip.com
+
+properties:
+  compatible:
+    oneOf:
+      - const: "microchip,lan9370"
+      - const: "microchip,lan9371"
+      - const: "microchip,lan9372"
+      - const: "microchip,lan9373"
+      - const: "microchip,lan9374"
+
+  reset-gpios:
+    description: should be a gpio specifier for a reset line
+
+  microchip,synclko-125:
+    description: Set if the output SYNCLKO frequency should be set to
+      125MHz instead of 25MHz.
+    type: boolean
+
+required:
+  - compatible
+
+example:
+  Ethernet switch connected via SPI to the host, CPU port wired to eth1:
+
+	eth1: ethernet@f802c000 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		fixed-link {
+			speed = <100>;
+			full-duplex;
+		};
+	};
+
+	spi1: spi@f8008000 {
+		cs-gpios = <0>, <0>, <0>, <&pioC 28 0>;
+		id = <1>;
+
+		lan9370: lan9370@3 {
+			compatible = "microchip,lan9370";
+			reg = <3>;
+
+			spi-max-frequency = <44000000>;
+			spi-cpha;
+			spi-cpol;
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				port@0 {
+					reg = <0>;
+					label = "lan1";
+				};
+				port@1 {
+					reg = <1>;
+					label = "lan2";
+				};
+				port@2 {
+					reg = <2>;
+					label = "lan3";
+				};
+				port@3 {
+					reg = <3>;
+					label = "lan4";
+				};
+				port@4 {
+					reg = <4>;
+					label = "cpu";
+          ethernet = <&eth1>;
+          phy-mode = "rmii";
+					fixed-link {
+						speed = <100>;
+						full-duplex;
+					};
+				};
+			};
+		};
+
+		lan9371: lan9371@3 {
+			compatible = "microchip,lan9371";
+			reg = <3>;
+
+			spi-max-frequency = <44000000>;
+			spi-cpha;
+			spi-cpol;
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				port@0 {
+					reg = <0>;
+					label = "lan1";
+				};
+				port@1 {
+					reg = <1>;
+					label = "lan2";
+				};
+				port@2 {
+					reg = <2>;
+					label = "lan3";
+				};
+				port@3 {
+					reg = <3>;
+					label = "lan4";
+				};
+				port@4 {
+					reg = <4>;
+					label = "cpu";
+          ethernet = <&eth1>;
+          phy-mode = "rmii";
+					fixed-link {
+						speed = <100>;
+						full-duplex;
+					};
+				};
+				port@5 {
+					reg = <5>;
+          label = "lan5";
+          phy-mode = "rmii";
+					fixed-link {
+						speed = <100>;
+						full-duplex;
+					};
+				};
+			};
+		};
+	};
