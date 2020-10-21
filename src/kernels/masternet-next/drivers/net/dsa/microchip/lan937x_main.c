@@ -11,6 +11,7 @@
 #include <net/switchdev.h>
 
 #include "lan937x_reg.h"
+#include "lan937x_ptp.h"
 #include "ksz_common.h"
 #include "lan937x_dev.h"
 
@@ -1030,6 +1031,9 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.port_change_mtu	= lan937x_change_mtu,
 	.phylink_validate	= lan937x_phylink_validate,
 	.phylink_mac_link_down	= ksz_mac_link_down,
+	.port_hwtstamp_get      = lan937x_hwtstamp_get,
+	.port_hwtstamp_set      = lan937x_hwtstamp_set,
+	.get_ts_info            = lan937x_get_ts_info
 };
 
 int lan937x_switch_register(struct ksz_device *dev)
