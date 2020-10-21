@@ -13,6 +13,7 @@
 #include <linux/dsa/lan937x.h>
 
 #include "lan937x_reg.h"
+#include "lan937x_ptp.h"
 #include "ksz_common.h"
 
 static const struct {
@@ -1919,6 +1920,9 @@ static const struct dsa_switch_ops lan937x_switch_ops = {
 	.phylink_validate	= lan937x_phylink_validate,
 	.phylink_mac_an_restart	= lan937x_phylink_mac_an_restart,
 	.phylink_mac_link_down	= ksz_mac_link_down,
+	.port_hwtstamp_get      = lan937x_hwtstamp_get,
+	.port_hwtstamp_set      = lan937x_hwtstamp_set,
+	.get_ts_info            = lan937x_get_ts_info
 };
 
 static u32 lan937x_get_port_addr(int port, int offset)
