@@ -142,7 +142,8 @@ static int lan937x_set_hwtstamp_config(struct ksz_device *dev, int port,
 			set_bit(LAN937X_HWTS_EN, &ptp_shared->state);
 	}
 
-	return 0;
+	return copy_to_user(ifr->ifr_data, port_tconfig, sizeof(struct hwtstamp_config)) ?  
+	        -EFAULT : 0;
 }
 
 int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct ifreq *ifr)
@@ -1039,3 +1040,4 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 
 	return IRQ_HANDLED;
 }
+
