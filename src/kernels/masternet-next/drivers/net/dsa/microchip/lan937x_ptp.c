@@ -5,6 +5,7 @@
 
 #include "lan937x_reg.h"
 #include "ksz_common.h"
+<<<<<<< HEAD
 #include <linux/ptp_classify.h>
 #include <linux/ptp_clock_kernel.h>
 #include <linux/irqreturn.h>
@@ -14,6 +15,8 @@
 	container_of((d), struct ksz_device, ptp_caps)
 
 #define MAX_DRIFT_CORR 6250000
+=======
+>>>>>>> conditional compilation using kconfig
 
 #define KSZ_PTP_INC_NS 40  /* HW clock is incremented every 40 ns (by 40) */
 #define KSZ_PTP_SUBNS_BITS 32  /* Number of bits in sub-nanoseconds counter */
