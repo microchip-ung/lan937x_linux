@@ -1,6 +1,5 @@
 #include "lan937x_reg.h"
 #include "ksz_common.h"
-#include "lan937x_ptp.h"
 
 /* The function is return back the capability of timestamping feature when requested
    through ethtool -T <interface> utility
