@@ -14,7 +14,7 @@ config NET_DSA_MICROCHIP_LAN937X
 	  through SPI.
 
 config NET_DSA_MICROCHIP_LAN937X_PTP
-	bool "support for the PTP clock on the LAN937x Ethernet Switch"
+	bool "Support for the PTP clock on the LAN937x Ethernet Switch"
 	depends on NET_DSA_MICROCHIP_LAN937X_SPI
 	help
 		This enables support for timestamping & PTP clock manipulation in the 
