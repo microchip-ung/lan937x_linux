@@ -17,6 +17,7 @@
 #include <linux/phy.h>
 #include <linux/regmap.h>
 #include <net/dsa.h>
+#include "lan937x_ptp.h" 
 
 /* All time stamps from the KSZ consist of 2 bits for seconds and 30 bits for
  * nanoseconds. This is NOT the same as 32 bits for nanoseconds.

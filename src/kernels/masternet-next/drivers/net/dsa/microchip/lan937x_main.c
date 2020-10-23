@@ -1307,6 +1307,12 @@ static int lan937x_setup(struct dsa_switch *ds)
 		return ret;
 	}
 
+	ret = lan937x_ptp_clock_register(ds);
+	if (ret < 0) {
+		dev_err(ds->dev, "Failed to register PTP clock: %d\n", ret);
+		return ret;
+	}
+
 	/* start switch */
 	lan937x_cfg(dev, REG_SW_OPERATION, SW_START, true);
 
