@@ -929,8 +929,11 @@ static int lan937x_setup(struct dsa_switch *ds)
 	/* enable global MIB counter freeze function */
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FREEZE, true);
 
-	/* enable Indirect Access from SPI to the VPHY registers */
-	lan937x_enable_spi_indirect_access(dev);
+	ret = lan937x_ptp_clock_register(ds);
+	if (ret < 0) {
+		dev_err(ds->dev, "Failed to register PTP clock: %d\n", ret);
+		return ret;
+	}
 
 	/* start switch */
 	lan937x_cfg(dev, REG_SW_OPERATION, SW_START, true);

@@ -7,12 +7,14 @@
 #ifndef __KSZ_COMMON_H
 #define __KSZ_COMMON_H
 
+//#include <linux/ptp_clock_kernel.h>
 #include <linux/etherdevice.h>
 #include <linux/kernel.h>
 #include <linux/mutex.h>
 #include <linux/phy.h>
 #include <linux/regmap.h>
 #include <net/dsa.h>
+#include "lan937x_ptp.h" 
 
 struct vlan_table {
 	u32 table[3];
@@ -90,6 +92,7 @@ struct ksz_device {
 	u32 overrides;			/* chip functions set by user */
 	u16 host_mask;
 	u16 port_mask;
+	struct lan937x_ptp_data  ptp_data;
 };
 
 struct alu_struct {
