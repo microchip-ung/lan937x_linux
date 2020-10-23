@@ -1483,6 +1483,10 @@ static void t1_phy_port_init(struct ksz_device *dev, int port)
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_POWER_DOWN_CTRL,
 				   T1_HW_INIT_SEQ_ENABLE, false);
 
+	/*TODO: Configure master/slave. true=master, false=slave */
+	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_MASTER_CTRL,
+				   PORT_T1_MASTER_CFG, true);
+
 	/* Software reset. */
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_BASIC_CTRL,
 				   PORT_T1_PHY_RESET, true);
