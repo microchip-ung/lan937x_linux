@@ -9,3 +9,4 @@ obj-$(CONFIG_NET_DSA_MICROCHIP_LAN937X)		+= lan937x.o
 lan937x-objs := lan937x_dev.o
 lan937x-objs += lan937x_main.o
 lan937x-objs += lan937x_spi.o
+obj-$(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)     += lan937x_ptp.o
