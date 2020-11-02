@@ -1041,6 +1041,79 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 	return IRQ_HANDLED;
 }
 
+//These are function releated to the ptp clock info
+
+static int lan937x_ptp_enable(struct ptp_clock_info *ptp,
+			      struct ptp_clock_request *req, int on)
+{
+	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
+	struct ksz_device *priv = ptp_data_to_lan937x(ptp_data);
+	int rc = -EOPNOTSUPP;
+
+	if (req->type == PTP_CLK_REQ_PPS)
+		rc = 0;  //todo: add code here
+	else if (req->type == PTP_CLK_REQ_EXTTS)
+		rc = 0;  //todo: add code here
+
+	return rc; 
+}
+
+
+static int lan937x_ptp_gettime(struct ptp_clock_info *ptp,
+				struct timespec64 *ts)
+{
+	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
+	struct ksz_device *priv = ptp_data_to_lan937x(ptp_data);
+
+	mutex_lock(&ptp_data->lock);
+
+	mutex_unlock(&ptp_data->lock);
+
+	return 0; //Todo: change it.
+}
+
+static int lan937x_ptp_settime(struct ptp_clock_info *ptp,
+			       const struct timespec64 *ts)
+{
+	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
+	struct ksz_device *priv = ptp_data_to_lan937x(ptp_data);
+	
+	mutex_lock(&ptp_data->lock);
+
+	mutex_unlock(&ptp_data->lock);
+	
+	return 0;  //Todo: change it now.
+
+}
+
+
+static int lan937x_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
+{
+	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
+	struct ksz_device *priv = ptp_data_to_lan937x(ptp_data);
+	
+	mutex_lock(&ptp_data->lock);
+
+	mutex_unlock(&ptp_data->lock);
+	
+	return 0; //Todo: change it
+}
+
+
+static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
+{
+	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
+	struct ksz_device *priv = ptp_data_to_lan937x(ptp_data);
+
+	mutex_lock(&ptp_data->lock);
+
+	mutex_unlock(&ptp_data->lock);
+	
+	return 0;
+}
+
+
+
 int lan937x_ptp_clock_register(struct dsa_switch *ds)
 {
 	struct ksz_device *dev  = ds->priv;
@@ -1048,7 +1121,13 @@ int lan937x_ptp_clock_register(struct dsa_switch *ds)
 	
 	ptp_data->caps = (struct ptp_clock_info) {
 		.owner		= THIS_MODULE,
-		.name		= "LAN937X PHC"
+		.name		= "LAN937X PHC",
+		.enable		= lan937x_ptp_enable,
+		.gettime64	= lan937x_ptp_gettime,
+		.settime64	= lan937x_ptp_settime,
+		.adjfine	= lan937x_ptp_adjfine,
+		.adjtime	= lan937x_ptp_adjtime
+
 	};
 
 	ptp_data->clock = ptp_clock_register(&ptp_data->caps, ds->dev);
@@ -1057,3 +1136,16 @@ int lan937x_ptp_clock_register(struct dsa_switch *ds)
 	
 	return 0;
 }	
+
+
+void lan937x_ptp_clock_unregister(struct dsa_switch *ds)
+{
+	struct ksz_device *dev  = ds->priv;
+	struct lan937x_ptp_data *ptp_data = &dev->ptp_data;
+
+	if (IS_ERR_OR_NULL(ptp_data->clock))
+		return;
+
+	ptp_clock_unregister(ptp_data->clock);
+	ptp_data->clock = NULL;
+}
