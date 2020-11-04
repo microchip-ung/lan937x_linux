@@ -4,6 +4,7 @@
 #include "lan937x_reg.h"
 #include "ksz_common.h"
 #include <linux/ptp_classify.h>
+#include "lan937x_reg.h"
 
 
 #define ptp_caps_to_data(d) \
@@ -257,4 +258,39 @@ void lan937x_ptp_clock_unregister(struct dsa_switch *ds)
 
 	ptp_clock_unregister(ptp_data->clock);
 	ptp_data->clock = NULL;
+}
+
+/*Time Stamping support - accessing the register */
+static int lan937x_ptp_enable_mode(struct ksz_device *dev) {
+       u16 data;
+       int ret;
+
+       ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
+       if (ret)
+               return ret;
+
+       /* Enable PTP mode */
+       data |= PTP_ENABLE;
+       ret = ksz_write16(dev, REG_PTP_MSG_CONF1, data);
+       if (ret)
+               return ret;
+
+       return 0;
+}
+
+static int lan937x_ptp_disable_mode(struct ksz_device *dev) {
+       u16 data;
+       int ret;
+
+       ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
+       if (ret)
+               return ret;
+
+       /* Disable PTP mode */
+       data &= ~PTP_ENABLE;
+       ret = ksz_write16(dev, REG_PTP_MSG_CONF1, data);
+       if (ret)
+               return ret;
+
+       return 0;
 }
