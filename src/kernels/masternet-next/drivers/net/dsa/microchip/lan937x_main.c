@@ -1928,6 +1928,8 @@ static const struct dsa_switch_ops lan937x_switch_ops = {
 	.phylink_mac_link_down	= ksz_mac_link_down,
 	.port_hwtstamp_get      = lan937x_hwtstamp_get,
 	.port_hwtstamp_set      = lan937x_hwtstamp_set,
+	.port_rxtstamp		= lan937x_port_rxtstamp,
+	.port_txtstamp		= lan937x_port_txtstamp,
 	.get_ts_info            = lan937x_get_ts_info
 };
 
