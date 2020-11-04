@@ -54,6 +54,7 @@ struct ksz_port {
 	struct ksz_port_mib mib;
 	phy_interface_t interface;
 	struct hwtstamp_config tstamp_config;
+	unsigned long tstamp_state;
 };
 
 struct ksz_device {

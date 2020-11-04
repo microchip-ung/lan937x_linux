@@ -146,6 +146,43 @@ static int lan937x_set_hwtstamp_config(struct ksz_device *dev, int port,
 	        -EFAULT : 0;
 }
 
+static int lan937x_set_hwtstamp_config(struct ksz_device *dev, int port,
+					 struct hwtstamp_config *config)
+{
+	struct ksz_port *prt = &dev->ports[port];
+	bool tstamp_enable = false;
+
+	/* Prevent the TX/RX paths from trying to interact with the
+	 * timestamp hardware while we reconfigure it.
+	 */
+	clear_bit_unlock(LAN937X_HWTSTAMP_ENABLED, &prt->tstamp_state);
+	
+	/* reserved for future extensions */
+	if (config->flags)
+		return -EINVAL;
+
+	switch (config->tx_type) {
+	case HWTSTAMP_TX_OFF:
+		tstamp_enable = false;
+		break;
+	case HWTSTAMP_TX_ON:
+		tstamp_enable = true;
+		break;
+	default:
+		return -ERANGE;
+	}
+
+	//Todo: insert the switch statement for rx_filter
+
+	/* Once hardware has been configured, enable timestamp checks
+	 * in the RX/TX paths.
+	 */
+	if (tstamp_enable)
+		set_bit(LAN937X_HWTSTAMP_ENABLED, &prt->tstamp_state);
+
+	return 0;
+}
+
 int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct ifreq *ifr)
 {
 	struct ksz_device *dev	= ds->priv;
@@ -1041,10 +1078,56 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 	return IRQ_HANDLED;
 }
 
+/* Returns a pointer to the PTP header if the caller should time stamp,
+ * or NULL if the caller should not.
+ */
+static struct ptp_header *lan937x_ptp_should_tstamp(struct ksz_port *port, struct sk_buff *skb,
+		unsigned int type) 
+{
+	if (!test_bit(LAN937X_HWTSTAMP_ENABLED, &port->tstamp_state))
+		return NULL;
+
+	return ptp_parse_header(skb, type); 
+}
+
+
+bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
+			     struct sk_buff *clone, unsigned int type)
+{
+	struct ksz_device *dev  = ds->priv;
+	struct ksz_port *prt = &dev->ports[port];
+	struct ptp_header *hdr;
+
+	//if (!(skb_shinfo(clone)->tx_flags & SKBTX_HW_TSTAMP))
+	//	return false;
+
+	hdr = lan937x_ptp_should_tstamp(prt, clone, type);
+	if (!hdr)
+		return false;
+
+	if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_IN_PROGRESS, 
+				&prt->tstamp_state))
+		return false;
+
+//	ps->tx_skb = clone;
+//	ps->tx_tstamp_start = jiffies;
+//	ps->tx_seq_id = be16_to_cpu(hdr->sequence_id);
+
+//	ptp_schedule_worker(chip->ptp_clock, 0);
+	return true;
+}
+
+bool lan937x_port_rxtstamp(struct dsa_switch *ds, int port,
+			     struct sk_buff *clone, unsigned int type)
+{
+
+	return true;
+}
+
 //These are function releated to the ptp clock info
 
 static int lan937x_ptp_enable(struct ptp_clock_info *ptp,
-			      struct ptp_clock_request *req, int on)
+		struct ptp_clock_request *req, int on)
 {
 	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
 	struct ksz_device *priv = ptp_data_to_lan937x(ptp_data);
@@ -1060,7 +1143,7 @@ static int lan937x_ptp_enable(struct ptp_clock_info *ptp,
 
 
 static int lan937x_ptp_gettime(struct ptp_clock_info *ptp,
-				struct timespec64 *ts)
+		struct timespec64 *ts)
 {
 	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
 	struct ksz_device *priv = ptp_data_to_lan937x(ptp_data);
@@ -1073,15 +1156,15 @@ static int lan937x_ptp_gettime(struct ptp_clock_info *ptp,
 }
 
 static int lan937x_ptp_settime(struct ptp_clock_info *ptp,
-			       const struct timespec64 *ts)
+		const struct timespec64 *ts)
 {
 	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
 	struct ksz_device *priv = ptp_data_to_lan937x(ptp_data);
-	
+
 	mutex_lock(&ptp_data->lock);
 
 	mutex_unlock(&ptp_data->lock);
-	
+
 	return 0;  //Todo: change it now.
 
 }
@@ -1091,11 +1174,11 @@ static int lan937x_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 {
 	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
 	struct ksz_device *priv = ptp_data_to_lan937x(ptp_data);
-	
+
 	mutex_lock(&ptp_data->lock);
 
 	mutex_unlock(&ptp_data->lock);
-	
+
 	return 0; //Todo: change it
 }
 
@@ -1108,7 +1191,7 @@ static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 	mutex_lock(&ptp_data->lock);
 
 	mutex_unlock(&ptp_data->lock);
-	
+
 	return 0;
 }
 
@@ -1118,22 +1201,22 @@ int lan937x_ptp_clock_register(struct dsa_switch *ds)
 {
 	struct ksz_device *dev  = ds->priv;
 	struct lan937x_ptp_data *ptp_data = &dev->ptp_data;
-	
+
 	ptp_data->caps = (struct ptp_clock_info) {
 		.owner		= THIS_MODULE,
-		.name		= "LAN937X PHC",
-		.enable		= lan937x_ptp_enable,
-		.gettime64	= lan937x_ptp_gettime,
-		.settime64	= lan937x_ptp_settime,
-		.adjfine	= lan937x_ptp_adjfine,
-		.adjtime	= lan937x_ptp_adjtime
+			.name		= "Microchip Clock",
+			.enable		= lan937x_ptp_enable,
+			.gettime64	= lan937x_ptp_gettime,
+			.settime64	= lan937x_ptp_settime,
+			.adjfine	= lan937x_ptp_adjfine,
+			.adjtime	= lan937x_ptp_adjtime
 
 	};
 
 	ptp_data->clock = ptp_clock_register(&ptp_data->caps, ds->dev);
 	if (IS_ERR_OR_NULL(ptp_data->clock))
 		return PTR_ERR(ptp_data->clock);
-	
+
 	return 0;
 }	
 

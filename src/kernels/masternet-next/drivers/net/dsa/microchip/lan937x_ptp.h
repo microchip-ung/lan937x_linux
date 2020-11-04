@@ -13,6 +13,12 @@
 
 #include <linux/ptp_clock_kernel.h>
 
+/* state flags for _port_hwtstamp::state */
+enum {
+	LAN937X_HWTSTAMP_ENABLED,
+	LAN937X_HWTSTAMP_TX_IN_PROGRESS,
+};
+
 struct lan937x_ptp_data
 {
 	struct ptp_clock_info caps;
