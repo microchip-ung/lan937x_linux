@@ -6,11 +6,12 @@
 #include <linux/ptp_classify.h>
 #include "lan937x_reg.h"
 
-
 #define ptp_caps_to_data(d) \
 		container_of((d), struct lan937x_ptp_data, caps)
 #define ptp_data_to_lan937x(d) \
 		container_of((d), struct ksz_device, ptp_data)
+
+#define MAX_DRIFT_CORR 6250000
 
 /* The function is return back the capability of timestamping feature when requested
    through ethtool -T <interface> utility
@@ -232,6 +233,7 @@ int lan937x_ptp_clock_register(struct dsa_switch *ds)
 	ptp_data->caps = (struct ptp_clock_info) {
 		.owner		= THIS_MODULE,
 			.name		= "Microchip Clock",
+			.max_adj  	= MAX_DRIFT_CORR,
 			.enable		= lan937x_ptp_enable,
 			.gettime64	= lan937x_ptp_gettime,
 			.settime64	= lan937x_ptp_settime,
