@@ -1205,6 +1205,7 @@ int lan937x_ptp_clock_register(struct dsa_switch *ds)
 	ptp_data->caps = (struct ptp_clock_info) {
 		.owner		= THIS_MODULE,
 			.name		= "Microchip Clock",
+			.max_adj  	= MAX_DRIFT_CORR,
 			.enable		= lan937x_ptp_enable,
 			.gettime64	= lan937x_ptp_gettime,
 			.settime64	= lan937x_ptp_settime,
