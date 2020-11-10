@@ -54,6 +54,12 @@ struct ksz_port {
 	struct ksz_port_mib mib;
 	phy_interface_t interface;
 	struct hwtstamp_config tstamp_config;
+	
+	/* Resources for transmit timestamping */
+	unsigned long tx_tstamp_start;
+	struct sk_buff *tx_skb;
+	u16 tx_seq_id;
+
 	unsigned long tstamp_state;
 };
 
