@@ -133,15 +133,16 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 	if (!hdr)
 		return false;
 
+
 	if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_IN_PROGRESS, 
 				&prt->tstamp_state))
 		return false;
 
-//	ps->tx_skb = clone;
-//	ps->tx_tstamp_start = jiffies;
-//	ps->tx_seq_id = be16_to_cpu(hdr->sequence_id);
+	prt->tx_skb = clone;
+	prt->tx_tstamp_start = jiffies;
+	prt->tx_seq_id = be16_to_cpu(hdr->sequence_id);
 
-//	ptp_schedule_worker(chip->ptp_clock, 0);
+	ptp_schedule_worker(dev->ptp_data.clock, 0);
 	return true;
 }
 
@@ -169,6 +170,30 @@ static int lan937x_ptp_enable(struct ptp_clock_info *ptp,
 	return rc; 
 }
 
+long lan937x_ptp_hwtstamp_work(struct ptp_clock_info *ptp)
+{
+	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
+	struct ksz_device *dev = ptp_data_to_lan937x(ptp_data);
+	struct ksz_port *prt = &dev->ports[0];  //todo: change the 1 to number of the port. 
+	struct sk_buff *tmp_skb;
+	struct skb_shared_hwtstamps shhwtstamps;
+	u64 ns = 1234;  //todo get the ns from the hardware. just a placeholder now
+	memset(&shhwtstamps, 0, sizeof(struct skb_shared_hwtstamps));
+	
+	shhwtstamps.hwtstamp = ns_to_ktime(ns);
+	
+	/* skb_complete_tx_timestamp() will free up the client to make
+	 * another timestamp-able transmit. We have to be ready for it
+	 * -- by clearing the ps->tx_skb "flag" -- beforehand.
+	 */
+
+	tmp_skb = prt->tx_skb;
+	prt->tx_skb = NULL;
+	clear_bit_unlock(LAN937X_HWTSTAMP_TX_IN_PROGRESS, &prt->tstamp_state);
+	skb_complete_tx_timestamp(tmp_skb, &shhwtstamps);
+	
+	return -1; //as of now, setting -1 for not to restart. 1 means to restart the poll
+}
 
 static int lan937x_ptp_gettime(struct ptp_clock_info *ptp,
 		struct timespec64 *ts)
@@ -238,7 +263,9 @@ int lan937x_ptp_clock_register(struct dsa_switch *ds)
 			.gettime64	= lan937x_ptp_gettime,
 			.settime64	= lan937x_ptp_settime,
 			.adjfine	= lan937x_ptp_adjfine,
-			.adjtime	= lan937x_ptp_adjtime
+			.adjtime	= lan937x_ptp_adjtime,
+			.do_aux_work	= lan937x_ptp_hwtstamp_work
+
 
 	};
 
