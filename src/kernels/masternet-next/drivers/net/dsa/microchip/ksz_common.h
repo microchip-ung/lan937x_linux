@@ -77,13 +77,11 @@ struct ksz_device {
 	u32 regs_size;
 	bool phy_errata_9477;
 	bool synclko_125;
-	const u8 *log_prt_map;
 	u8 tx_phy_log_prt;
-
+	
 	struct vlan_table *vlan_cache;
 
 	struct ksz_port *ports;
-	struct lan937x_port_ext *prts_ext; /*port extended information*/
 	struct delayed_work mib_read;
 	unsigned long mib_read_interval;
 	u16 br_member;

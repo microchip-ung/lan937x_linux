@@ -10,7 +10,6 @@
 #include <linux/if_bridge.h>
 #include <net/dsa.h>
 #include <net/switchdev.h>
-#include <linux/dsa/lan937x.h>
 
 #include "lan937x_reg.h"
 #include "ksz_common.h"
@@ -84,7 +83,7 @@ static void lan937x_cfg(struct ksz_device *dev, u32 addr, u8 bits, bool set)
 static void lan937x_port_cfg(struct ksz_device *dev, int port, int offset,
 			     u8 bits, bool set)
 {
-	regmap_update_bits(dev->regmap[0], PORT_CTRL_ADDR(dev->log_prt_map[port],
+	regmap_update_bits(dev->regmap[0], dev->dev_ops->get_port_addr(port,
 							  offset), bits, set ? bits : 0);
 }
 
@@ -96,49 +95,49 @@ static void lan937x_cfg32(struct ksz_device *dev, u32 addr, u32 bits, bool set)
 static inline void lan937x_pread8(struct ksz_device *dev, int port, int offset,
 				  u8 *data)
 {
-	ksz_read8(dev, dev->dev_ops->get_port_addr(dev->log_prt_map[port],
+	ksz_read8(dev, dev->dev_ops->get_port_addr(port,
 						   offset), data);
 }
 
 static inline void lan937x_pread16(struct ksz_device *dev, int port, int offset,
 				   u16 *data)
 {
-	ksz_read16(dev, dev->dev_ops->get_port_addr(dev->log_prt_map[port],
+	ksz_read16(dev, dev->dev_ops->get_port_addr(port,
 						    offset), data);
 }
 
 static inline void lan937x_pread32(struct ksz_device *dev, int port, int offset,
 				   u32 *data)
 {
-	ksz_read32(dev, dev->dev_ops->get_port_addr(dev->log_prt_map[port],
+	ksz_read32(dev, dev->dev_ops->get_port_addr(port,
 						    offset), data);
 }
 
 static inline void lan937x_pwrite8(struct ksz_device *dev, int port,
 				   int offset, u8 data)
 {
-	ksz_write8(dev, dev->dev_ops->get_port_addr(dev->log_prt_map[port],
+	ksz_write8(dev,dev->dev_ops->get_port_addr(port,
 						    offset), data);
 }
 
 static inline void lan937x_pwrite16(struct ksz_device *dev, int port,
 				    int offset, u16 data)
 {
-	ksz_write16(dev, dev->dev_ops->get_port_addr(dev->log_prt_map[port],
+	ksz_write16(dev, dev->dev_ops->get_port_addr(port,
 						     offset), data);
 }
 
 static inline void lan937x_pwrite32(struct ksz_device *dev, int port,
 				    int offset, u32 data)
 {
-	ksz_write32(dev, dev->dev_ops->get_port_addr(dev->log_prt_map[port],
+	ksz_write32(dev, dev->dev_ops->get_port_addr(port,
 						     offset), data);
 }
 
 static void lan937x_port_cfg32(struct ksz_device *dev, int port, int offset,
 			       u32 bits, bool set)
 {
-	regmap_update_bits(dev->regmap[2], PORT_CTRL_ADDR(dev->log_prt_map[port],
+	regmap_update_bits(dev->regmap[2], dev->dev_ops->get_port_addr(port,
 							  offset), bits, set ? bits : 0);
 }
 
@@ -300,7 +299,7 @@ static void lan937x_r_mib_cnt(struct ksz_device *dev, int port, u16 addr,
 	lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4, data);
 
 	ret = regmap_read_poll_timeout(dev->regmap[2],
-				       PORT_CTRL_ADDR(dev->log_prt_map[port],
+				       PORT_CTRL_ADDR(port,
 						      REG_PORT_MIB_CTRL_STAT__4),
 					   val, !(val & MIB_COUNTER_READ), 10, 1000);
 	/* failed to read MIB. get out of loop */
@@ -398,7 +397,7 @@ static int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
 
 static bool lan937x_is_tx_phy_port(struct ksz_device *dev, int phy_prt)
 {
-	return dev->tx_phy_log_prt == dev->log_prt_map[phy_prt];
+	return dev->tx_phy_log_prt == phy_prt;
 }
 
 static int lan937x_t1_tx_phy_write(struct ksz_device *dev, int addr,
@@ -420,17 +419,12 @@ static int lan937x_t1_tx_phy_write(struct ksz_device *dev, int addr,
 		return ret;
 	}
 
-	if (dev->log_prt_map[addr] == LOGICAL_PORT_INVALID) {
-		dev_dbg(dev->dev, "Invalid logical port found");
-		return -EINVAL; /*addr given in the argument is invalid*/
-	}
-
 	if (lan937x_is_tx_phy_port(dev, addr))
 		addr_base = REG_PORT_TX_PHY_CTRL_BASE;
 	else
 		addr_base = REG_PORT_T1_PHY_CTRL_BASE;
 
-	temp = dev->dev_ops->get_port_addr(dev->log_prt_map[addr],
+	temp = dev->dev_ops->get_port_addr(addr,
 				(addr_base + (reg << 2)));
 
 	ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
@@ -509,19 +503,14 @@ static int lan937x_t1_tx_phy_read(struct ksz_device *dev, int addr,
 			dev_dbg(dev->dev, "Failed to enable VPHY indirect access from SPI");
 			return ret;
 		}
-
-		if (dev->log_prt_map[addr] == LOGICAL_PORT_INVALID) {
-			dev_dbg(dev->dev, "Invalid logical port found");
-			return -EINVAL;
-		}
-
+		
 		if (lan937x_is_tx_phy_port(dev, addr))
 			addr_base = REG_PORT_TX_PHY_CTRL_BASE;
 		else
 			addr_base = REG_PORT_T1_PHY_CTRL_BASE;
 
 		/* get register address based on the logical port */
-		temp = dev->dev_ops->get_port_addr(dev->log_prt_map[addr],
+		temp = dev->dev_ops->get_port_addr(addr,
 						(addr_base + (reg << 2)));
 
 		ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
@@ -606,15 +595,15 @@ static void lan937x_get_strings(struct dsa_switch *ds, int port,
 static void lan937x_cfg_port_member(struct ksz_device *dev, int port,
 				    u8 member)
 {
-	u8 log_prt = 0;
-	int i;
+	//u8 log_prt = 0;
+	//int i;
 
-	for (i = 0; i < dev->port_cnt; i++)
-		if (member & (1 << i))
-			log_prt |=  (1 << (dev->log_prt_map[i] - 1));
+	/*for (i = 0; i < dev->port_cnt; i++)
+		if (member & (1 << i)) 
+			log_prt |=  (1 << (i - 1));*/
 
 	/* Physical port number conversion to logical port number*/
-	lan937x_pwrite32(dev, port, REG_PORT_VLAN_MEMBERSHIP__4, log_prt);
+	lan937x_pwrite32(dev, port, REG_PORT_VLAN_MEMBERSHIP__4, member);
 
 	dev->ports[port].member = member;
 }
@@ -761,13 +750,13 @@ static void lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 		 * updating vlan table registers
 		 */
 		if (untagged)
-			vlan_table[1] |= BIT(dev->log_prt_map[port] - 1);
+			vlan_table[1] |= BIT(port);
 		else
-			vlan_table[1] &= ~BIT(dev->log_prt_map[port] - 1);
-		vlan_table[1] &= ~(BIT(dev->log_prt_map[dev->cpu_port] - 1));
+			vlan_table[1] &= ~BIT(port);
+		vlan_table[1] &= ~(BIT(dev->cpu_port));
 
-		vlan_table[2] |= BIT(dev->log_prt_map[port] - 1) |
-						BIT(dev->log_prt_map[dev->cpu_port] - 1);
+		vlan_table[2] |= BIT(port) |
+						BIT(dev->cpu_port);
 
 		if (lan937x_set_vlan_table(dev, vid, vlan_table)) {
 			dev_dbg(dev->dev, "Failed to set vlan table\n");
@@ -800,13 +789,13 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 		/* clear switch logical port number based on the port arg when
 		 * updating vlan table registers
 		 */
-		vlan_table[2] &= ~BIT(dev->log_prt_map[port] - 1);
+		vlan_table[2] &= ~BIT(port);
 
 		if (pvid == vid)
 			pvid = 1;
 
 		if (untagged)
-			vlan_table[1] &= ~BIT(dev->log_prt_map[port] - 1);
+			vlan_table[1] &= ~BIT(port);
 
 		if (lan937x_set_vlan_table(dev, vid, vlan_table)) {
 			dev_dbg(dev->dev, "Failed to set vlan table\n");
@@ -856,7 +845,7 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 	/* switch logical port number has to be set based on the port arg when
 	 * updating alu table registers
 	 */
-	alu_table[1] |= BIT(dev->log_prt_map[port] - 1);
+	alu_table[1] |= BIT(port);
 	if (vid)
 		alu_table[1] |= ALU_V_USE_FID;
 	alu_table[2] = (vid << ALU_V_FID_S);
@@ -917,7 +906,7 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 		/* clear forwarding port - switch logical port number has to be set
 		 * based on the port arg when updating alu table registers
 		 */
-		alu_table[2] &= ~BIT(dev->log_prt_map[port] - 1);
+		alu_table[2] &= ~BIT(port);
 
 		/* if there is no port to forward, clear table */
 		if ((alu_table[2] & ALU_V_PORT_MAP) == 0) {
@@ -1006,7 +995,7 @@ static int lan937x_port_fdb_dump(struct dsa_switch *ds, int port,
 
 		lan937x_convert_alu(&alu, alu_table);
 
-		if (alu.port_forward & BIT(dev->log_prt_map[port] - 1)) {
+		if (alu.port_forward & BIT(port)) {
 			ret = cb(alu.mac, alu.fid, alu.is_static, data);
 			if (ret)
 				goto exit;
@@ -1074,7 +1063,7 @@ static void lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 	/* add entry */
 	static_table[0] = ALU_V_STATIC_VALID;
 	/* set logical port number based on the port arg */
-	static_table[1] |= BIT(dev->log_prt_map[port] - 1);
+	static_table[1] |= BIT(port);
 	if (mdb->vid)
 		static_table[1] |= ALU_V_USE_FID;
 	static_table[2] = (mdb->vid << ALU_V_FID_S);
@@ -1142,7 +1131,7 @@ static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
 		goto exit;
 
 	/* clear logical port based on port arg */
-	static_table[1] &= ~BIT(dev->log_prt_map[port] - 1);
+	static_table[1] &= ~BIT(port);
 
 	if ((static_table[1] & ALU_V_PORT_MAP) == 0) {
 		/* delete entry */
@@ -1484,8 +1473,8 @@ static void t1_phy_port_init(struct ksz_device *dev, int port)
 				   T1_HW_INIT_SEQ_ENABLE, false);
 
 	/*TODO: Configure master/slave. true=master, false=slave */
-	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_MASTER_CTRL,
-				   PORT_T1_MASTER_CFG, true);
+	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_INITIATOR_CTRL,
+				   PORT_T1_INITIATOR_CFG, true);
 
 	/* Software reset. */
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_BASIC_CTRL,
@@ -1750,7 +1739,7 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 		if (i < dev->phy_port_cnt)
 			p->phy = 1;
 
-		if (dev->chip_id == 0x00937400 && i == 7) {
+		if (dev->chip_id == 0x00937300 && i == 3) {
 			/* SGMII PHY detection code is not implemented yet. */
 			p->phy = 0;
 		}
@@ -1958,7 +1947,6 @@ struct lan937x_chip_data {
 	int phy_port_cnt;
 	int mib_port_cnt;
 	u8 tx_phy_log_prt;
-	u8  log_addr_map[10];
 };
 
 static const struct lan937x_chip_data lan937x_switch_chips[] = {
@@ -1975,8 +1963,6 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.mib_port_cnt = 5,
 		.phy_port_cnt = 4,
 		.tx_phy_log_prt = NO_TX_PHY_PRESENT,
-		/* AFE0, AFE1, AFE3, AFE4, RGMII2*/
-		.log_addr_map = {1, 2, 3, 4, 5, 0xff, 0xff, 0xff, 0xff, 0xff},
 	},
 	{
 		.chip_id = 0x00937100,
@@ -1991,9 +1977,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.mib_port_cnt = 6,
 		.phy_port_cnt = 4,
 		/* Tx Phy logical port number */
-		.tx_phy_log_prt = 4,
-		/* AFE0, AFE1, AFE3, TxPHY, RGMII2, RGMII1 */
-		.log_addr_map = {1, 2, 3, 4, 5, 6, 0xff, 0xff, 0xff, 0xff },
+		.tx_phy_log_prt = 3,
 	},
 	{
 		.chip_id = 0x00937200,
@@ -2008,9 +1992,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.mib_port_cnt = 8,
 		.phy_port_cnt = 6,
 		/* Tx Phy logical port number */
-		.tx_phy_log_prt = 4,
-		/* AFE0, AFE1, AFE2, AFE3, AFE4, TxPHY, RGMII2, RGMII1 */
-		.log_addr_map = {1, 2, 8, 3, 7, 4, 5, 6, 0xff, 0xff},
+		.tx_phy_log_prt = 3,
 	},
 	{
 		.chip_id = 0x00937300,
@@ -2026,8 +2008,6 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.phy_port_cnt = 3,
 		/* Tx Phy logical port number */
 		.tx_phy_log_prt = NO_TX_PHY_PRESENT,
-		/* AFE0  AFE1  AFE2  AFE3  AFE4 SGMII  RGMII2  RGMII1 */
-		.log_addr_map = {1, 2, 8, 3, 7, 4, 5, 6, 0xff, 0xff},
 	},
 	{
 		.chip_id = 0x00937400,
@@ -2043,32 +2023,10 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.phy_port_cnt = 6,
 		/* Tx Phy logical port number */
 		.tx_phy_log_prt = NO_TX_PHY_PRESENT,
-		 /* AFE0  AFE1  AFE2  AFE3  AFE4  AFE5 RGMII2/Port6/CPU  RGMII1/Port7 */
-		.log_addr_map = {1,	2, 8, 3, 7, 4, 5, 6, 0xff, 0xff},
 	},
 
 };
 
-static void lan937x_port_init(struct ksz_device *dev)
-{
-	struct lan937x_port_ext *kp;
-	struct dsa_port *dp;
-	int i;
-
-	for (i = 0; i < dev->mib_port_cnt; i++) {
-		if (!dsa_is_user_port(dev->ds, i))
-			continue;
-
-		dp = dsa_to_port(dev->ds, i);
-		kp = &dev->prts_ext[i];
-
-		dp->priv = kp;
-		kp->dp = dp;
-
-		kp->lp_num = dev->log_prt_map[i];
-		kp->tx_phy_log_prt = dev->tx_phy_log_prt;
-	}
-}
 
 static int lan937x_switch_init(struct ksz_device *dev)
 {
@@ -2087,7 +2045,6 @@ static int lan937x_switch_init(struct ksz_device *dev)
 			dev->port_cnt = chip->port_cnt;
 			dev->cpu_ports = chip->cpu_ports;
 			dev->mib_port_cnt = chip->mib_port_cnt;
-			dev->log_prt_map = chip->log_addr_map;
 			dev->phy_port_cnt = chip->phy_port_cnt;
 			dev->tx_phy_log_prt = chip->tx_phy_log_prt;
 			break;
@@ -2109,13 +2066,8 @@ static int lan937x_switch_init(struct ksz_device *dev)
 	if (!dev->ports)
 		return -ENOMEM;
 
-	dev->prts_ext = devm_kzalloc(dev->dev, sizeof(struct lan937x_port_ext) * i,
-				     GFP_KERNEL);
-
-	if (!dev->prts_ext)
-		return -ENOMEM;
-
 	for (i = 0; i < dev->mib_port_cnt; i++) {
+
 		mutex_init(&dev->ports[i].mib.cnt_mutex);
 		dev->ports[i].mib.counters =
 			devm_kzalloc(dev->dev,
@@ -2159,8 +2111,6 @@ int lan937x_switch_register(struct ksz_device *dev)
 	ret = ksz_switch_register(dev, &lan937x_dev_ops);
 	if (ret)
 		return ret;
-
-	lan937x_port_init(dev);
 
 	for (i = 0; i < dev->phy_port_cnt; ++i) {
 		if (!dsa_is_user_port(dev->ds, i))

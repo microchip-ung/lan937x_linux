@@ -277,23 +277,23 @@
 							label = "lan2";
 						};
 						port@2 {
-							reg = <2>;
+							reg = <7>;
 							label = "lan3";
 						};
 						port@3 {
-							reg = <3>;
+							reg = <2>;
 							label = "lan4";
 						};
 						port@4 {
-							reg = <4>;
+							reg = <6>;
 							label = "lan5";
 						};
 						port@5 {
-							reg = <5>;
+							reg = <3>;
 							label = "lan6";
 						};
 						port@6 {
-							reg = <6>;
+							reg = <4>;
 							label = "cpu";
 							phy-mode = "rmii";							
 							ethernet = <&macb0>;
@@ -303,7 +303,7 @@
 							};
 						};
 						port@7 {
-							reg = <7>;
+							reg = <5>;
 							label = "lan7";
 							phy-mode = "rmii";
 							fixed-link {
@@ -335,19 +335,19 @@
 							label = "lan2";
 						};
 						port@2 {
-							reg = <2>;
+							reg = <7>;
 							label = "lan3";
 						};
 						port@3 {
-							reg = <3>;
+							reg = <2>;
 							label = "lan4";
 						};
 						port@4 {
-							reg = <4>;
+							reg = <6>;
 							label = "lan5";
 						};
 						port@5 {
-							reg = <5>;
+							reg = <3>;
 							label = "lan6";
 							phy-mode = "sgmii";
 							fixed-link {
@@ -356,7 +356,7 @@
 							};
 						};
 						port@6 {
-							reg = <6>;
+							reg = <4>;
 							phy-mode = "rmii";
 							label = "cpu";
 							ethernet = <&macb0>;
@@ -366,7 +366,7 @@
 							};
 						};
 						port@7 {
-							reg = <7>;
+							reg = <5>;
 							label = "lan7";
 							phy-mode = "rmii";
 							fixed-link {
@@ -398,23 +398,23 @@
 							label = "lan2";
 						};
 						port@2 {
-							reg = <2>;
+							reg = <7>;
 							label = "lan3";
 						};
 						port@3 {
-							reg = <3>;
+							reg = <2>;
 							label = "lan4";
 						};
 						port@4 {
-							reg = <4>;
+							reg = <6>;
 							label = "lan5";
 						};
 						port@5 {
-							reg = <5>;
+							reg = <3>;
 							label = "lan6";
 						};
 						port@6 {
-							reg = <6>;
+							reg = <4>;
 							phy-mode = "rmii";
 							label = "cpu";
 							ethernet = <&macb0>;
@@ -424,7 +424,7 @@
 							};
 						};
 						port@7 {
-							reg = <7>;
+							reg = <5>;
 							phy-mode = "rmii";
 							label = "lan7";
 							fixed-link {

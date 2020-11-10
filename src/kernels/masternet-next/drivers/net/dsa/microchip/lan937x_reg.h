@@ -804,7 +804,7 @@
 #define PTP_SDOID_MINOR_S		8
 #define PTP_P2P_PORTS_M			0xFF
 
-#define PORT_CTRL_ADDR(port, addr)	((addr) | ((port)  << 12))
+#define PORT_CTRL_ADDR(port, addr)	((addr) | ((port+1)  << 12))
 
 #define REG_GLOBAL_RR_INDEX__1		0x0600
 
@@ -2252,5 +2252,17 @@
 
 #define PHY_LINK_UP					1
 #define PHY_LINK_DOWN				0
+
+/*The port number as per the datasheet*/
+#define CPU_LOGICAL_PORT_NUM		5
+#define MII_LOGICAL_PORT_NUM		6
+#define SGMII_LOGICAL_PORT_NUM		4
+#define TXPHY_LOGICAL_PORT_NUM		4
+
+#define GET_CHIP_ID_LSB(chip_id) 	((dev->chip_id >> 8) && 0xff)
+#define LAN937X_CPU_PORT			(CPU_LOGICAL_PORT_NUM - 1)
+#define LAN937X_MII_PORT			(MII_LOGICAL_PORT_NUM - 1)
+#define LAN937X_SGMII_PORT			(SGMII_LOGICAL_PORT_NUM - 1)
+#define LAN937X_TXPHY_PORT			(TXPHY_LOGICAL_PORT_NUM - 1)
 
 #endif
