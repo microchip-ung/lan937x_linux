@@ -2259,7 +2259,7 @@
 #define SGMII_LOGICAL_PORT_NUM		4
 #define TXPHY_LOGICAL_PORT_NUM		4
 
-#define GET_CHIP_ID_LSB(chip_id) 	((dev->chip_id >> 8) && 0xff)
+#define GET_CHIP_ID_LSB(chip_id) 	((chip_id >> 8) & 0xff)
 #define LAN937X_CPU_PORT			(CPU_LOGICAL_PORT_NUM - 1)
 #define LAN937X_MII_PORT			(MII_LOGICAL_PORT_NUM - 1)
 #define LAN937X_SGMII_PORT			(SGMII_LOGICAL_PORT_NUM - 1)
