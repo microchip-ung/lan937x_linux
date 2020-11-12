@@ -156,20 +156,21 @@ static int lan937x_set_hwtstamp_config(struct ksz_device *dev, int port,
 	 * timestamp hardware while we reconfigure it.
 	 */
 	clear_bit_unlock(LAN937X_HWTSTAMP_ENABLED, &prt->tstamp_state);
-	
+
 	/* reserved for future extensions */
 	if (config->flags)
 		return -EINVAL;
 
 	switch (config->tx_type) {
-	case HWTSTAMP_TX_OFF:
-		tstamp_enable = false;
-		break;
-	case HWTSTAMP_TX_ON:
-		tstamp_enable = true;
-		break;
-	default:
-		return -ERANGE;
+		case HWTSTAMP_TX_OFF:
+			tstamp_enable = false;
+			break;
+		case HWTSTAMP_TX_ON:
+			//case HWTSTAMP_TX_ONESTEP_SYNC:   //todo: check for this. it is need for onestep sync
+			tstamp_enable = true;
+			break;
+		default:
+			return -ERANGE;
 	}
 
 	//Todo: insert the switch statement for rx_filter
@@ -1098,8 +1099,8 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 	struct ksz_port *prt = &dev->ports[port];
 	struct ptp_header *hdr;
 
-	//if (!(skb_shinfo(clone)->tx_flags & SKBTX_HW_TSTAMP))
-	//	return false;
+	if (!(skb_shinfo(clone)->tx_flags & SKBTX_HW_TSTAMP))
+		return false;
 
 	hdr = lan937x_ptp_should_tstamp(prt, clone, type);
 	if (!hdr)
@@ -1142,17 +1143,59 @@ static int lan937x_ptp_enable(struct ptp_clock_info *ptp,
 	return rc; 
 }
 
+ktime_t lan937x_tstamp_to_clock(struct ksz_device *ksz, u32 tstamp, int offset_ns) 
+{
+       struct timespec64 ptp_clock_time;
+       /* Split up time stamp, 2 bit seconds, 30 bit nano seconds */
+       struct timespec64 ts = {
+               .tv_sec  = tstamp >> 30,
+               .tv_nsec = tstamp & (BIT_MASK(30) - 1),
+       };
+       struct timespec64 diff;
+       unsigned long flags;
+       s64 ns;
+
+       spin_lock_irqsave(&ksz->ptp_data.clock_lock, flags);
+       ptp_clock_time = ksz->ptp_data.clock_time;
+       spin_unlock_irqrestore(&ksz->ptp_data.clock_lock, flags);
+
+       /* calculate full time from partial time stamp */
+       ts.tv_sec = (ptp_clock_time.tv_sec & ~3) | ts.tv_sec;
+
+       /* find nearest possible point in time */
+       diff = timespec64_sub(ts, ptp_clock_time);
+       if (diff.tv_sec > 2)
+               ts.tv_sec -= 4;
+       else if (diff.tv_sec < -2)
+               ts.tv_sec += 4;
+
+       /* Add/remove excess delay between wire and time stamp unit */
+       ns = timespec64_to_ns(&ts) + offset_ns;
+
+       return ns_to_ktime(ns);
+}
+/*
+ * Function is pointer to the do_aux_work in the ptp_clock capability.
+ * It is called by application, by polling method to read the timestamp
+ * If timestamp is ready, it post using skb_complete api and return -1.
+ * else it returns 1 for restart the polling to get timestamp.
+ */
 long lan937x_ptp_hwtstamp_work(struct ptp_clock_info *ptp)
 {
 	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
 	struct ksz_device *dev = ptp_data_to_lan937x(ptp_data);
+	struct dsa_switch *ds = dev->ds;
 	struct ksz_port *prt = &dev->ports[0];  //todo: change the 1 to number of the port. 
 	struct sk_buff *tmp_skb;
 	struct skb_shared_hwtstamps shhwtstamps;
-	u64 ns = 1234;  //todo get the ns from the hardware. just a placeholder now
-	memset(&shhwtstamps, 0, sizeof(struct skb_shared_hwtstamps));
+	u32 tstamp_raw;
+
 	
-	shhwtstamps.hwtstamp = ns_to_ktime(ns);
+	memset(&shhwtstamps, 0, sizeof(struct skb_shared_hwtstamps));
+
+	//Read the timestamp from the hardware
+	tstamp_raw = 1234;	//todo get the timestamp from the hardware. just a placeholder now
+	shhwtstamps.hwtstamp = lan937x_tstamp_to_clock(dev, tstamp_raw, prt->tstamp_tx_latency_ns);
 	
 	/* skb_complete_tx_timestamp() will free up the client to make
 	 * another timestamp-able transmit. We have to be ready for it
@@ -1167,30 +1210,106 @@ long lan937x_ptp_hwtstamp_work(struct ptp_clock_info *ptp)
 	return -1; //as of now, setting -1 for not to restart. 1 means to restart the poll
 }
 
+static int _lan937x_ptp_gettime(struct ksz_device *dev, struct timespec64 *ts)
+{
+	u32 nanoseconds;
+	u32 seconds;
+	u16 data16;
+	u8 phase;
+	int ret;
+
+	/* Copy current PTP clock into shadow registers */
+	ret = ksz_read16(dev, REG_PTP_CLK_CTRL, &data16);
+	if (ret)
+		return ret;
+
+	data16 |= PTP_READ_TIME;
+
+	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
+	if (ret)
+		return ret;
+
+	/* Read from shadow registers */
+	ret = ksz_read8(dev, REG_PTP_RTC_SUB_NANOSEC__2, &phase);
+	if (ret)
+		return ret;
+	ret = ksz_read32(dev, REG_PTP_RTC_NANOSEC, &nanoseconds);
+	if (ret)
+		return ret;
+	ret = ksz_read32(dev, REG_PTP_RTC_SEC, &seconds);
+	if (ret)
+		return ret;
+
+	ts->tv_sec = seconds;
+	ts->tv_nsec = nanoseconds + phase * 8;
+
+	return 0;
+}
+
 static int lan937x_ptp_gettime(struct ptp_clock_info *ptp,
 		struct timespec64 *ts)
 {
 	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
-	struct ksz_device *priv = ptp_data_to_lan937x(ptp_data);
+	struct ksz_device *dev = ptp_data_to_lan937x(ptp_data);
+	int ret;
 
 	mutex_lock(&ptp_data->lock);
-
+	ret = _lan937x_ptp_gettime(dev, ts);
 	mutex_unlock(&ptp_data->lock);
 
-	return 0; //Todo: change it.
+	return ret; 
 }
 
 static int lan937x_ptp_settime(struct ptp_clock_info *ptp,
 		const struct timespec64 *ts)
 {
 	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
-	struct ksz_device *priv = ptp_data_to_lan937x(ptp_data);
+	struct ksz_device *dev = ptp_data_to_lan937x(ptp_data);
+	u16 data16;
+	int ret;
+
+	pr_err("set time \n");
 
 	mutex_lock(&ptp_data->lock);
 
+	/* Write to shadow registers */
+
+	/* clock phase */
+	ret = ksz_read16(dev, REG_PTP_RTC_SUB_NANOSEC__2, &data16);
+	if (ret)
+		goto error_return;
+
+	data16 &= ~PTP_RTC_SUB_NANOSEC_M;
+
+	ret = ksz_write16(dev, REG_PTP_RTC_SUB_NANOSEC__2, data16);
+	if (ret)
+		goto error_return;
+
+	/* nanoseconds */
+	ret = ksz_write32(dev, REG_PTP_RTC_NANOSEC, ts->tv_nsec);
+	if (ret)
+		goto error_return;
+
+	/* seconds */
+	ret = ksz_write32(dev, REG_PTP_RTC_SEC, ts->tv_sec);
+	if (ret)
+		goto error_return;
+
+	/* Load PTP clock from shadow registers */
+	ret = ksz_read16(dev, REG_PTP_CLK_CTRL, &data16);
+	if (ret)
+		goto error_return;
+
+	data16 |= PTP_LOAD_TIME;
+
+	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
+	if (ret)
+		goto error_return;
+
+error_return:
 	mutex_unlock(&ptp_data->lock);
 
-	return 0;  //Todo: change it now.
+	return ret;  
 
 }
 
@@ -1221,11 +1340,54 @@ static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 }
 
 
+static int lan937x_ptp_start_clock(struct ksz_device *dev)
+{
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, REG_PTP_CLK_CTRL, &data);
+	if (ret)
+		return ret;
+
+	/* Perform PTP clock reset */
+	data |= PTP_CLK_RESET;
+	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data);
+	if (ret)
+		return ret;
+	data &= ~PTP_CLK_RESET;
+
+	/* Enable PTP clock */
+	data |= PTP_CLK_ENABLE;
+	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int lan937x_ptp_stop_clock(struct ksz_device *dev)
+{
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, REG_PTP_CLK_CTRL, &data);
+	if (ret)
+		return ret;
+
+	/* Disable PTP clock */
+	data &= ~PTP_CLK_ENABLE;
+	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
 
 int lan937x_ptp_clock_register(struct dsa_switch *ds)
 {
 	struct ksz_device *dev  = ds->priv;
 	struct lan937x_ptp_data *ptp_data = &dev->ptp_data;
+	int ret;
 
 	ptp_data->caps = (struct ptp_clock_info) {
 		.owner		= THIS_MODULE,
@@ -1241,13 +1403,17 @@ int lan937x_ptp_clock_register(struct dsa_switch *ds)
 
 	};
 
+	/* Start hardware counter (will overflow after 136 years) */
+	ret = lan937x_ptp_start_clock(dev);
+	if (ret)
+		return ret;
+
 	ptp_data->clock = ptp_clock_register(&ptp_data->caps, ds->dev);
 	if (IS_ERR_OR_NULL(ptp_data->clock))
 		return PTR_ERR(ptp_data->clock);
 
 	return 0;
 }	
-
 
 void lan937x_ptp_clock_unregister(struct dsa_switch *ds)
 {
