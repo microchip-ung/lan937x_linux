@@ -62,7 +62,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.num_alus = 4096,
 		.num_statics = 16,
 		/* can be configured as cpu port */
-		.cpu_ports = 0xFF,
+		.cpu_ports = 0x10,
 		/* total physical port count */
 		.port_cnt = 5,
 		.mib_port_cnt = 5,
@@ -75,7 +75,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.num_alus = 4096,
 		.num_statics = 16,
 		/* can be configured as cpu port */
-		.cpu_ports = 0xFF,
+		.cpu_ports = 0x30,
 		/* total physical port count */
 		.port_cnt = 6,
 		.mib_port_cnt = 6,
@@ -88,7 +88,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.num_alus = 4096,
 		.num_statics = 16,
 		/* can be configured as cpu port */
-		.cpu_ports = 0x7F,
+		.cpu_ports = 0x30,
 		/* total port count */
 		.port_cnt = 8,
 		.mib_port_cnt = 8,
@@ -101,7 +101,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.num_alus = 4096,
 		.num_statics = 16,
 		/* can be configured as cpu port */
-		.cpu_ports = 0x7F,
+		.cpu_ports = 0x38,
 		/* total physical port count */
 		.port_cnt = 5,
 		.mib_port_cnt = 5,
@@ -114,7 +114,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.num_alus = 4096,
 		.num_statics = 16,
 		/* can be configured as cpu port */
-		.cpu_ports = 0x7f,
+		.cpu_ports = 0x30,
 		/* total physical port count */
 		.port_cnt = 8,
 		.mib_port_cnt = 8,
@@ -199,6 +199,7 @@ void lan937x_cfg_port_member(struct ksz_device *dev, int port,
 
 static void lan937x_flush_dyn_mac_table(struct ksz_device *dev, int port)
 {
+	unsigned int value;
 	u8 data;
 
 	regmap_update_bits(dev->regmap[0], REG_SW_LUE_CTRL_2,
@@ -212,6 +213,11 @@ static void lan937x_flush_dyn_mac_table(struct ksz_device *dev, int port)
 			lan937x_pwrite8(dev, port, P_STP_CTRL,
 					data | PORT_LEARN_DISABLE);
 		lan937x_cfg(dev, S_FLUSH_TABLE_CTRL, SW_FLUSH_DYN_MAC_TABLE, true);
+
+		regmap_read_poll_timeout(dev->regmap[0],
+				       S_FLUSH_TABLE_CTRL,
+				value, !(value & SW_FLUSH_DYN_MAC_TABLE), 10, 1000);
+		
 		lan937x_pwrite8(dev, port, P_STP_CTRL, data);
 	} else {
 		/* flush all */
@@ -290,14 +296,10 @@ int lan937x_reset_switch(struct ksz_device *dev)
 	/* reset switch */
 	lan937x_cfg(dev, REG_SW_OPERATION, SW_RESET, true);
 
-	/* turn off SPI DO Edge select */
-	regmap_update_bits(dev->regmap[0], REG_SW_GLOBAL_SERIAL_CTRL_0,
-			   SPI_AUTO_EDGE_DETECTION, 0);
-
 	/* default configuration */
 	ksz_read8(dev, REG_SW_LUE_CTRL_1, &data8);
 	data8 = SW_AGING_ENABLE | SW_LINK_AUTO_AGING |
-	      SW_SRC_ADDR_FILTER | SW_FLUSH_STP_TABLE | SW_FLUSH_MSTP_TABLE;
+	      SW_SRC_ADDR_FILTER;
 	ksz_write8(dev, REG_SW_LUE_CTRL_1, data8);
 
 	/* disable interrupts */
@@ -310,10 +312,6 @@ int lan937x_reset_switch(struct ksz_device *dev)
 			   BROADCAST_STORM_RATE,
 			   (BROADCAST_STORM_VALUE *
 			   BROADCAST_STORM_PROT_RATE) / 100);
-
-	if (dev->synclko_125)
-		ksz_write8(dev, REG_SW_GLOBAL_OUTPUT_CTRL__1,
-			   SW_ENABLE_REFCLKO | SW_REFCLKO_IS_125MHZ);
 
 	return 0;
 }
@@ -344,7 +342,7 @@ static void lan937x_switch_exit(struct ksz_device *dev)
 	lan937x_reset_switch(dev);
 }
 
-static int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
+int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
 {
 	u16 data16;
 	u8 data8;
@@ -421,9 +419,6 @@ int lan937x_t1_tx_phy_write(struct ksz_device *dev, int addr,
 	if (!isphyport(dev, addr))
 		return 0;
 
-	/* Enable Indirect Access from SPI to the VPHY registers */
-	ret = lan937x_enable_spi_indirect_access(dev);
-
 	if (ret) {
 		dev_dbg(dev->dev, "Failed to enable VPHY indirect access from SPI");
 		return ret;
@@ -449,7 +444,7 @@ int lan937x_t1_tx_phy_write(struct ksz_device *dev, int addr,
 	ret = regmap_read_poll_timeout(dev->regmap[1],
 				       REG_VPHY_IND_CTRL__2,
 				value, !(value & VPHY_IND_BUSY), 10, 1000);
-
+	
 	/* failed to write phy register. get out of loop */
 	if (ret) {
 		dev_dbg(dev->dev, "Failed to write phy register\n");
@@ -506,8 +501,6 @@ int lan937x_t1_tx_phy_read(struct ksz_device *dev, int addr,
 			break;
 		}
 	} else {
-		/* Enable Indirect Access from SPI to the VPHY registers */
-		ret = lan937x_enable_spi_indirect_access(dev);
 
 		if (ret) {
 			dev_dbg(dev->dev, "Failed to enable VPHY indirect access from SPI");

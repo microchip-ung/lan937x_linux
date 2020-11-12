@@ -16,7 +16,7 @@
 #define SPI_ADDR_ALIGN				3
 #define SPI_TURNAROUND_SHIFT		5
 
-KSZ_REGMAP_TABLE(ksz9477, 32, SPI_ADDR_SHIFT,
+KSZ_REGMAP_TABLE(lan937x, 32, SPI_ADDR_SHIFT,
 		 SPI_TURNAROUND_SHIFT, SPI_ADDR_ALIGN);
 
 static int lan937x_spi_probe(struct spi_device *spi)
@@ -29,15 +29,15 @@ static int lan937x_spi_probe(struct spi_device *spi)
 	if (!dev)
 		return -ENOMEM;
 
-	for (i = 0; i < ARRAY_SIZE(ksz9477_regmap_config); i++) {
-		rc = ksz9477_regmap_config[i];
+	for (i = 0; i < ARRAY_SIZE(lan937x_regmap_config); i++) {
+		rc = lan937x_regmap_config[i];
 		rc.lock_arg = &dev->regmap_mutex;
 		dev->regmap[i] = devm_regmap_init_spi(spi, &rc);
 		if (IS_ERR(dev->regmap[i])) {
 			ret = PTR_ERR(dev->regmap[i]);
 			dev_err(&spi->dev,
 				"Failed to initialize regmap%i: %d\n",
-				ksz9477_regmap_config[i].val_bits, ret);
+				lan937x_regmap_config[i].val_bits, ret);
 			return ret;
 		}
 	}

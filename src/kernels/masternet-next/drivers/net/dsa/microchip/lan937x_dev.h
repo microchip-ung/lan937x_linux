@@ -35,6 +35,7 @@ void lan937x_cfg_port_member(struct ksz_device *dev, int port,
 				    u8 member);
 void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port);
 int lan937x_sw_register(struct ksz_device *dev);
+int lan937x_enable_spi_indirect_access(struct ksz_device *dev);
 
 struct mib_names{
 	int index;
