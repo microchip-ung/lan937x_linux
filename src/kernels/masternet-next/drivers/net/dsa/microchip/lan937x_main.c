@@ -945,7 +945,8 @@ static int lan937x_setup(struct dsa_switch *ds)
 	/* enable Indirect Access from SPI to the VPHY registers */
 	lan937x_enable_spi_indirect_access(dev);
 
-	ret = lan937x_ptp_clock_register(ds);
+	ret = lan937x_ptp_init(ds);
+        
 	if (ret < 0) {
 		dev_err(ds->dev, "Failed to register PTP clock: %d\n", ret);
 		return ret;
