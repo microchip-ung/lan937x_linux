@@ -12,6 +12,9 @@
 
 #define MAX_DRIFT_CORR 6250000
 
+#define KSZ_PTP_INC_NS 40  /* HW clock is incremented every 40 ns (by 40) */
+#define KSZ_PTP_SUBNS_BITS 32  /* Number of bits in sub-nanoseconds counter */
+
 /* The function is return back the capability of timestamping feature when requested
    through ethtool -T <interface> utility
    */
@@ -295,8 +298,6 @@ static int lan937x_ptp_settime(struct ptp_clock_info *ptp,
 	u16 data16;
 	int ret;
 
-	pr_err("set time \n");
-
 	mutex_lock(&ptp_data->lock);
 
 	/* Write to shadow registers */
@@ -344,26 +345,94 @@ error_return:
 static int lan937x_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 {
 	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
-	struct ksz_device *priv = ptp_data_to_lan937x(ptp_data);
+	struct ksz_device *dev = ptp_data_to_lan937x(ptp_data);
+	u16 data16;
+	int ret;
 
-	mutex_lock(&ptp_data->lock);
+	if (scaled_ppm) {
+		/* basic calculation:
+		 * s32 ppb = scaled_ppm_to_ppb(scaled_ppm);
+		 * s64 adj = div_s64(((s64)ppb * KSZ_PTP_INC_NS) << KSZ_PTP_SUBNS_BITS,
+		 *                   NSEC_PER_SEC);
+		 */
 
-	mutex_unlock(&ptp_data->lock);
+		/* more precise calculation (avoids shifting out precision) */
+		s64 ppb, adj;
+		u32 data32;
 
-	return 0; //Todo: change it
+		/* see scaled_ppm_to_ppb() in ptp_clock.c for details */
+		ppb = 1 + scaled_ppm;
+		ppb *= 125;
+		ppb *= KSZ_PTP_INC_NS;
+		ppb <<= KSZ_PTP_SUBNS_BITS - 13;
+		adj = div_s64(ppb, NSEC_PER_SEC);
+
+		data32 = abs(adj);
+		data32 &= BIT_MASK(30) - 1;
+		if (adj >= 0)
+			data32 |= PTP_RATE_DIR;
+
+		ret = ksz_write32(dev, REG_PTP_SUBNANOSEC_RATE, data32);
+		if (ret)
+			return ret;
+	}
+
+	ret = ksz_read16(dev, REG_PTP_CLK_CTRL, &data16);
+	if (ret)
+		return ret;
+
+	if (scaled_ppm)
+		data16 |= PTP_CLK_ADJ_ENABLE;
+	else
+		data16 &= ~PTP_CLK_ADJ_ENABLE;
+
+	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
+	if (ret)
+		return ret;
+
+	return 0; 
 }
 
 
 static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 {
 	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
-	struct ksz_device *priv = ptp_data_to_lan937x(ptp_data);
+	struct ksz_device *dev = ptp_data_to_lan937x(ptp_data);
+	int ret;
+	s32 sec, nsec;
+	u16 data16;
 
 	mutex_lock(&ptp_data->lock);
 
-	mutex_unlock(&ptp_data->lock);
+	/* do not use ns_to_timespec64(), both sec and nsec are subtracted by hw */
+	sec = div_s64_rem(delta, NSEC_PER_SEC, &nsec);
 
-	return 0;
+	ret = ksz_write32(dev, REG_PTP_RTC_NANOSEC, abs(nsec));
+	if (ret)
+		goto error_return;
+
+	/* contradictory to the data sheet, seconds are also considered */
+	ret = ksz_write32(dev, REG_PTP_RTC_SEC, abs(sec));
+	if (ret)
+		goto error_return;
+
+	ret = ksz_read16(dev, REG_PTP_CLK_CTRL, &data16);
+	if (ret)
+		goto error_return;
+
+	data16 |= PTP_STEP_ADJ;
+	if (delta < 0)
+		data16 &= ~PTP_STEP_DIR;  /* 0: subtract */
+	else
+		data16 |= PTP_STEP_DIR;   /* 1: add */
+
+	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
+	if (ret)
+		goto error_return;
+
+error_return:
+	mutex_unlock(&ptp_data->lock);
+	return ret;
 }
 
 
@@ -410,7 +479,7 @@ static int lan937x_ptp_stop_clock(struct ksz_device *dev)
 	return 0;
 }
 
-int lan937x_ptp_clock_register(struct dsa_switch *ds)
+int lan937x_ptp_init(struct dsa_switch *ds)
 {
 	struct ksz_device *dev  = ds->priv;
 	struct lan937x_ptp_data *ptp_data = &dev->ptp_data;
@@ -418,16 +487,14 @@ int lan937x_ptp_clock_register(struct dsa_switch *ds)
 
 	ptp_data->caps = (struct ptp_clock_info) {
 		.owner		= THIS_MODULE,
-			.name		= "Microchip Clock",
-			.max_adj  	= MAX_DRIFT_CORR,
-			.enable		= lan937x_ptp_enable,
-			.gettime64	= lan937x_ptp_gettime,
-			.settime64	= lan937x_ptp_settime,
-			.adjfine	= lan937x_ptp_adjfine,
-			.adjtime	= lan937x_ptp_adjtime,
-			.do_aux_work	= lan937x_ptp_hwtstamp_work
-
-
+		.name		= "Microchip Clock",
+		.max_adj  	= MAX_DRIFT_CORR,
+		.enable		= lan937x_ptp_enable,
+		.gettime64	= lan937x_ptp_gettime,
+		.settime64	= lan937x_ptp_settime,
+		.adjfine	= lan937x_ptp_adjfine,
+		.adjtime	= lan937x_ptp_adjtime,
+		.do_aux_work	= lan937x_ptp_hwtstamp_work
 	};
 
 	/* Start hardware counter (will overflow after 136 years) */
@@ -437,12 +504,19 @@ int lan937x_ptp_clock_register(struct dsa_switch *ds)
 
 	ptp_data->clock = ptp_clock_register(&ptp_data->caps, ds->dev);
 	if (IS_ERR_OR_NULL(ptp_data->clock))
-		return PTR_ERR(ptp_data->clock);
+	{
+		ret = PTR_ERR(ptp_data->clock);
+		goto error_stop_clock;
+	}
 
 	return 0;
+
+error_stop_clock:
+	lan937x_ptp_stop_clock(dev);
+	return ret;
 }	
 
-void lan937x_ptp_clock_unregister(struct dsa_switch *ds)
+void lan937x_ptp_deinit(struct dsa_switch *ds)
 {
 	struct ksz_device *dev  = ds->priv;
 	struct lan937x_ptp_data *ptp_data = &dev->ptp_data;
@@ -452,6 +526,7 @@ void lan937x_ptp_clock_unregister(struct dsa_switch *ds)
 
 	ptp_clock_unregister(ptp_data->clock);
 	ptp_data->clock = NULL;
+	lan937x_ptp_stop_clock(dev);
 }
 
 /*Time Stamping support - accessing the register */
