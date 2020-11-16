@@ -59,8 +59,8 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.chip_id = 0x00937000,
 		.dev_name = "LAN9370",
 		.num_vlans = 4096,
-		.num_alus = 4096,
-		.num_statics = 16,
+		.num_alus = 1024,
+		.num_statics = 256,
 		/* can be configured as cpu port */
 		.cpu_ports = 0x10,
 		/* total physical port count */
@@ -72,8 +72,8 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.chip_id = 0x00937100,
 		.dev_name = "LAN9371",
 		.num_vlans = 4096,
-		.num_alus = 4096,
-		.num_statics = 16,
+		.num_alus = 1024,
+		.num_statics = 256,
 		/* can be configured as cpu port */
 		.cpu_ports = 0x30,
 		/* total physical port count */
@@ -85,8 +85,8 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.chip_id = 0x00937200,
 		.dev_name = "LAN9372",
 		.num_vlans = 4096,
-		.num_alus = 4096,
-		.num_statics = 16,
+		.num_alus = 1024,
+		.num_statics = 256,
 		/* can be configured as cpu port */
 		.cpu_ports = 0x30,
 		/* total port count */
@@ -98,8 +98,8 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.chip_id = 0x00937300,
 		.dev_name = "LAN9373",
 		.num_vlans = 4096,
-		.num_alus = 4096,
-		.num_statics = 16,
+		.num_alus = 1024,
+		.num_statics = 256,
 		/* can be configured as cpu port */
 		.cpu_ports = 0x38,
 		/* total physical port count */
@@ -111,8 +111,8 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.chip_id = 0x00937400,
 		.dev_name = "LAN9374",
 		.num_vlans = 4096,
-		.num_alus = 4096,
-		.num_statics = 16,
+		.num_alus = 1024,
+		.num_statics = 256,
 		/* can be configured as cpu port */
 		.cpu_ports = 0x30,
 		/* total physical port count */
