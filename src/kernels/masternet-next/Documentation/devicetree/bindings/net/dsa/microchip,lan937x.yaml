@@ -77,8 +77,8 @@ example:
 				port@4 {
 					reg = <4>;
 					label = "cpu";
-          ethernet = <&eth1>;
-          phy-mode = "rmii";
+					ethernet = <&eth1>;
+					phy-mode = "rmii";
 					fixed-link {
 						speed = <100>;
 						full-duplex;
@@ -117,8 +117,8 @@ example:
 				port@4 {
 					reg = <4>;
 					label = "cpu";
-          ethernet = <&eth1>;
-          phy-mode = "rmii";
+					ethernet = <&eth1>;
+					phy-mode = "rmii";
 					fixed-link {
 						speed = <100>;
 						full-duplex;
@@ -126,8 +126,8 @@ example:
 				};
 				port@5 {
 					reg = <5>;
-          label = "lan5";
-          phy-mode = "rmii";
+					label = "lan5";
+					phy-mode = "rmii";
 					fixed-link {
 						speed = <100>;
 						full-duplex;
@@ -135,4 +135,268 @@ example:
 				};
 			};
 		};
+		lan9370: lan9370@3 {
+					compatible = "microchip,lan9370";
+					reg = <3>;
+
+					spi-max-frequency = <44000000>;
+					spi-cpha;
+					spi-cpol;
+			
+					ports {
+						#address-cells = <1>;
+						#size-cells = <0>;
+						port@0 {
+							reg = <0>;
+							label = "lan1";
+						};
+						port@1 {
+							reg = <1>;
+							label = "lan2";
+						};
+						port@2 {
+							reg = <2>;
+							label = "lan3";
+						};
+						port@3 {
+							reg = <3>;
+							label = "lan4";
+						};
+						port@4 {
+							reg = <4>;
+							label = "cpu";
+							ethernet = <&eth1>;
+							phy-mode = "rmii";
+							fixed-link {
+								speed = <100>;
+								full-duplex;
+							};
+						};
+					};
+				};
+
+				lan9371: lan9371@3 {
+					compatible = "microchip,lan9371";
+					reg = <3>;
+
+					spi-max-frequency = <44000000>;
+					spi-cpha;
+					spi-cpol;
+
+					ports {
+						#address-cells = <1>;
+						#size-cells = <0>;
+						port@0 {
+							reg = <0>;
+							label = "lan1";
+						};
+						port@1 {
+							reg = <1>;
+							label = "lan2";
+						};
+						port@2 {
+							reg = <2>;
+							label = "lan3";
+						};
+						port@3 {
+							reg = <3>;
+							label = "lan4";
+						};
+						port@4 {
+							reg = <4>;
+							label = "cpu";
+							ethernet = <&eth1>;
+							phy-mode = "rmii";
+							fixed-link {
+								speed = <100>;
+								full-duplex;
+							};
+						};
+						port@5 {
+							reg = <5>;
+							phy-mode = "rmii";
+							label = "lan5";
+							fixed-link {
+								speed = <100>;
+								full-duplex;
+							};
+						};
+					};
+				};
+				
+				lan9372: lan9372@3 {
+					compatible = "microchip,lan9372";
+					reg = <3>;
+
+					spi-max-frequency = <44000000>;
+					spi-cpha;
+					spi-cpol;
+
+					ports {
+						#address-cells = <1>;
+						#size-cells = <0>;
+						port@0 {
+							reg = <0>;
+							label = "lan1";
+						};
+						port@1 {
+							reg = <1>;
+							label = "lan2";
+						};
+						port@2 {
+							reg = <7>;
+							label = "lan3";
+						};
+						port@3 {
+							reg = <2>;
+							label = "lan4";
+						};
+						port@4 {
+							reg = <6>;
+							label = "lan5";
+						};
+						port@5 {
+							reg = <3>;
+							label = "lan6";
+						};
+						port@6 {
+							reg = <4>;
+							label = "cpu";							
+							ethernet = <&eth1>;
+							phy-mode = "rmii";
+							fixed-link {
+								speed = <100>;
+								full-duplex;
+							};
+						};
+						port@7 {
+							reg = <5>;
+							label = "lan7";
+							phy-mode = "rmii";
+							fixed-link {
+								speed = <100>;
+								full-duplex;
+							};
+						};
+					};
+				};
+				
+				lan9373: lan9373@3 {
+					compatible = "microchip,lan9373";
+					reg = <3>;
+
+					spi-max-frequency = <44000000>;
+					spi-cpha;
+					spi-cpol;
+
+					ports {
+						#address-cells = <1>;
+						#size-cells = <0>;
+						port@0 {
+							reg = <0>;
+							label = "lan1";
+						};
+						port@1 {
+							reg = <1>;
+							label = "lan2";
+						};
+						port@2 {
+							reg = <7>;
+							label = "lan3";
+						};
+						port@3 {
+							reg = <2>;
+							label = "lan4";
+						};
+						port@4 {
+							reg = <6>;
+							label = "lan5";
+						};
+						port@5 {
+							reg = <3>;
+							label = "lan6";
+							phy-mode = "sgmii";
+							fixed-link {
+								speed = <100>;
+								full-duplex;
+							};
+						};
+						port@6 {
+							reg = <4>;
+							label = "cpu";
+							ethernet = <&eth1>;
+							phy-mode = "rmii";
+							fixed-link {
+								speed = <100>;
+								full-duplex;
+							};
+						};
+						port@7 {
+							reg = <5>;
+							label = "lan7";
+							phy-mode = "rmii";
+							fixed-link {
+								speed = <100>;
+								full-duplex;
+							};
+						};
+					};
+				};
+				
+				lan9374: lan9374@3 {
+					compatible = "microchip,lan9374";
+					reg = <3>;
+
+					spi-max-frequency = <44000000>;
+					spi-cpha;
+					spi-cpol;
+
+					ports {
+						#address-cells = <1>;
+						#size-cells = <0>;
+						port@0 {
+							reg = <0>;
+							label = "lan1";
+						};
+						port@1 {
+							reg = <1>;
+							label = "lan2";
+						};
+						port@2 {
+							reg = <7>;
+							label = "lan3";
+						};
+						port@3 {
+							reg = <2>;
+							label = "lan4";
+						};
+						port@4 {
+							reg = <6>;
+							label = "lan5";
+						};
+						port@5 {
+							reg = <3>;
+							label = "lan6";
+						};
+						port@6 {
+							reg = <4>;
+							label = "cpu";
+							ethernet = <&eth1>;
+							phy-mode = "rmii";
+							fixed-link {
+								speed = <100>;
+								full-duplex;
+							};
+						};
+						port@7 {
+							reg = <5>;
+							phy-mode = "rmii";
+							label = "lan7";
+							fixed-link {
+								speed = <100>;
+								full-duplex;
+							};
+						};
+					};
+				};
 	};
