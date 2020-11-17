@@ -4,6 +4,7 @@
  * Copyright (c) 2017 Microchip Technology
  */
 
+#include "../../drivers/net/dsa/microchip/ksz_common.h"
 #include <linux/etherdevice.h>
 #include <linux/list.h>
 #include <linux/slab.h>
@@ -205,10 +206,94 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
  *	  (eg, 0x00=port1, 0x02=port3, 0x06=port7)
  */
 #define LAN937X_INGRESS_TAG_LEN		2
+#define LAN937X_PTP_TAG_LEN             4
 
+#define LAN937X_PTP_TAG_INDICATION      BIT(7)
 #define LAN937X_TAIL_TAG_OVERRIDE	BIT(11)
 #define LAN937X_TAIL_TAG_LOOKUP		BIT(12)
 #define LAN937X_TAIL_TAG_VALID		BIT(13)
+
+/* Find appropriate slave based on the logical port.
+ * Logical port number is stored for each slave of dsa_port priv data 
+ * during probe
+ */
+static struct dsa_port *ksz_get_dsa_phy_port(struct net_device *dev,
+					     int device, int log_prt)
+{
+	struct dsa_port *cpu_dp = dev->dsa_ptr;
+	struct dsa_switch_tree *dst = cpu_dp->dst;
+	struct dsa_port *dp;
+	struct lan937x_port_ext *kp;
+
+	/*Find right target based on log_prt number*/
+	list_for_each_entry(dp, &dst->ports, list)
+		if (dp->ds->index == device &&
+		    dp->type == DSA_PORT_TYPE_USER){
+			kp = dp->priv;
+			if (kp->lp_num == log_prt)
+				return dp;
+		}
+
+	return NULL;
+}
+
+#if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
+
+ktime_t lan937x_tstamp_to_clock(struct ksz_device *ksz, u32 tstamp, int offset_ns) 
+{
+       struct timespec64 ptp_clock_time;
+       /* Split up time stamp, 2 bit seconds, 30 bit nano seconds */
+       struct timespec64 ts = {
+               .tv_sec  = tstamp >> 30,
+               .tv_nsec = tstamp & (BIT_MASK(30) - 1),
+       };
+       struct timespec64 diff;
+       unsigned long flags;
+       s64 ns;
+
+       spin_lock_irqsave(&ksz->ptp_data.clock_lock, flags);
+       ptp_clock_time = ksz->ptp_data.clock_time;
+       spin_unlock_irqrestore(&ksz->ptp_data.clock_lock, flags);
+
+       /* calculate full time from partial time stamp */
+       ts.tv_sec = (ptp_clock_time.tv_sec & ~3) | ts.tv_sec;
+
+       /* find nearest possible point in time */
+       diff = timespec64_sub(ts, ptp_clock_time);
+       if (diff.tv_sec > 2)
+               ts.tv_sec -= 4;
+       else if (diff.tv_sec < -2)
+               ts.tv_sec += 4;
+
+       /* Add/remove excess delay between wire and time stamp unit */
+       ns = timespec64_to_ns(&ts) + offset_ns;
+
+       return ns_to_ktime(ns);
+}
+EXPORT_SYMBOL(lan937x_tstamp_to_clock);
+
+static void lan937x_xmit_timestamp(struct sk_buff *skb __maybe_unused) 
+{ 
+
+}
+
+static void lan937x_rcv_timestamp(struct sk_buff *skb __maybe_unused, u8 *tag __maybe_unused,
+                                 struct net_device *dev __maybe_unused,
+                                 unsigned int port __maybe_unused)
+{
+
+}
+
+#else
+
+static void lan937x_xmit_timestamp(struct sk_buff *skb __maybe_unused) 
+{}
+
+static void lan937x_rcv_timestamp(struct sk_buff *skb __maybe_unused, u8 *tag __maybe_unused,
+                                 struct net_device *dev __maybe_unused,
+                                 unsigned int port __maybe_unused)
+{}
+#endif
 
 static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 				    struct net_device *dev)
@@ -219,8 +304,9 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	u16 val;
 
 	/* Tag encoding */
-	tag = skb_put(skb, LAN937X_INGRESS_TAG_LEN);
-	addr = skb_mac_header(skb);
+        lan937x_xmit_timestamp(skb);
+	tag = skb_put(nskb, LAN937X_INGRESS_TAG_LEN);
+	addr = skb_mac_header(nskb);
 
 	val = BIT(dp->index);
 
@@ -244,8 +330,11 @@ static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev,
 	unsigned int port = tag[0] & 7;
 
 	/* Extra 4-bytes PTP timestamp */
-	if (tag[0] & KSZ9477_PTP_TAG_INDICATION)
+	if (tag[0] & LAN937X_PTP_TAG_INDICATION)
+	{
+                lan937x_rcv_timestamp(skb, tag, dev, log_prt);
 		len += KSZ9477_PTP_TAG_LEN;
+	}
 
 	return ksz_common_rcv(skb, dev, port, len);
 }
@@ -255,7 +344,7 @@ static const struct dsa_device_ops lan937x_netdev_ops = {
 	.proto	= DSA_TAG_PROTO_LAN937X,
 	.xmit	= lan937x_xmit,
 	.rcv	= lan937x_rcv,
-	.overhead = LAN937X_INGRESS_TAG_LEN,
+	.overhead = LAN937X_INGRESS_TAG_LEN + LAN937X_PTP_TAG_LEN,
 	.tail_tag = true,
 };
 
