@@ -1150,37 +1150,6 @@ static int lan937x_ptp_enable(struct ptp_clock_info *ptp,
 	return -ENOTTY;
 }
 
-ktime_t lan937x_tstamp_to_clock(struct ksz_device *ksz, u32 tstamp, int offset_ns) 
-{
-       struct timespec64 ptp_clock_time;
-       /* Split up time stamp, 2 bit seconds, 30 bit nano seconds */
-       struct timespec64 ts = {
-               .tv_sec  = tstamp >> 30,
-               .tv_nsec = tstamp & (BIT_MASK(30) - 1),
-       };
-       struct timespec64 diff;
-       unsigned long flags;
-       s64 ns;
-
-       spin_lock_irqsave(&ksz->ptp_data.clock_lock, flags);
-       ptp_clock_time = ksz->ptp_data.clock_time;
-       spin_unlock_irqrestore(&ksz->ptp_data.clock_lock, flags);
-
-       /* calculate full time from partial time stamp */
-       ts.tv_sec = (ptp_clock_time.tv_sec & ~3) | ts.tv_sec;
-
-       /* find nearest possible point in time */
-       diff = timespec64_sub(ts, ptp_clock_time);
-       if (diff.tv_sec > 2)
-               ts.tv_sec -= 4;
-       else if (diff.tv_sec < -2)
-               ts.tv_sec += 4;
-
-       /* Add/remove excess delay between wire and time stamp unit */
-       ns = timespec64_to_ns(&ts) + offset_ns;
-
-       return ns_to_ktime(ns);
-}
 /*
  * Function is pointer to the do_aux_work in the ptp_clock capability.
  * It is called by application, by polling method to read the timestamp
