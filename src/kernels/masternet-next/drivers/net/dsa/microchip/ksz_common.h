@@ -154,6 +154,7 @@ struct ksz_dev_ops {
 	void (*exit)(struct ksz_device *dev);
 };
 
+
 struct ksz_device *ksz_switch_alloc(struct device *base, void *priv);
 int ksz_switch_register(struct ksz_device *dev,
 			const struct ksz_dev_ops *ops);
@@ -310,6 +311,10 @@ static inline void ksz_regmap_unlock(void *__mtx)
 	struct mutex *mtx = __mtx;
 	mutex_unlock(mtx);
 }
+
+/* net/dsa/tag_ksz.c */
+ktime_t lan937x_tstamp_to_clock(struct ksz_device *ksz, u32 tstamp,
+               int offset_ns);
 
 /* Regmap tables generation */
 #define KSZ_SPI_OP_RD		3
