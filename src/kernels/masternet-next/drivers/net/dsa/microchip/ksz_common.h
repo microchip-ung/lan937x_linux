@@ -42,15 +42,17 @@ struct ksz_port {
 
 	struct ksz_port_mib mib;
 	phy_interface_t interface;
-	struct hwtstamp_config tstamp_config;
 	
+#if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
 	/* Resources for transmit timestamping */
+	struct hwtstamp_config tstamp_config;
 	unsigned long tx_tstamp_start;
 	struct sk_buff *tx_skb;
 	u16 tx_seq_id;
-        u16 tstamp_tx_latency_ns;
-
+	u16 tstamp_rx_latency_ns;   /* rx delay from wire to tstamp unit */
+	u16 tstamp_tx_latency_ns;   /* tx delay from tstamp unit to wire */
 	unsigned long tstamp_state;
+#endif
 };
 
 struct ksz_device {
@@ -100,6 +102,7 @@ struct ksz_device {
 	u32 overrides;			/* chip functions set by user */
 	u16 host_mask;
 	u16 port_mask;
+#if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
 	//struct lan937x_ptp_data  ptp_data;
 	struct ptp_clock_info ptp_caps;
 	struct ptp_clock *ptp_clock;
@@ -107,6 +110,7 @@ struct ksz_device {
 
 	spinlock_t ptp_clock_lock;
 	struct timespec64 ptp_clock_time;
+#endif
 };
 
 struct alu_struct {
