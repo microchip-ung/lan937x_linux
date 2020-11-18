@@ -13,11 +13,6 @@
 
 #include <linux/ptp_clock_kernel.h>
 
-/* state flags for _port_hwtstamp::state */
-enum {
-	LAN937X_HWTSTAMP_ENABLED,
-	LAN937X_HWTSTAMP_TX_IN_PROGRESS,
-};
 
 int lan937x_get_ts_info(struct dsa_switch *ds, int port, struct ethtool_ts_info *ts);
 int lan937x_hwtstamp_get(struct dsa_switch *ds, int port, struct ifreq *ifr);

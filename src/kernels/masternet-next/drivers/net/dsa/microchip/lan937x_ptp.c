@@ -1116,7 +1116,7 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 				&prt->tstamp_state))
 		return false;
 
-	prt->tx_skb = clone;
+	prt->tstamp_tx_xdelay_skb = clone;
 	prt->tx_tstamp_start = jiffies;
 	prt->tx_seq_id = be16_to_cpu(hdr->sequence_id);
 
@@ -1124,12 +1124,6 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 	return true;
 }
 
-bool lan937x_port_rxtstamp(struct dsa_switch *ds, int port,
-			     struct sk_buff *clone, unsigned int type)
-{
-
-	return true;
-}
 
 //These are function releated to the ptp clock info
 
@@ -1150,40 +1144,6 @@ static int lan937x_ptp_enable(struct ptp_clock_info *ptp,
 	return -ENOTTY;
 }
 
-/*
- * Function is pointer to the do_aux_work in the ptp_clock capability.
- * It is called by application, by polling method to read the timestamp
- * If timestamp is ready, it post using skb_complete api and return -1.
- * else it returns 1 for restart the polling to get timestamp.
- */
-long lan937x_ptp_hwtstamp_work(struct ptp_clock_info *ptp)
-{
-	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
-	struct dsa_switch *ds = dev->ds;
-	struct ksz_port *prt = &dev->ports[0];  //todo: change the 1 to number of the port. 
-	struct sk_buff *tmp_skb;
-	struct skb_shared_hwtstamps shhwtstamps;
-	u32 tstamp_raw;
-
-	
-	memset(&shhwtstamps, 0, sizeof(struct skb_shared_hwtstamps));
-
-	//Read the timestamp from the hardware
-	tstamp_raw = 1234;	//todo get the timestamp from the hardware. just a placeholder now
-	shhwtstamps.hwtstamp = lan937x_tstamp_to_clock(dev, tstamp_raw, prt->tstamp_tx_latency_ns);
-	
-	/* skb_complete_tx_timestamp() will free up the client to make
-	 * another timestamp-able transmit. We have to be ready for it
-	 * -- by clearing the ps->tx_skb "flag" -- beforehand.
-	 */
-
-	tmp_skb = prt->tx_skb;
-	prt->tx_skb = NULL;
-	clear_bit_unlock(LAN937X_HWTSTAMP_TX_IN_PROGRESS, &prt->tstamp_state);
-	skb_complete_tx_timestamp(tmp_skb, &shhwtstamps);
-	
-	return -1; //as of now, setting -1 for not to restart. 1 means to restart the poll
-}
 
 static int _lan937x_ptp_gettime(struct ksz_device *dev, struct timespec64 *ts)
 {
@@ -1387,6 +1347,25 @@ error_return:
 	return ret;
 }
 
+/*
+ * Function is pointer to the do_aux_work in the ptp_clock capability.
+ */
+static long lan937x_ptp_do_aux_work(struct ptp_clock_info *ptp)
+{
+	struct ksz_device *dev = container_of(ptp, struct ksz_device, ptp_caps);
+	struct timespec64 ts;
+	unsigned long flags;
+
+	mutex_lock(&dev->ptp_mutex);
+	_lan937x_ptp_gettime(dev, &ts);
+	mutex_unlock(&dev->ptp_mutex);
+
+	spin_lock_irqsave(&dev->ptp_clock_lock, flags);
+	dev->ptp_clock_time = ts;
+	spin_unlock_irqrestore(&dev->ptp_clock_lock, flags);
+
+	return HZ;  /* reschedule in 1 second */
+}
 
 static int lan937x_ptp_start_clock(struct ksz_device *dev)
 {
@@ -1626,7 +1605,7 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 		.settime64	= lan937x_ptp_settime,
 		.adjfine	= lan937x_ptp_adjfine,
 		.adjtime	= lan937x_ptp_adjtime,
-		.do_aux_work	= lan937x_ptp_hwtstamp_work,
+		.do_aux_work	= lan937x_ptp_do_aux_work,
 		.n_alarm        = 0,
 		.n_ext_ts       = 0,  /* currently not implemented */
 		.n_per_out      = 0,
@@ -1686,3 +1665,52 @@ void lan937x_ptp_deinit(struct dsa_switch *ds)
 	lan937x_ptp_stop_clock(dev);
 }
 
+irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
+{
+	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_STATUS__2);
+	struct ksz_port *prt = &dev->ports[port];
+	irqreturn_t result = IRQ_NONE;
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, addr, &data);
+	if (ret)
+		return IRQ_NONE;
+
+	if ((data & PTP_PORT_XDELAY_REQ_INT) && prt->tstamp_tx_xdelay_skb) {
+		/* Timestamp for Pdelay_Req / Delay_Req */
+		u32 tstamp_raw;
+		ktime_t tstamp;
+		struct skb_shared_hwtstamps shhwtstamps;
+		struct sk_buff *tmp_skb;
+
+		/* In contrast to the KSZ9563R data sheet, the format of the
+		 * port time stamp registers is also 2 bit seconds + 30 bit
+		 * nanoseconds (same as in the tail tags).
+		 */
+		ret = ksz_read32(dev, PORT_CTRL_ADDR(port, REG_PTP_PORT_XDELAY_TS), &tstamp_raw);
+		if (ret)
+			return result;
+
+		tstamp = ksz9477_decode_tstamp(tstamp_raw, prt->tstamp_tx_latency_ns);
+		memset(&shhwtstamps, 0, sizeof(shhwtstamps));
+		shhwtstamps.hwtstamp = lan937x_tstamp_to_clock(dev, tstamp);
+
+		/* skb_complete_tx_timestamp() will free up the client to make
+		 * another timestamp-able transmit. We have to be ready for it
+		 * -- by clearing the ps->tx_skb "flag" -- beforehand.
+		 */
+
+		tmp_skb = prt->tstamp_tx_xdelay_skb;
+		prt->tstamp_tx_xdelay_skb = NULL;
+		clear_bit_unlock(LAN937X_HWTSTAMP_TX_IN_PROGRESS, &prt->tstamp_state);
+		skb_complete_tx_timestamp(tmp_skb, &shhwtstamps);
+	}
+
+	/* Clear interrupt(s) (W1C) */
+	ret = ksz_write16(dev, addr, data);
+	if (ret)
+		return IRQ_NONE;
+
+	return IRQ_HANDLED;
+}
