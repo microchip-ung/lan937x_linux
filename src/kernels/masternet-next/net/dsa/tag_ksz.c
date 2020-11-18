@@ -228,9 +228,9 @@ ktime_t lan937x_tstamp_to_clock(struct ksz_device *ksz, u32 tstamp, int offset_n
        unsigned long flags;
        s64 ns;
 
-       spin_lock_irqsave(&ksz->ptp_data.clock_lock, flags);
-       ptp_clock_time = ksz->ptp_data.clock_time;
-       spin_unlock_irqrestore(&ksz->ptp_data.clock_lock, flags);
+       spin_lock_irqsave(&ksz->ptp_clock_lock, flags);
+       ptp_clock_time = ksz->ptp_clock_time;
+       spin_unlock_irqrestore(&ksz->ptp_clock_lock, flags);
 
        /* calculate full time from partial time stamp */
        ts.tv_sec = (ptp_clock_time.tv_sec & ~3) | ts.tv_sec;

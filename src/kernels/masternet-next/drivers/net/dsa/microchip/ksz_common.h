@@ -100,7 +100,13 @@ struct ksz_device {
 	u32 overrides;			/* chip functions set by user */
 	u16 host_mask;
 	u16 port_mask;
-	struct lan937x_ptp_data  ptp_data;
+	//struct lan937x_ptp_data  ptp_data;
+	struct ptp_clock_info ptp_caps;
+	struct ptp_clock *ptp_clock;
+	struct mutex ptp_mutex;  //to serialize the activity in the phc
+
+	spinlock_t ptp_clock_lock;
+	struct timespec64 ptp_clock_time;
 };
 
 struct alu_struct {
