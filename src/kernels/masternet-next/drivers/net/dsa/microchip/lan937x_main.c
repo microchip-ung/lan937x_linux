@@ -366,18 +366,31 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 	return 0;
 }
 
+static u8 lan937x_get_fid(u16 vid)
+{
+	u8 fid;
+
+	if (vid >= ALU_FID_SIZE)
+		fid = (vid % ALU_FID_SIZE) + 1;
+	else
+		fid = vid;
+	
+	return fid;
+}
+
 static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 				const unsigned char *addr, u16 vid)
 {
 	struct ksz_device *dev = ds->priv;
+	u8 fid = lan937x_get_fid(vid);
 	u32 alu_table[4];
-	int ret;
 	u32 data;
-
+	int ret;
+	
 	mutex_lock(&dev->alu_mutex);
 
-	/* find any entry with mac & vid */
-	data = vid << ALU_FID_INDEX_S;
+	/* find any entry with mac & fid */
+	data = fid << ALU_FID_INDEX_S;
 	data |= ((addr[0] << 8) | addr[1]);
 	ksz_write32(dev, REG_SW_ALU_INDEX_0, data);
 
@@ -404,9 +417,9 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 	 * updating alu table registers
 	 */
 	alu_table[1] |= BIT(port);
-	if (vid)
+	if (fid)
 		alu_table[1] |= ALU_V_USE_FID;
-	alu_table[2] = (vid << ALU_V_FID_S);
+	alu_table[2] = (fid << ALU_V_FID_S);
 	alu_table[2] |= ((addr[0] << 8) | addr[1]);
 	alu_table[3] = ((addr[2] << 24) | (addr[3] << 16));
 	alu_table[3] |= ((addr[4] << 8) | addr[5]);
@@ -430,14 +443,15 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 				const unsigned char *addr, u16 vid)
 {
 	struct ksz_device *dev = ds->priv;
+	u8 fid = lan937x_get_fid(vid);
 	u32 alu_table[4];
 	u32 data;
 	int ret;
 
 	mutex_lock(&dev->alu_mutex);
 
-	/* read any entry with mac & vid */
-	data = vid << ALU_FID_INDEX_S;
+	/* read any entry with mac & fid */
+	data = fid << ALU_FID_INDEX_S;
 	data |= ((addr[0] << 8) | addr[1]);
 	ksz_write32(dev, REG_SW_ALU_INDEX_0, data);
 
@@ -574,6 +588,7 @@ static void lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 				 const struct switchdev_obj_port_mdb *mdb)
 {
 	struct ksz_device *dev = ds->priv;
+	u8 fid = lan937x_get_fid(mdb->vid);
 	u32 static_table[4];
 	u32 mac_hi, mac_lo;
 	int index;
@@ -601,8 +616,8 @@ static void lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 		lan937x_read_table(dev, static_table);
 
 		if (static_table[0] & ALU_V_STATIC_VALID) {
-			/* check this has same vid & mac address */
-			if (((static_table[2] >> ALU_V_FID_S) == mdb->vid) &&
+			/* check this has same fid & mac address */
+			if (((static_table[2] >> ALU_V_FID_S) == fid) &&
 			    ((static_table[2] & ALU_V_MAC_ADDR_HI) == mac_hi) &&
 			    static_table[3] == mac_lo) {
 				/* found matching one */
@@ -622,9 +637,9 @@ static void lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 	static_table[0] = ALU_V_STATIC_VALID;
 	/* set logical port number based on the port arg */
 	static_table[1] |= BIT(port);
-	if (mdb->vid)
+	if (fid)
 		static_table[1] |= ALU_V_USE_FID;
-	static_table[2] = (mdb->vid << ALU_V_FID_S);
+	static_table[2] = (fid << ALU_V_FID_S);
 	static_table[2] |= mac_hi;
 	static_table[3] = mac_lo;
 
@@ -645,6 +660,7 @@ static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
 				const struct switchdev_obj_port_mdb *mdb)
 {
 	struct ksz_device *dev = ds->priv;
+	u8 fid = lan937x_get_fid(mdb->vid);
 	u32 static_table[4];
 	u32 mac_hi, mac_lo;
 	int index, ret;
@@ -673,9 +689,9 @@ static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
 		lan937x_read_table(dev, static_table);
 
 		if (static_table[0] & ALU_V_STATIC_VALID) {
-			/* check this has same vid & mac address */
+			/* check this has same fid & mac address */
 
-			if (((static_table[2] >> ALU_V_FID_S) == mdb->vid) &&
+			if (((static_table[2] >> ALU_V_FID_S) == fid) &&
 			    ((static_table[2] & ALU_V_MAC_ADDR_HI) == mac_hi) &&
 			    static_table[3] == mac_lo) {
 				/* found matching one */

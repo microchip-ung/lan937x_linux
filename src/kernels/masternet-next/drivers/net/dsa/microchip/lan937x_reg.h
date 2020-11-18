@@ -279,6 +279,7 @@
 #define REG_SW_ALU_INDEX_0		0x0410
 
 #define ALU_FID_INDEX_S			16
+#define ALU_FID_SIZE				127
 #define ALU_MAC_ADDR_HI			0xFFFF
 
 #define REG_SW_ALU_INDEX_1		0x0414
