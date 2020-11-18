@@ -216,36 +216,28 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
 
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
 
-ktime_t lan937x_tstamp_to_clock(struct ksz_device *ksz, u32 tstamp, int offset_ns) 
+ktime_t lan937x_tstamp_to_clock(struct ksz_device *ksz, u32 tstamp) 
 {
-       struct timespec64 ptp_clock_time;
-       /* Split up time stamp, 2 bit seconds, 30 bit nano seconds */
-       struct timespec64 ts = {
-               .tv_sec  = tstamp >> 30,
-               .tv_nsec = tstamp & (BIT_MASK(30) - 1),
-       };
-       struct timespec64 diff;
-       unsigned long flags;
-       s64 ns;
+	struct timespec64 ts = ktime_to_timespec64(tstamp);
+	struct timespec64 ptp_clock_time;
+	struct timespec64 diff;
+	unsigned long flags;
 
-       spin_lock_irqsave(&ksz->ptp_clock_lock, flags);
-       ptp_clock_time = ksz->ptp_clock_time;
-       spin_unlock_irqrestore(&ksz->ptp_clock_lock, flags);
+	spin_lock_irqsave(&ksz->ptp_clock_lock, flags);
+	ptp_clock_time = ksz->ptp_clock_time;
+	spin_unlock_irqrestore(&ksz->ptp_clock_lock, flags);
 
-       /* calculate full time from partial time stamp */
-       ts.tv_sec = (ptp_clock_time.tv_sec & ~3) | ts.tv_sec;
+	/* calculate full time from partial time stamp */
+	ts.tv_sec = (ptp_clock_time.tv_sec & ~3) | ts.tv_sec;
 
-       /* find nearest possible point in time */
-       diff = timespec64_sub(ts, ptp_clock_time);
-       if (diff.tv_sec > 2)
-               ts.tv_sec -= 4;
-       else if (diff.tv_sec < -2)
-               ts.tv_sec += 4;
+	/* find nearest possible point in time */
+	diff = timespec64_sub(ts, ptp_clock_time);
+	if (diff.tv_sec > 2)
+		ts.tv_sec -= 4;
+	else if (diff.tv_sec < -2)
+		ts.tv_sec += 4;
 
-       /* Add/remove excess delay between wire and time stamp unit */
-       ns = timespec64_to_ns(&ts) + offset_ns;
-
-       return ns_to_ktime(ns);
+	return timespec64_to_ktime(ts);
 }
 EXPORT_SYMBOL(lan937x_tstamp_to_clock);
 
