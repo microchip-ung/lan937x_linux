@@ -5,10 +5,8 @@
 #include "ksz_common.h"
 #include <linux/ptp_classify.h>
 
-#define ptp_caps_to_data(d) \
-		container_of((d), struct lan937x_ptp_data, caps)
-#define ptp_data_to_lan937x(d) \
-		container_of((d), struct ksz_device, ptp_data)
+#define ptp_clock_info_to_dev(d) \
+		container_of((d), struct ksz_device, ptp_caps)
 
 #define MAX_DRIFT_CORR 6250000
 
@@ -21,7 +19,6 @@
 int lan937x_get_ts_info(struct dsa_switch *ds, int port, struct ethtool_ts_info *ts)
 {
 	struct ksz_device *dev  = ds->priv;
-	struct lan937x_ptp_data *ptp_data = &dev->ptp_data;
 
 	ts->so_timestamping = SOF_TIMESTAMPING_TX_HARDWARE |
 		              SOF_TIMESTAMPING_RX_HARDWARE |
@@ -33,7 +30,7 @@ int lan937x_get_ts_info(struct dsa_switch *ds, int port, struct ethtool_ts_info 
 	ts->rx_filters = (1 << HWTSTAMP_FILTER_NONE)  |
 		         (1 << HWTSTAMP_FILTER_PTP_V2_L2_EVENT);
 	
-	ts->phc_index = ptp_clock_index(ptp_data->clock);
+	ts->phc_index = ptp_clock_index(dev->ptp_clock);
 
 	return 0;
 }
@@ -145,7 +142,7 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 	prt->tx_tstamp_start = jiffies;
 	prt->tx_seq_id = be16_to_cpu(hdr->sequence_id);
 
-	ptp_schedule_worker(dev->ptp_data.clock, 0);
+	ptp_schedule_worker(dev->ptp_clock, 0);
 	return true;
 }
 
@@ -183,8 +180,7 @@ static int lan937x_ptp_enable(struct ptp_clock_info *ptp,
  */
 long lan937x_ptp_hwtstamp_work(struct ptp_clock_info *ptp)
 {
-	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
-	struct ksz_device *dev = ptp_data_to_lan937x(ptp_data);
+	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
 	struct dsa_switch *ds = dev->ds;
 	struct ksz_port *prt = &dev->ports[0];  //todo: change the 1 to number of the port. 
 	struct sk_buff *tmp_skb;
@@ -250,13 +246,12 @@ static int _lan937x_ptp_gettime(struct ksz_device *dev, struct timespec64 *ts)
 static int lan937x_ptp_gettime(struct ptp_clock_info *ptp,
 		struct timespec64 *ts)
 {
-	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
-	struct ksz_device *dev = ptp_data_to_lan937x(ptp_data);
+	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
 	int ret;
 
-	mutex_lock(&ptp_data->lock);
+	mutex_lock(&dev->ptp_mutex);
 	ret = _lan937x_ptp_gettime(dev, ts);
-	mutex_unlock(&ptp_data->lock);
+	mutex_unlock(&dev->ptp_mutex);
 
 	return ret; 
 }
@@ -264,13 +259,12 @@ static int lan937x_ptp_gettime(struct ptp_clock_info *ptp,
 static int lan937x_ptp_settime(struct ptp_clock_info *ptp,
 		const struct timespec64 *ts)
 {
-	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
-	struct ksz_device *dev = ptp_data_to_lan937x(ptp_data);
+	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
 	u16 data16;
 	unsigned long flags;
 	int ret;
 
-	mutex_lock(&ptp_data->lock);
+	mutex_lock(&dev->ptp_mutex);
 
 	/* Write to shadow registers */
 
@@ -306,12 +300,12 @@ static int lan937x_ptp_settime(struct ptp_clock_info *ptp,
 	if (ret)
 		goto error_return;
 
-	spin_lock_irqsave(&dev->ptp_data.clock_lock, flags);
-	dev->ptp_data.clock_time = *ts;
-	spin_unlock_irqrestore(&dev->ptp_data.clock_lock, flags);
+	spin_lock_irqsave(&dev->ptp_clock_lock, flags);
+	dev->ptp_clock_time = *ts;
+	spin_unlock_irqrestore(&dev->ptp_clock_lock, flags);
 
 error_return:
-	mutex_unlock(&ptp_data->lock);
+	mutex_unlock(&dev->ptp_mutex);
 
 	return ret;  
 
@@ -320,8 +314,7 @@ error_return:
 
 static int lan937x_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 {
-	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
-	struct ksz_device *dev = ptp_data_to_lan937x(ptp_data);
+	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
 	u16 data16;
 	int ret;
 
@@ -372,15 +365,14 @@ static int lan937x_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 
 static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 {
-	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
-	struct ksz_device *dev = ptp_data_to_lan937x(ptp_data);
+	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
 	struct timespec64 delta64 = ns_to_timespec64(delta);
 	int ret;
 	s32 sec, nsec;
 	u16 data16;
 	unsigned long flags;
 
-	mutex_lock(&ptp_data->lock);
+	mutex_lock(&dev->ptp_mutex);
 
 	/* do not use ns_to_timespec64(), both sec and nsec are subtracted by hw */
 	sec = div_s64_rem(delta, NSEC_PER_SEC, &nsec);
@@ -408,12 +400,12 @@ static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 	if (ret)
 		goto error_return;
 
-	spin_lock_irqsave(&dev->ptp_data.clock_lock, flags);
-	dev->ptp_data.clock_time = timespec64_add(dev->ptp_data.clock_time, delta64);
-	spin_unlock_irqrestore(&dev->ptp_data.clock_lock, flags);
+	spin_lock_irqsave(&dev->ptp_clock_lock, flags);
+	dev->ptp_clock_time = timespec64_add(dev->ptp_clock_time, delta64);
+	spin_unlock_irqrestore(&dev->ptp_clock_lock, flags);
 
 error_return:
-	mutex_unlock(&ptp_data->lock);
+	mutex_unlock(&dev->ptp_mutex);
 	return ret;
 }
 
@@ -441,10 +433,10 @@ static int lan937x_ptp_start_clock(struct ksz_device *dev)
 	if (ret)
 		return ret;
 
-	spin_lock_irqsave(&dev->ptp_data.clock_lock, flags);
-	dev->ptp_data.clock_time.tv_sec = 0;
-	dev->ptp_data.clock_time.tv_nsec = 0;
-	spin_unlock_irqrestore(&dev->ptp_data.clock_lock, flags);
+	spin_lock_irqsave(&dev->ptp_clock_lock, flags);
+	dev->ptp_clock_time.tv_sec = 0;
+	dev->ptp_clock_time.tv_nsec = 0;
+	spin_unlock_irqrestore(&dev->ptp_clock_lock, flags);
 	
 	return 0;
 }
@@ -470,10 +462,9 @@ static int lan937x_ptp_stop_clock(struct ksz_device *dev)
 int lan937x_ptp_init(struct dsa_switch *ds)
 {
 	struct ksz_device *dev  = ds->priv;
-	struct lan937x_ptp_data *ptp_data = &dev->ptp_data;
 	int ret;
 
-	ptp_data->caps = (struct ptp_clock_info) {
+	dev->ptp_caps = (struct ptp_clock_info) {
 		.owner		= THIS_MODULE,
 		.name		= "Microchip Clock",
 		.max_adj  	= MAX_DRIFT_CORR,
@@ -494,10 +485,10 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 	if (ret)
 		return ret;
 
-	ptp_data->clock = ptp_clock_register(&ptp_data->caps, ds->dev);
-	if (IS_ERR_OR_NULL(ptp_data->clock))
+	dev->ptp_clock = ptp_clock_register(&dev->ptp_caps, ds->dev);
+	if (IS_ERR_OR_NULL(dev->ptp_clock))
 	{
-		ret = PTR_ERR(ptp_data->clock);
+		ret = PTR_ERR(dev->ptp_clock);
 		goto error_stop_clock;
 	}
 
@@ -511,13 +502,12 @@ error_stop_clock:
 void lan937x_ptp_deinit(struct dsa_switch *ds)
 {
 	struct ksz_device *dev  = ds->priv;
-	struct lan937x_ptp_data *ptp_data = &dev->ptp_data;
 
-	if (IS_ERR_OR_NULL(ptp_data->clock))
+	if (IS_ERR_OR_NULL(dev->ptp_clock))
 		return;
 
-	ptp_clock_unregister(ptp_data->clock);
-	ptp_data->clock = NULL;
+	ptp_clock_unregister(dev->ptp_clock);
+	dev->ptp_clock = NULL;
 	lan937x_ptp_stop_clock(dev);
 }
 
