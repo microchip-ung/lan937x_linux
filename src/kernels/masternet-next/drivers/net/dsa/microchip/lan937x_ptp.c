@@ -1432,58 +1432,6 @@ static int lan937x_ptp_stop_clock(struct ksz_device *dev)
 	return 0;
 }
 
-int lan937x_ptp_init(struct dsa_switch *ds)
-{
-	struct ksz_device *dev  = ds->priv;
-	int ret;
-
-	dev->ptp_caps = (struct ptp_clock_info) {
-		.owner		= THIS_MODULE,
-		.name		= "Microchip Clock",
-		.max_adj  	= MAX_DRIFT_CORR,
-		.enable		= lan937x_ptp_enable,
-		.gettime64	= lan937x_ptp_gettime,
-		.settime64	= lan937x_ptp_settime,
-		.adjfine	= lan937x_ptp_adjfine,
-		.adjtime	= lan937x_ptp_adjtime,
-		.do_aux_work	= lan937x_ptp_hwtstamp_work,
-		.n_alarm        = 0,
-		.n_ext_ts       = 0,  /* currently not implemented */
-		.n_per_out      = 0,
-		.pps            = 0
-	};
-
-	/* Start hardware counter (will overflow after 136 years) */
-	ret = lan937x_ptp_start_clock(dev);
-	if (ret)
-		return ret;
-
-	dev->ptp_clock = ptp_clock_register(&dev->ptp_caps, ds->dev);
-	if (IS_ERR_OR_NULL(dev->ptp_clock))
-	{
-		ret = PTR_ERR(dev->ptp_clock);
-		goto error_stop_clock;
-	}
-
-	return 0;
-
-error_stop_clock:
-	lan937x_ptp_stop_clock(dev);
-	return ret;
-}	
-
-void lan937x_ptp_deinit(struct dsa_switch *ds)
-{
-	struct ksz_device *dev  = ds->priv;
-
-	if (IS_ERR_OR_NULL(dev->ptp_clock))
-		return;
-
-	ptp_clock_unregister(dev->ptp_clock);
-	dev->ptp_clock = NULL;
-	lan937x_ptp_stop_clock(dev);
-}
-
 /*Time Stamping support - accessing the register */
 static int lan937x_ptp_enable_mode(struct ksz_device *dev) {
        u16 data;
@@ -1518,3 +1466,223 @@ static int lan937x_ptp_disable_mode(struct ksz_device *dev) {
 
        return 0;
 }
+
+static int lan937x_ptp_enable_port_ptp_interrupts(struct ksz_device *dev, int port)
+{
+	u32 addr = PORT_CTRL_ADDR(port, REG_PORT_INT_MASK);
+	u8 data;
+	int ret;
+
+	ret = ksz_read8(dev, addr, &data);
+	if (ret)
+		return ret;
+
+	/* Enable port PTP interrupt (0 means enabled) */
+	data &= ~PORT_PTP_INT;
+	ret = ksz_write8(dev, addr, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int lan937x_ptp_disable_port_ptp_interrupts(struct ksz_device *dev, int port)
+{
+	u32 addr = PORT_CTRL_ADDR(port, REG_PORT_INT_MASK);
+	u8 data;
+	int ret;
+
+	ret = ksz_read8(dev, addr, &data);
+	if (ret)
+		return ret;
+
+	/* Enable port PTP interrupt (1 means disabled) */
+	data |= PORT_PTP_INT;
+	ret = ksz_write8(dev, addr, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int lan937x_ptp_enable_port_egress_interrupts(struct ksz_device *dev, int port)
+{
+	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, addr, &data);
+	if (ret)
+		return ret;
+
+	/* Enable port xdelay egress timestamp interrupt (1 means enabled) */
+	data |= PTP_PORT_XDELAY_REQ_INT;
+	ret = ksz_write16(dev, addr, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int lan937x_ptp_disable_port_egress_interrupts(struct ksz_device *dev, int port)
+{
+	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, addr, &data);
+	if (ret)
+		return ret;
+
+	/* Disable port xdelay egress timestamp interrupts (0 means disabled) */
+	data &= PTP_PORT_XDELAY_REQ_INT;
+	ret = ksz_write16(dev, addr, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
+{
+	struct ksz_port *prt = &dev->ports[port];
+	int ret;
+
+	/* Read rx and tx delay from port registers */
+	ret = ksz_read16(dev, PORT_CTRL_ADDR(port, REG_PTP_PORT_RX_DELAY__2),
+			 &prt->tstamp_rx_latency_ns);
+	if (ret)
+		return ret;
+
+	ret = ksz_read16(dev, PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_DELAY__2),
+			 &prt->tstamp_tx_latency_ns);
+	if (ret)
+		return ret;
+
+	if (port != dev->cpu_port) {
+		ret = lan937x_ptp_enable_port_ptp_interrupts(dev, port);
+		if (ret)
+			return ret;
+
+		ret = lan937x_ptp_enable_port_egress_interrupts(dev, port);
+		if (ret)
+			goto error_disable_port_ptp_interrupts;
+	}
+
+	return 0;
+
+error_disable_port_ptp_interrupts:
+	if (port != dev->cpu_port)
+		lan937x_ptp_disable_port_ptp_interrupts(dev, port);
+	return ret;
+}
+
+static void lan937x_ptp_port_deinit(struct ksz_device *dev, int port)
+{
+	if (port != dev->cpu_port) {
+		lan937x_ptp_disable_port_egress_interrupts(dev, port);
+		lan937x_ptp_disable_port_ptp_interrupts(dev, port);
+	}
+}
+
+static int lan937x_ptp_ports_init(struct ksz_device *dev)
+{
+	int port;
+	int ret;
+
+	for (port = 0; port < dev->port_cnt; port++) {
+		ret = lan937x_ptp_port_init(dev, port);
+		if (ret)
+			goto error_deinit;
+	}
+
+	return 0;
+
+error_deinit:
+	for (--port; port >= 0; --port)
+		lan937x_ptp_port_deinit(dev, port);
+	return ret;
+}
+
+static void lan937x_ptp_ports_deinit(struct ksz_device *dev)
+{
+	int port;
+
+	for (port = dev->port_cnt - 1; port >= 0; --port)
+		lan937x_ptp_port_deinit(dev, port);
+}
+
+int lan937x_ptp_init(struct dsa_switch *ds)
+{
+	struct ksz_device *dev  = ds->priv;
+	int ret;
+
+	dev->ptp_caps = (struct ptp_clock_info) {
+		.owner		= THIS_MODULE,
+		.name		= "Microchip Clock",
+		.max_adj  	= MAX_DRIFT_CORR,
+		.enable		= lan937x_ptp_enable,
+		.gettime64	= lan937x_ptp_gettime,
+		.settime64	= lan937x_ptp_settime,
+		.adjfine	= lan937x_ptp_adjfine,
+		.adjtime	= lan937x_ptp_adjtime,
+		.do_aux_work	= lan937x_ptp_hwtstamp_work,
+		.n_alarm        = 0,
+		.n_ext_ts       = 0,  /* currently not implemented */
+		.n_per_out      = 0,
+		.pps            = 0
+	};
+
+	/* Start hardware counter (will overflow after 136 years) */
+	ret = lan937x_ptp_start_clock(dev);
+	if (ret)
+		return ret;
+
+	dev->ptp_clock = ptp_clock_register(&dev->ptp_caps, ds->dev);
+	if (IS_ERR_OR_NULL(dev->ptp_clock))
+	{
+		ret = PTR_ERR(dev->ptp_clock);
+		goto error_stop_clock;
+	}
+
+	/* Enable PTP mode (will affect tail tagging format) */
+	ret = lan937x_ptp_enable_mode(dev);
+	if (ret)
+		goto error_unregister_clock;
+
+	/* Init switch ports */
+	ret = lan937x_ptp_ports_init(dev);
+	if (ret)
+		goto error_disable_mode;
+
+
+	/* Schedule cyclic call of ptp_do_aux_work() */
+	ret = ptp_schedule_worker(dev->ptp_clock, 0);
+	if (ret)
+		goto error_ports_deinit;
+
+ 	return 0;
+ 
+error_ports_deinit:
+	lan937x_ptp_ports_deinit(dev);
+error_disable_mode:
+	lan937x_ptp_disable_mode(dev);
+error_unregister_clock:
+	ptp_clock_unregister(dev->ptp_clock);
+error_stop_clock:
+	lan937x_ptp_stop_clock(dev);
+	return ret;
+}	
+
+void lan937x_ptp_deinit(struct dsa_switch *ds)
+{
+	struct ksz_device *dev  = ds->priv;
+
+	if (IS_ERR_OR_NULL(dev->ptp_clock))
+		return;
+
+	ptp_clock_unregister(dev->ptp_clock);
+	dev->ptp_clock = NULL;
+	lan937x_ptp_stop_clock(dev);
+}
+
