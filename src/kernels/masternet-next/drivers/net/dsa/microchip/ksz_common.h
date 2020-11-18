@@ -7,14 +7,21 @@
 #ifndef __KSZ_COMMON_H
 #define __KSZ_COMMON_H
 
-//#include <linux/ptp_clock_kernel.h>
+#include <linux/bitfield.h>
+#include <linux/bits.h>
+#include <linux/ptp_clock_kernel.h>
 #include <linux/etherdevice.h>
 #include <linux/kernel.h>
 #include <linux/mutex.h>
 #include <linux/phy.h>
 #include <linux/regmap.h>
 #include <net/dsa.h>
-#include "lan937x_ptp.h" 
+
+/* All time stamps from the KSZ consist of 2 bits for seconds and 30 bits for
+ * nanoseconds. This is NOT the same as 32 bits for nanoseconds.
+ */
+#define KSZ_TSTAMP_SEC_MASK  GENMASK(31, 30)
+#define KSZ_TSTAMP_NSEC_MASK GENMASK(29, 0)
 
 struct vlan_table {
 	u32 table[3];
@@ -47,7 +54,7 @@ struct ksz_port {
 	/* Resources for transmit timestamping */
 	struct hwtstamp_config tstamp_config;
 	unsigned long tx_tstamp_start;
-	struct sk_buff *tx_skb;
+	struct sk_buff *tstamp_tx_xdelay_skb;
 	u16 tx_seq_id;
 	u16 tstamp_rx_latency_ns;   /* rx delay from wire to tstamp unit */
 	u16 tstamp_tx_latency_ns;   /* tx delay from tstamp unit to wire */
@@ -323,8 +330,15 @@ static inline void ksz_regmap_unlock(void *__mtx)
 }
 
 /* net/dsa/tag_ksz.c */
-ktime_t lan937x_tstamp_to_clock(struct ksz_device *ksz, u32 tstamp,
-               int offset_ns);
+static inline ktime_t ksz9477_decode_tstamp(u32 tstamp, int offset_ns)
+{
+	u64 ns = FIELD_GET(KSZ_TSTAMP_SEC_MASK, tstamp) * NSEC_PER_SEC +
+		 FIELD_GET(KSZ_TSTAMP_NSEC_MASK, tstamp);
+
+	/* Add/remove excess delay between wire and time stamp unit */
+	return ns_to_ktime(ns + offset_ns);
+}
+ktime_t lan937x_tstamp_to_clock(struct ksz_device *ksz, u32 tstamp);
 
 /* Regmap tables generation */
 #define KSZ_SPI_OP_RD		3
