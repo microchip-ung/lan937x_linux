@@ -379,9 +379,9 @@ int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
 
 	return ret;
 }
-bool isphyport (struct ksz_device *dev, int port)
+bool lan937x_is_internal_phy_port (struct ksz_device *dev, int port)
 {
-	if (port == LAN937X_CPU_PORT || port == LAN937X_MII_PORT)
+	if (port == LAN937X_RGMII_1_PORT || port == LAN937X_RGMII_2_PORT)
 	{
 		return false;
 	}
@@ -393,15 +393,15 @@ bool isphyport (struct ksz_device *dev, int port)
 
 	return true;
 }
+
 u32 lan937x_get_port_addr(int port, int offset)
 {
 	return PORT_CTRL_ADDR(port, offset);
 }
 
-
-bool lan937x_is_tx_phy_port (struct ksz_device *dev, int port)
+bool lan937x_is_internal_tx_phy_port (struct ksz_device *dev, int port)
 {
-	if (isphyport(dev, port) && port == LAN937X_SGMII_PORT)
+	if (lan937x_is_internal_phy_port(dev, port) && port == LAN937X_SGMII_PORT)
 		if ((GET_CHIP_ID_LSB(dev->chip_id) == CHIP_ID_71) ||
 		(GET_CHIP_ID_LSB(dev->chip_id) == CHIP_ID_72))
 			return true;
@@ -416,7 +416,7 @@ int lan937x_t1_tx_phy_write(struct ksz_device *dev, int addr,
 	int ret;
 
 	/* Check for phy port */
-	if (!isphyport(dev, addr))
+	if (!lan937x_is_internal_phy_port(dev, addr))
 		return 0;
 
 	if (ret) {
@@ -424,7 +424,7 @@ int lan937x_t1_tx_phy_write(struct ksz_device *dev, int addr,
 		return ret;
 	}
 
-	if (lan937x_is_tx_phy_port(dev, addr))
+	if (lan937x_is_internal_tx_phy_port(dev, addr))
 		addr_base = REG_PORT_TX_PHY_CTRL_BASE;
 	else
 		addr_base = REG_PORT_T1_PHY_CTRL_BASE;
@@ -468,7 +468,7 @@ int lan937x_t1_tx_phy_read(struct ksz_device *dev, int addr,
 	 * be used.  For SGMII PHY the supporting code will be added later.
 	 */
 
-	if (!isphyport(dev, addr)) {
+	if (!lan937x_is_internal_phy_port(dev, addr)) {
 		struct ksz_port *p = &dev->ports[addr];
 
 		switch (reg) {
@@ -507,7 +507,7 @@ int lan937x_t1_tx_phy_read(struct ksz_device *dev, int addr,
 			return ret;
 		}
 		
-		if (lan937x_is_tx_phy_port(dev, addr))
+		if (lan937x_is_internal_tx_phy_port(dev, addr))
 			addr_base = REG_PORT_TX_PHY_CTRL_BASE;
 		else
 			addr_base = REG_PORT_T1_PHY_CTRL_BASE;
@@ -715,9 +715,9 @@ static void t1_phy_port_init(struct ksz_device *dev, int port)
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_POWER_DOWN_CTRL,
 				   T1_HW_INIT_SEQ_ENABLE, false);
 
-	/*TODO: Configure master/slave. true=master, false=slave */
-	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_INITIATOR_CTRL,
-				   PORT_T1_INITIATOR_CFG, true);
+	/* Configure master/slave. true=master, false=slave */
+	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_M_CTRL,
+				   PORT_T1_M_CFG, true);
 
 	/* Software reset. */
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_BASIC_CTRL,
@@ -788,7 +788,7 @@ static void t1_phy_port_init(struct ksz_device *dev, int port)
 	/* MANUAL STD POLARITY */
 	lan937x_t1_tx_phy_write(dev, port, 0x17, 0x0080);
 
-	/* disable INITIATOR mode energy detect */
+	/* disable master mode energy detect */
 	lan937x_t1_tx_phy_mod_bits(dev, port, 0x10, 0x0040, false);
 
 	lan937x_t1_phy_bank_read(dev, port, T1_REG_BANK_SEL_AFE, 0x0B, &val);
@@ -882,8 +882,8 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 	/* enable 802.1p priority */
 	lan937x_port_cfg(dev, port, P_PRIO_CTRL, PORT_802_1P_PRIO_ENABLE, true);
 
-	if (isphyport(dev, port)) {
-		if (lan937x_is_tx_phy_port(dev, port))
+	if (lan937x_is_internal_phy_port(dev, port)) {
+		if (lan937x_is_internal_tx_phy_port(dev, port))
 			tx_phy_port_init(dev, port);
 		else
 			t1_phy_port_init(dev, port);
@@ -937,7 +937,7 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 	lan937x_cfg_port_member(dev, port, member);
 
 	/* clear pending interrupts */
-	if (isphyport(dev, port))
+	if (lan937x_is_internal_phy_port(dev, port))
 		lan937x_pread16(dev, port, REG_PORT_PHY_INT_ENABLE, &data16);
 }
 

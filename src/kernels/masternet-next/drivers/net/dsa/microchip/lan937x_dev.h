@@ -28,8 +28,8 @@ int lan937x_t1_tx_phy_write(struct ksz_device *dev, int addr,
 				   int reg, u16 val);
 int lan937x_t1_tx_phy_read(struct ksz_device *dev, int addr,
 				  int reg, u16 *val);
-bool lan937x_is_tx_phy_port (struct ksz_device *dev, int port);
-bool isphyport (struct ksz_device *dev, int port);
+bool lan937x_is_internal_tx_phy_port (struct ksz_device *dev, int port);
+bool lan937x_is_internal_phy_port (struct ksz_device *dev, int port);
 int lan937x_reset_switch(struct ksz_device *dev);
 void lan937x_cfg_port_member(struct ksz_device *dev, int port,
 				    u8 member);

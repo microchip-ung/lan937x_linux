@@ -133,7 +133,7 @@ static int lan937x_get_link_status(struct ksz_device *dev, int port)
 {
 	u16 val1, val2;
 
-	lan937x_t1_tx_phy_read(dev, port, REG_PORT_T1_PHY_INITIATOR_STATUS,
+	lan937x_t1_tx_phy_read(dev, port, REG_PORT_T1_PHY_M_STATUS,
 			       &val1);
 
 	lan937x_t1_tx_phy_read(dev, port, REG_PORT_T1_MODE_STAT, &val2);
@@ -152,7 +152,7 @@ static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
 
 	lan937x_t1_tx_phy_read(dev, addr, reg, &val);
 
-	if (reg == MII_BMSR && !lan937x_is_tx_phy_port(dev, addr)) {
+	if (reg == MII_BMSR && !lan937x_is_internal_tx_phy_port(dev, addr)) {
 		/* 100 Base Full duplex is supported*/
 		val |= BMSR_100FULL;
 
@@ -1007,7 +1007,7 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 	if (phy_interface_mode_is_rgmii(state->interface) ||
 	    state->interface == PHY_INTERFACE_MODE_SGMII ||
 		state->interface == PHY_INTERFACE_MODE_RMII	||
-		lan937x_is_tx_phy_port(dev, port)) {
+		lan937x_is_internal_tx_phy_port(dev, port)) {
 		phylink_set(mask, 10baseT_Half);
 		phylink_set(mask, 10baseT_Full);
 		phylink_set(mask, 100baseT_Half);
@@ -1024,7 +1024,7 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 		phylink_set(mask, 1000baseT_Full);
 	}
 	/* For T1 PHY */
-	if (!lan937x_is_tx_phy_port(dev, port) &&
+	if (!lan937x_is_internal_tx_phy_port(dev, port) &&
 	    port < dev->phy_port_cnt) {
 		phylink_set(mask, 100baseT_Full);
 		phylink_set_port_modes(mask);
@@ -1042,7 +1042,7 @@ static void lan937x_phylink_mac_an_restart(struct dsa_switch *ds, int port)
 	u16 regval;
 
 	/* Auto negotiation is not supported for T1 & MII ports */
-	if (!lan937x_is_tx_phy_port(dev, port))
+	if (!lan937x_is_internal_tx_phy_port(dev, port))
 		return;
 
 	if (!lan937x_t1_tx_phy_read(dev, port, MII_BMCR, &regval)) {
@@ -1096,7 +1096,7 @@ int lan937x_switch_register(struct ksz_device *dev)
 		if (!dsa_is_user_port(dev->ds, i))
 			continue;
 		
-		if (!isphyport(dev, i))
+		if (!lan937x_is_internal_phy_port(dev, i))
 			continue;
 
 		phydev = dsa_to_port(dev->ds, i)->slave->phydev;
