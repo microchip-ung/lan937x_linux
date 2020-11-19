@@ -8,6 +8,8 @@
 #include <linux/platform_data/microchip-ksz.h>
 #include <linux/phy.h>
 #include <linux/if_bridge.h>
+#include <linux/interrupt.h>
+#include <linux/irq.h>
 #include <net/dsa.h>
 #include <net/switchdev.h>
 #include <linux/dsa/lan937x.h>
@@ -558,7 +560,8 @@ static int lan937x_get_link_status(struct ksz_device *dev, int port)
 	    val2 & (T1_PORT_DSCR_LOCK_STATUS_MSK | T1_PORT_LINK_UP_MSK))
 		return PHY_LINK_UP;
 
-	return PHY_LINK_DOWN;
+	return PHY_LINK_DOWN;  
+//	return PHY_LINK_UP; //todo: arun.. remove it
 }
 
 static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
@@ -1768,12 +1771,6 @@ static int lan937x_setup(struct dsa_switch *ds)
 	if (!dev->vlan_cache)
 		return -ENOMEM;
 
-	ret = lan937x_reset_switch(dev);
-	if (ret) {
-		dev_err(ds->dev, "failed to reset switch\n");
-		return ret;
-	}
-
 	/* Required for port partitioning. */
 	lan937x_cfg32(dev, REG_SW_QM_CTRL__4, UNICAST_VLAN_BOUNDARY,
 		      true);
@@ -1928,7 +1925,8 @@ static const struct dsa_switch_ops lan937x_switch_ops = {
 	.phylink_mac_link_down	= ksz_mac_link_down,
 	.port_hwtstamp_get      = lan937x_hwtstamp_get,
 	.port_hwtstamp_set      = lan937x_hwtstamp_set,
-	.port_rxtstamp		= lan937x_port_rxtstamp,
+        /* never defer rx delivery, tstamping is done via tail tagging */
+	.port_rxtstamp		= NULL, 
 	.port_txtstamp		= lan937x_port_txtstamp,
 	.get_ts_info            = lan937x_get_ts_info
 };
@@ -2082,11 +2080,84 @@ static void lan937x_port_init(struct ksz_device *dev)
 	}
 }
 
+static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
+{
+	struct ksz_device *dev = dev_id;
+	u32 data;
+	int port;
+	int ret;
+	irqreturn_t result = IRQ_NONE;
+
+	/* Read global port interrupt status register */
+	ret = ksz_read32(dev, REG_SW_PORT_INT_STATUS__4, &data);
+	if (ret)
+		return result;
+
+	for (port = 0; port < dev->port_cnt; port++) {
+		if (data & BIT(port)) {
+			u8 data8;
+
+			/* Read port interrupt status register */
+			ret = ksz_read8(dev, PORT_CTRL_ADDR(port, REG_PORT_INT_STATUS),
+					&data8);
+			if (ret)
+				return result;
+
+			if (data8 & PORT_PTP_INT)
+				result |= lan937x_ptp_port_interrupt(dev, port);
+		}
+	}
+
+	return result;
+}
+
+static int lan937x_enable_port_interrupts(struct ksz_device *dev)
+{
+	u32 data;
+	int ret;
+
+	ret = ksz_read32(dev, REG_SW_PORT_INT_MASK__4, &data);
+	if (ret)
+		return ret;
+
+	/* Enable port interrupts (0 means enabled) */
+	data &= ~((1 << dev->port_cnt) - 1);
+	ret = ksz_write32(dev, REG_SW_PORT_INT_MASK__4, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int lan937x_disable_port_interrupts(struct ksz_device *dev)
+{
+	u32 data;
+	int ret;
+
+	ret = ksz_read32(dev, REG_SW_PORT_INT_MASK__4, &data);
+	if (ret)
+		return ret;
+
+	/* Disable port interrupts (1 means disabled) */
+	data |= ((1 << dev->port_cnt) - 1);
+	ret = ksz_write32(dev, REG_SW_PORT_INT_MASK__4, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 static int lan937x_switch_init(struct ksz_device *dev)
 {
-	int i;
+	int i, ret;
 
 	dev->ds->ops = &lan937x_switch_ops;
+
+	ret = lan937x_reset_switch(dev);
+	if (ret) {
+		dev_err(dev->dev, "failed to reset switch\n");
+		return ret;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(lan937x_switch_chips); i++) {
 		const struct lan937x_chip_data *chip = &lan937x_switch_chips[i];
@@ -2140,11 +2211,33 @@ static int lan937x_switch_init(struct ksz_device *dev)
 
 	/* set the real number of ports */
 	dev->ds->num_ports = dev->port_cnt;
+
+	if (dev->irq > 0) {
+		unsigned long irqflags = irqd_get_trigger_type(irq_get_irq_data(dev->irq));
+
+		irqflags |= IRQF_ONESHOT;
+		ret = devm_request_threaded_irq(dev->dev, dev->irq, NULL,
+						lan937x_switch_irq_thread,
+						irqflags,
+						dev_name(dev->dev),
+						dev);
+		if (ret) {
+			dev_err(dev->dev, "failed to request IRQ.\n");
+			return ret;
+		}
+
+		ret = lan937x_enable_port_interrupts(dev);
+		if (ret)
+			return ret;
+	}
+
 	return 0;
 }
 
 static void lan937x_switch_exit(struct ksz_device *dev)
 {
+	if (dev->irq > 0)
+		lan937x_disable_port_interrupts(dev);	
 	lan937x_reset_switch(dev);
 }
 
