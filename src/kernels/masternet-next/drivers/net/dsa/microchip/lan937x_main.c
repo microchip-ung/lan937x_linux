@@ -7,6 +7,8 @@
 #include <linux/iopoll.h>
 #include <linux/phy.h>
 #include <linux/if_bridge.h>
+#include <linux/interrupt.h>
+#include <linux/irq.h>
 #include <net/dsa.h>
 #include <net/switchdev.h>
 
@@ -138,7 +140,8 @@ static int lan937x_get_link_status(struct ksz_device *dev, int port)
 	    val2 & (T1_PORT_DSCR_LOCK_STATUS_MSK | T1_PORT_LINK_UP_MSK))
 		return PHY_LINK_UP;
 
-	return PHY_LINK_DOWN;
+	return PHY_LINK_DOWN;  
+//	return PHY_LINK_UP; //todo: arun.. remove it
 }
 
 static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
@@ -900,12 +903,6 @@ static int lan937x_setup(struct dsa_switch *ds)
 	if (!dev->vlan_cache)
 		return -ENOMEM;
 
-	ret = lan937x_reset_switch(dev);
-	if (ret) {
-		dev_err(ds->dev, "failed to reset switch\n");
-		return ret;
-	}
-
 	/* Required for port partitioning. */
 	lan937x_cfg32(dev, REG_SW_QM_CTRL__4, UNICAST_VLAN_BOUNDARY,
 		      true);
@@ -1036,7 +1033,8 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.phylink_mac_link_down	= ksz_mac_link_down,
 	.port_hwtstamp_get      = lan937x_hwtstamp_get,
 	.port_hwtstamp_set      = lan937x_hwtstamp_set,
-	.port_rxtstamp		= lan937x_port_rxtstamp,
+        /* never defer rx delivery, tstamping is done via tail tagging */
+	.port_rxtstamp		= NULL, 
 	.port_txtstamp		= lan937x_port_txtstamp,
 	.get_ts_info            = lan937x_get_ts_info
 };
