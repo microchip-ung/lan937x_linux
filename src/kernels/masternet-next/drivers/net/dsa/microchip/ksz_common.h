@@ -75,6 +75,7 @@ struct ksz_device {
 
 	struct device *dev;
 	struct regmap *regmap[3];
+	int irq;
 
 	void *priv;
 
