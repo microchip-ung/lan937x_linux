@@ -1522,6 +1522,45 @@ static int lan937x_ptp_disable_port_egress_interrupts(struct ksz_device *dev, in
 	return 0;
 }
 
+
+static int lan937x_ptp_enable_port_sync_interrupts(struct ksz_device *dev, int port)
+{
+	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, addr, &data);
+	if (ret)
+		return ret;
+
+	/* Enable port xdelay egress timestamp interrupt (1 means enabled) */
+	data |= PTP_PORT_SYNC_INT;
+	ret = ksz_write16(dev, addr, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int lan937x_ptp_disable_port_sync_interrupts(struct ksz_device *dev, int port)
+{
+	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, addr, &data);
+	if (ret)
+		return ret;
+
+	/* Disable port xdelay egress timestamp interrupts (0 means disabled) */
+	data &= PTP_PORT_SYNC_INT;
+	ret = ksz_write16(dev, addr, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
 {
 	struct ksz_port *prt = &dev->ports[port];
@@ -1543,6 +1582,10 @@ static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
 		if (ret)
 			return ret;
 
+		ret = lan937x_ptp_enable_port_sync_interrupts(dev, port);
+		if (ret)
+			goto error_disable_port_ptp_interrupts;
+		
 		ret = lan937x_ptp_enable_port_egress_interrupts(dev, port);
 		if (ret)
 			goto error_disable_port_ptp_interrupts;
@@ -1668,7 +1711,7 @@ void lan937x_ptp_deinit(struct dsa_switch *ds)
 irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 {
 	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_STATUS__2);
-	struct ksz_port *prt = &dev->ports[port];
+	struct ksz_port *prt = &dev->ports[port - 1];
 	irqreturn_t result = IRQ_NONE;
 	u16 data;
 	int ret;
@@ -1677,7 +1720,7 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 	if (ret)
 		return IRQ_NONE;
 
-	if ((data & PTP_PORT_XDELAY_REQ_INT) && prt->tstamp_tx_xdelay_skb) {
+	if (((data & PTP_PORT_XDELAY_REQ_INT) || (data & PTP_PORT_SYNC_INT)) && prt->tstamp_tx_xdelay_skb) {
 		/* Timestamp for Pdelay_Req / Delay_Req */
 		u32 tstamp_raw;
 		ktime_t tstamp;
