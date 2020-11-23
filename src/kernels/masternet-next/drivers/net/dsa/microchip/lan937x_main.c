@@ -561,7 +561,6 @@ static int lan937x_get_link_status(struct ksz_device *dev, int port)
 		return PHY_LINK_UP;
 
 	return PHY_LINK_DOWN;  
-//	return PHY_LINK_UP; //todo: arun.. remove it
 }
 
 static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
@@ -1488,8 +1487,8 @@ static void t1_phy_port_init(struct ksz_device *dev, int port)
 				   T1_HW_INIT_SEQ_ENABLE, false);
 
 	/*TODO: Configure master/slave. true=master, false=slave */
-	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_MASTER_CTRL,
-				   PORT_T1_MASTER_CFG, true);
+	//lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_MASTER_CTRL,
+	//			   PORT_T1_MASTER_CFG, true);
 
 	/* Software reset. */
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_BASIC_CTRL,
@@ -2087,8 +2086,18 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 	int port;
 	int ret;
 	irqreturn_t result = IRQ_NONE;
+	
 
-	/* Read global port interrupt status register */
+	/* Read global interrupt status register */
+	ret = ksz_read32(dev, REG_SW_INT_STATUS__4, &data);
+	if (ret)
+		return result;
+
+	if(data & 0x2000000)
+	{
+		ksz_write32(dev, REG_SW_INT_STATUS__4, 0x2000000);
+	}
+
 	ret = ksz_read32(dev, REG_SW_PORT_INT_STATUS__4, &data);
 	if (ret)
 		return result;
@@ -2096,15 +2105,16 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 	for (port = 0; port < dev->port_cnt; port++) {
 		if (data & BIT(port)) {
 			u8 data8;
-
+			u8 tempPort = 3; //todo arun remove it.
+			
 			/* Read port interrupt status register */
-			ret = ksz_read8(dev, PORT_CTRL_ADDR(port, REG_PORT_INT_STATUS),
+			ret = ksz_read8(dev, PORT_CTRL_ADDR(tempPort, REG_PORT_INT_STATUS),
 					&data8);
 			if (ret)
 				return result;
 
 			if (data8 & PORT_PTP_INT)
-				result |= lan937x_ptp_port_interrupt(dev, port);
+				result |= lan937x_ptp_port_interrupt(dev, tempPort);
 		}
 	}
 
