@@ -141,7 +141,6 @@ static int lan937x_get_link_status(struct ksz_device *dev, int port)
 		return PHY_LINK_UP;
 
 	return PHY_LINK_DOWN;  
-//	return PHY_LINK_UP; //todo: arun.. remove it
 }
 
 static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
@@ -823,6 +822,382 @@ static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 	return interface;
 }
 
+<<<<<<< HEAD
+=======
+static void lan937x_t1_tx_phy_mod_bits(struct ksz_device *dev, int port,
+				       int reg, u16 val, bool set)
+{
+	u16 data;
+
+	/* read phy register */
+	lan937x_t1_tx_phy_read(dev, port, reg, &data);
+
+	/* set/clear the data */
+	if (set)
+		data |= val;
+	else
+		data &= ~val;
+
+	/* write phy register */
+	lan937x_t1_tx_phy_write(dev, port, reg, data);
+}
+
+static u32 lan937x_tx_phy_bank_read(struct ksz_device *dev, int port,
+				    u8 bank, u8 reg)
+{
+	u16 data_hi;
+	u16 data_lo;
+	u16 ctrl;
+
+	ctrl = ((u16)bank & TX_REG_BANK_SEL_M) << TX_REG_BANK_SEL_S;
+	ctrl |= ((u16)reg & TX_READ_ADDR_M) << TX_READ_ADDR_S;
+
+	/* write ctrl register with appropriate value */
+	ctrl |= TX_IND_DATA_READ;
+	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_IND_CTRL, ctrl);
+
+	/* if bank is WOL value to be written again to reflect correct bank */
+	if (bank == TX_REG_BANK_SEL_WOL)
+		lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_IND_CTRL, ctrl);
+
+	/* read data hi & low value */
+	lan937x_t1_tx_phy_read(dev, port, REG_PORT_TX_READ_DATA_LO, &data_lo);
+	lan937x_t1_tx_phy_read(dev, port, REG_PORT_TX_READ_DATA_HI, &data_hi);
+
+	return ((u32)data_hi << 16) | data_lo;
+}
+
+static void lan937x_tx_phy_bank_write(struct ksz_device *dev, int port,
+				      u8 bank, u8 reg, u16 val)
+{
+	u16 ctrl;
+
+	/* write the value */
+	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_WRITE_DATA, val);
+	ctrl = ((u16)bank & TX_REG_BANK_SEL_M) << TX_REG_BANK_SEL_S;
+	ctrl |= (reg & TX_WRITE_ADDR_M);
+
+	if (bank == TX_REG_BANK_SEL_DSP || bank == TX_REG_BANK_SEL_BIST)
+		ctrl |= TX_TEST_MODE;
+	/* write ctrl register with write operation bit set */
+	ctrl |= TX_IND_DATA_WRITE;
+	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_IND_CTRL, ctrl);
+}
+
+static void tx_phy_setup(struct ksz_device *dev, int port)
+{
+	u16 data_lo;
+
+	lan937x_t1_tx_phy_read(dev, port, REG_PORT_TX_SPECIAL_MODES, &data_lo);
+	/* Need to change configuration from 6 to other value. */
+	data_lo &= TX_PHYADDR_M;
+
+	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_SPECIAL_MODES, data_lo);
+
+    /* Need to toggle test_mode bit to enable DSP access. */
+	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_IND_CTRL, TX_TEST_MODE);
+	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_IND_CTRL, 0);
+
+	/* Note TX_TEST_MODE is then always enabled so this is not required. */
+	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_IND_CTRL, TX_TEST_MODE);
+	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_IND_CTRL, 0);
+}
+
+static void tx_phy_port_init(struct ksz_device *dev, int port)
+{
+	u32 data;
+
+	/* Software reset. */
+	lan937x_t1_tx_phy_mod_bits(dev, port, MII_BMCR, BMCR_RESET, true);
+
+	/* tx phy setup */
+	tx_phy_setup(dev, port);
+
+	/* tx phy init sequence */
+	data = lan937x_tx_phy_bank_read(dev, port, TX_REG_BANK_SEL_VMDAC,
+					TX_VMDAC_ZQ_CAL_CTRL);
+	data |= TX_START_ZQ_CAL;
+	lan937x_tx_phy_bank_write(dev, port, TX_REG_BANK_SEL_VMDAC,
+				  TX_VMDAC_ZQ_CAL_CTRL, data);
+	lan937x_tx_phy_bank_write(dev, port, TX_REG_BANK_SEL_VMDAC, TX_VMDAC_CTRL0,
+				  TX_VMDAC_CTRL0_VAL);
+	lan937x_tx_phy_bank_write(dev, port, TX_REG_BANK_SEL_VMDAC, TX_VMDAC_CTRL1,
+				  TX_VMDAC_CTRL1_VAL);
+	data = lan937x_tx_phy_bank_read(dev, port, TX_REG_BANK_SEL_VMDAC,
+					TX_VMDAC_MISC_PCS_CTRL0);
+	data |= TX_MISC_PCS_CTRL0_13;
+	lan937x_tx_phy_bank_write(dev, port, TX_REG_BANK_SEL_VMDAC,
+				  TX_VMDAC_MISC_PCS_CTRL0, data);
+
+	lan937x_tx_phy_bank_write(dev, port, TX_REG_BANK_SEL_DSP, TX_DSP_DCBLW,
+				  TX_DSP_DCBLW_VAL);
+	lan937x_tx_phy_bank_write(dev, port, TX_REG_BANK_SEL_DSP, TX_DSP_A11_CONFIG,
+				  TX_DSP_A11_CONFIG_VAL);
+	lan937x_tx_phy_bank_write(dev, port, TX_REG_BANK_SEL_DSP, TX_DSP_A10_CONFIG,
+				  TX_DSP_A10_CONFIG_VAL);
+	data = lan937x_tx_phy_bank_read(dev, port, TX_REG_BANK_SEL_DSP,
+					TX_DSP_A5_CONFIG);
+	data &= ~(TX_A5_TXCLKPHSEL_M << TX_A5_TXCLKPHSEL_S);
+	data |= (TX_A5_TXCLK_2_NS << TX_A5_TXCLKPHSEL_S);
+	lan937x_tx_phy_bank_write(dev, port, TX_REG_BANK_SEL_VMDAC,
+				  TX_DSP_A5_CONFIG, data);
+}
+
+static void lan937x_t1_phy_bank_sel(struct ksz_device *dev, int port,
+				    u8 bank, u8 addr, u16 oper)
+{
+	u16 data, ctrl;
+	u8 prev_bank;
+
+	lan937x_t1_tx_phy_read(dev, port, REG_PORT_T1_EXT_REG_CTRL, &ctrl);
+	prev_bank = (ctrl >> T1_REG_BANK_SEL_S) & T1_REG_BANK_SEL_M;
+	ctrl &= T1_PCS_STS_CNT_RESET;
+
+	data = ((u16)bank & T1_REG_BANK_SEL_M) << T1_REG_BANK_SEL_S;
+	data |= (addr & T1_REG_ADDR_M);
+	data |= oper;
+	data |= ctrl;
+
+	/* if the bank is DSP need to write twice */
+	if (bank != prev_bank && bank == T1_REG_BANK_SEL_DSP) {
+		u16 t = data & ~T1_REG_ADDR_M;
+
+		t &= ~oper;
+		t |= T1_IND_DATA_READ;
+
+		/* Need to write twice to access correct register. */
+		lan937x_t1_tx_phy_write(dev, port, REG_PORT_T1_EXT_REG_CTRL, t);
+	}
+
+	lan937x_t1_tx_phy_write(dev, port, REG_PORT_T1_EXT_REG_CTRL, data);
+}
+
+static void lan937x_t1_phy_bank_read(struct ksz_device *dev, int port,
+				     u8 bank, u8 addr, u16 *val)
+{
+	/* select the bank for read operation */
+	lan937x_t1_phy_bank_sel(dev, port, bank, addr, T1_IND_DATA_READ);
+
+	/* read bank */
+	lan937x_t1_tx_phy_read(dev, port, REG_PORT_T1_EXT_REG_RD_DATA, val);
+}
+
+static void lan937x_t1_phy_bank_write(struct ksz_device *dev, int port,
+				      u8 bank, u8 addr, u16 val)
+{
+	/* write the data to be written into the bank */
+	lan937x_t1_tx_phy_write(dev, port, REG_PORT_T1_EXT_REG_WR_DATA, val);
+	/* select the bank for write operation */
+	lan937x_t1_phy_bank_sel(dev, port, bank, addr, T1_IND_DATA_WRITE);
+}
+
+static void t1_phy_port_init(struct ksz_device *dev, int port)
+{
+	u16 val;
+
+	/* Power down the PHY. */
+	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_BASIC_CTRL,
+				   PORT_T1_POWER_DOWN, true);
+
+	/* Make sure software initialization sequence is used. */
+	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_POWER_DOWN_CTRL,
+				   T1_HW_INIT_SEQ_ENABLE, false);
+
+	/*TODO: Configure master/slave. true=master, false=slave */
+	//lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_MASTER_CTRL,
+	//			   PORT_T1_MASTER_CFG, true);
+
+	/* Software reset. */
+	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_BASIC_CTRL,
+				   PORT_T1_PHY_RESET, true);
+
+	/* cdr mode */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x34, 0x0001);
+
+	/* setting lock 3 mufac */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x1B, 0x0B6A);
+
+	/* setting pos lock mufac */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x1C, 0x0B6B);
+
+	/* setting lock1 win config */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x11, 0x2A74);
+
+	/* setting lock2 win config */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x12, 0x2B70);
+
+	/* setting lock3 win config */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x13, 0x2B6C);
+
+	/* setting plock */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x14, 0x2974);
+
+	/* setting lock threshold config */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x16, 0xC803);
+
+	/* slv fd stg bmp */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x24, 0x0002);
+
+	/* Blw BW config lock stage 3 */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x2A, 0x003C);
+
+	/* Blw BW config */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x56, 0x3CAA);
+
+	/* Blw BW config */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x57, 0x1E47);
+
+	/* Blw BW config */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x58, 0x1E4E);
+
+	/* Blw BW config */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x59, 0x1E56);
+
+	/* disable scrambler lock timeout 0-disable 1- enable */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x32, 0x00F6);
+
+	/* reducing energy detect partial timeout */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x3C, 0x64CC);
+
+	lan937x_t1_tx_phy_read(dev, port, 0x0A, &val);
+
+	if ((val & 0x4000) == 0)
+		lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_PCS, 0x26, 0x1770);
+
+	/* pwr dn Config */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x04, 0x16D7);
+
+	/* scrambler lock hysterisis */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_PCS, 0x00, 0x7FFF);
+
+	/* eq status timer control */
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_PCS, 0x02, 0x07FF);
+
+	/* MANUAL STD POLARITY */
+	lan937x_t1_tx_phy_write(dev, port, 0x17, 0x0080);
+
+	/* disable INITIATOR mode energy detect */
+	lan937x_t1_tx_phy_mod_bits(dev, port, 0x10, 0x0040, false);
+
+	lan937x_t1_phy_bank_read(dev, port, T1_REG_BANK_SEL_AFE, 0x0B, &val);
+
+	val &= ~0x001E;
+	/* increase tx amp to 0b0101 */
+	val |= 0x000A;
+
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_AFE, 0x0B, val);
+
+	lan937x_t1_phy_bank_write(dev, port, T1_REG_BANK_SEL_DSP, 0x25, 0x23E0);
+
+	/* Set HW_INIT */
+	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_POWER_DOWN_CTRL,
+				   T1_HW_INIT_SEQ_ENABLE, true);
+
+	/* Power up the PHY. */
+	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_BASIC_CTRL,
+				   PORT_T1_POWER_DOWN, false);
+}
+
+static void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
+{
+	struct ksz_port *p = &dev->ports[port];
+	u8 data8, member;
+	u16 data16;
+
+	/* enable tag tail for host port */
+	if (cpu_port) {
+		lan937x_port_cfg(dev, port, REG_PORT_CTRL_0, PORT_TAIL_TAG_ENABLE,
+				 true);
+		/* Enable jumbo packet in host port so that frames are not
+		 * counted as oversized.
+		 */
+		lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_JUMBO_PACKET,
+				 true);
+		lan937x_pwrite16(dev, port, REG_PORT_MTU__2, 1540);
+	}
+
+	lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_FR_CHK_LENGTH, false);
+
+	lan937x_port_cfg(dev, port, REG_PORT_CTRL_0, PORT_MAC_LOOPBACK, false);
+
+	/* set back pressure */
+	lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_1, PORT_BACK_PRESSURE, true);
+
+	/* enable broadcast storm limit */
+	lan937x_port_cfg(dev, port, P_BCAST_STORM_CTRL, PORT_BROADCAST_STORM, true);
+
+	/* disable DiffServ priority */
+	lan937x_port_cfg(dev, port, P_PRIO_CTRL, PORT_DIFFSERV_PRIO_ENABLE, false);
+
+	/* replace priority */
+	lan937x_port_cfg(dev, port, REG_PORT_MRI_MAC_CTRL, PORT_USER_PRIO_CEILING,
+			 false);
+	lan937x_port_cfg32(dev, port, REG_PORT_MTI_QUEUE_CTRL_0__4,
+			   MTI_PVID_REPLACE, false);
+
+	/* enable 802.1p priority */
+	lan937x_port_cfg(dev, port, P_PRIO_CTRL, PORT_802_1P_PRIO_ENABLE, true);
+
+	if (port < dev->phy_port_cnt) {
+		if (lan937x_is_tx_phy_port(dev, port))
+			tx_phy_port_init(dev, port);
+		else
+			t1_phy_port_init(dev, port);
+
+	} else {
+		/* force flow control off*/
+		lan937x_port_cfg(dev, port, REG_PORT_XMII_CTRL_0,
+				 PORT_FORCE_TX_FLOW_CTRL | PORT_FORCE_RX_FLOW_CTRL,
+			     false);
+
+		/* configure MAC to 1G & RGMII mode  */
+		lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
+
+		switch (p->interface) {
+		case PHY_INTERFACE_MODE_MII:
+			lan937x_set_xmii(dev, 0, &data8);
+			lan937x_set_gbit(dev, false, &data8);
+			data8 |= PORT_MII_NOT_1GBIT;
+			p->phydev.speed = SPEED_100;
+			break;
+		case PHY_INTERFACE_MODE_RMII:
+			lan937x_set_xmii(dev, 1, &data8);
+			lan937x_set_gbit(dev, false, &data8);
+			data8 |= PORT_MII_NOT_1GBIT;
+			p->phydev.speed = SPEED_100;
+			break;
+		default:
+			lan937x_set_xmii(dev, 3, &data8);
+			lan937x_set_gbit(dev, true, &data8);
+			data8 |= PORT_MII_NOT_1GBIT;
+			data8 &= ~PORT_RGMII_ID_IG_ENABLE;
+			data8 &= ~PORT_RGMII_ID_EG_ENABLE;
+			if (p->interface == PHY_INTERFACE_MODE_RGMII_ID ||
+			    p->interface == PHY_INTERFACE_MODE_RGMII_RXID)
+				data8 |= PORT_RGMII_ID_IG_ENABLE;
+			if (p->interface == PHY_INTERFACE_MODE_RGMII_ID ||
+			    p->interface == PHY_INTERFACE_MODE_RGMII_TXID)
+				data8 |= PORT_RGMII_ID_EG_ENABLE;
+			p->phydev.speed = SPEED_1000;
+			break;
+		}
+		lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, data8);
+		p->phydev.duplex = 1;
+	}
+	mutex_lock(&dev->dev_mutex);
+	if (cpu_port)
+		member = dev->port_mask;
+	else
+		member = dev->host_mask | p->vid_member;
+	mutex_unlock(&dev->dev_mutex);
+	lan937x_cfg_port_member(dev, port, member);
+
+	/* clear pending interrupts */
+	if (port < dev->phy_port_cnt)
+		lan937x_pread16(dev, port, REG_PORT_PHY_INT_ENABLE, &data16);
+}
+
+>>>>>>> working sync isr and link up
 static void lan937x_config_cpu_port(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
