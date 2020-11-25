@@ -104,11 +104,11 @@ static void lan937x_write_table(struct ksz_device *dev, u32 *table)
 	ksz_write32(dev, REG_SW_ALU_VAL_D, table[3]);
 }
 
-static int lan937x_wait_alu_ready(struct ksz_device *dev)
+static int lan937x_wait_alu_ready(int alu, struct ksz_device *dev)
 {
 	unsigned int val;
 
-	return regmap_read_poll_timeout(dev->regmap[2], REG_SW_ALU_CTRL__4,
+	return regmap_read_poll_timeout(dev->regmap[2], REG_SW_ALU_CTRL(alu),
 					val, !(val & ALU_START), 10, 1000);
 }
 
@@ -304,8 +304,8 @@ static void lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 
 		vlan_table[0] = VLAN_VALID | (vid & VLAN_FID_M);
 
-		/* set/clear switch logical port number based on the port arg when
-		 * updating vlan table registers
+		/* set/clear switch port when updating vlan table
+		 * registers
 		 */
 		if (untagged)
 			vlan_table[1] |= BIT(port);
@@ -344,9 +344,7 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 			dev_dbg(dev->dev, "Failed to get vlan table\n");
 			return -ETIMEDOUT;
 		}
-		/* clear switch logical port number based on the port arg when
-		 * updating vlan table registers
-		 */
+		/* clear switch port number */
 		vlan_table[2] &= ~BIT(port);
 
 		if (pvid == vid)
@@ -370,7 +368,7 @@ static u8 lan937x_get_fid(u16 vid)
 {
 	u8 fid;
 
-	if (vid >= ALU_FID_SIZE)
+	if (vid > ALU_FID_SIZE)
 		fid = (vid % ALU_FID_SIZE) + 1;
 	else
 		fid = vid;
@@ -384,54 +382,70 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 	struct ksz_device *dev = ds->priv;
 	u8 fid = lan937x_get_fid(vid);
 	u32 alu_table[4];
+	int ret,i;
 	u32 data;
-	int ret;
+	u8 val;
 	
 	mutex_lock(&dev->alu_mutex);
 
-	/* find any entry with mac & fid */
-	data = fid << ALU_FID_INDEX_S;
-	data |= ((addr[0] << 8) | addr[1]);
-	ksz_write32(dev, REG_SW_ALU_INDEX_0, data);
+	for (i = 0; i < ALU_STA_DYN_CNT; i++) {
+		/* find any entry with mac & fid */
+		data = fid << ALU_FID_INDEX_S;
+		data |= ((addr[0] << 8) | addr[1]);
+		ksz_write32(dev, REG_SW_ALU_INDEX_0, data);
 
-	data = ((addr[2] << 24) | (addr[3] << 16));
-	data |= ((addr[4] << 8) | addr[5]);
-	ksz_write32(dev, REG_SW_ALU_INDEX_1, data);
+		data = ((addr[2] << 24) | (addr[3] << 16));
+		data |= ((addr[4] << 8) | addr[5]);
+		ksz_write32(dev, REG_SW_ALU_INDEX_1, data);
 
-	/* start read operation */
-	ksz_write32(dev, REG_SW_ALU_CTRL__4, ALU_READ | ALU_START);
+		/* start read operation */
+		ksz_write32(dev, REG_SW_ALU_CTRL(i), ALU_READ | ALU_START);
 
-	/* wait to be finished */
-	ret = lan937x_wait_alu_ready(dev);
-	if (ret) {
-		dev_dbg(dev->dev, "Failed to read ALU\n");
-		goto exit;
+		/* wait to be finished */
+		ret = lan937x_wait_alu_ready(i, dev);
+		if (ret) {
+			dev_dbg(dev->dev, "Failed to read ALU\n");
+			goto exit;
+		}
+
+		/* read ALU entry */
+		lan937x_read_table(dev, alu_table);
+
+		/* update ALU entry */
+		alu_table[0] = ALU_V_STATIC_VALID;
+
+		/* update port number */
+		alu_table[1] |= BIT(port);
+
+		if (fid)
+			alu_table[1] |= ALU_V_USE_FID;
+		alu_table[2] = (fid << ALU_V_FID_S);
+		alu_table[2] |= ((addr[0] << 8) | addr[1]);
+		alu_table[3] = ((addr[2] << 24) | (addr[3] << 16));
+		alu_table[3] |= ((addr[4] << 8) | addr[5]);
+
+		lan937x_write_table(dev, alu_table);
+
+		ksz_write32(dev, REG_SW_ALU_CTRL(i), ALU_WRITE | ALU_START);
+
+		/* wait to be finished */
+		ret = lan937x_wait_alu_ready(i, dev);
+
+		if (ret)
+			dev_dbg(dev->dev, "Failed to write ALU\n");
+
+		ksz_read8(dev, REG_SW_LUE_INT_STATUS__1, &val);
+
+		/* ALU write failed */
+		if (val & WRITE_FAIL_INT && i == 1)
+			dev_dbg(dev->dev, "Failed to write ALU\n");
+
+		/* ALU1 write failed and attempt to write ALU2, otherwise exit*/
+		if (val & WRITE_FAIL_INT)
+			val = WRITE_FAIL_INT;
+		else
+			goto exit;	
 	}
-
-	/* read ALU entry */
-	lan937x_read_table(dev, alu_table);
-
-	/* update ALU entry */
-	alu_table[0] = ALU_V_STATIC_VALID;
-	/* switch logical port number has to be set based on the port arg when
-	 * updating alu table registers
-	 */
-	alu_table[1] |= BIT(port);
-	if (fid)
-		alu_table[1] |= ALU_V_USE_FID;
-	alu_table[2] = (fid << ALU_V_FID_S);
-	alu_table[2] |= ((addr[0] << 8) | addr[1]);
-	alu_table[3] = ((addr[2] << 24) | (addr[3] << 16));
-	alu_table[3] |= ((addr[4] << 8) | addr[5]);
-
-	lan937x_write_table(dev, alu_table);
-
-	ksz_write32(dev, REG_SW_ALU_CTRL__4, ALU_WRITE | ALU_START);
-
-	/* wait to be finished */
-	ret = lan937x_wait_alu_ready(dev);
-	if (ret)
-		dev_dbg(dev->dev, "Failed to write ALU\n");
 
 exit:
 	mutex_unlock(&dev->alu_mutex);
@@ -445,63 +459,63 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 	struct ksz_device *dev = ds->priv;
 	u8 fid = lan937x_get_fid(vid);
 	u32 alu_table[4];
+	int ret, i;
 	u32 data;
-	int ret;
 
 	mutex_lock(&dev->alu_mutex);
 
-	/* read any entry with mac & fid */
-	data = fid << ALU_FID_INDEX_S;
-	data |= ((addr[0] << 8) | addr[1]);
-	ksz_write32(dev, REG_SW_ALU_INDEX_0, data);
+	for (i = 0; i < ALU_STA_DYN_CNT; i++) {
+		/* read any entry with mac & fid */
+		data = fid << ALU_FID_INDEX_S;
+		data |= ((addr[0] << 8) | addr[1]);
+		ksz_write32(dev, REG_SW_ALU_INDEX_0, data);
 
-	data = ((addr[2] << 24) | (addr[3] << 16));
-	data |= ((addr[4] << 8) | addr[5]);
-	ksz_write32(dev, REG_SW_ALU_INDEX_1, data);
+		data = ((addr[2] << 24) | (addr[3] << 16));
+		data |= ((addr[4] << 8) | addr[5]);
+		ksz_write32(dev, REG_SW_ALU_INDEX_1, data);
 
-	/* start read operation */
-	ksz_write32(dev, REG_SW_ALU_CTRL__4, ALU_READ | ALU_START);
+		/* start read operation */
+		ksz_write32(dev, REG_SW_ALU_CTRL(i), ALU_READ | ALU_START);
 
-	/* wait to be finished */
-	ret = lan937x_wait_alu_ready(dev);
-	if (ret) {
-		dev_dbg(dev->dev, "Failed to read ALU\n");
-		goto exit;
-	}
+		/* wait to be finished */
+		ret = lan937x_wait_alu_ready(i, dev);
+		if (ret) {
+			dev_dbg(dev->dev, "Failed to read ALU\n");
+			goto exit;
+		}
 
-	ksz_read32(dev, REG_SW_ALU_VAL_A, &alu_table[0]);
-	if (alu_table[0] & ALU_V_STATIC_VALID) {
-		ksz_read32(dev, REG_SW_ALU_VAL_B, &alu_table[1]);
-		ksz_read32(dev, REG_SW_ALU_VAL_C, &alu_table[2]);
-		ksz_read32(dev, REG_SW_ALU_VAL_D, &alu_table[3]);
+		ksz_read32(dev, REG_SW_ALU_VAL_A, &alu_table[0]);
+		if (alu_table[0] & ALU_V_STATIC_VALID) {
+			ksz_read32(dev, REG_SW_ALU_VAL_B, &alu_table[1]);
+			ksz_read32(dev, REG_SW_ALU_VAL_C, &alu_table[2]);
+			ksz_read32(dev, REG_SW_ALU_VAL_D, &alu_table[3]);
 
-		/* clear forwarding port - switch logical port number has to be set
-		 * based on the port arg when updating alu table registers
-		 */
-		alu_table[1] &= ~BIT(port);
+			/* clear forwarding port */
+			alu_table[1] &= ~BIT(port);
 
-		/* if there is no port to forward, clear table */
-		if ((alu_table[1] & ALU_V_PORT_MAP) == 0) {
+			/* if there is no port to forward, clear table */
+			if ((alu_table[1] & ALU_V_PORT_MAP) == 0) {
+				alu_table[0] = 0;
+				alu_table[1] = 0;
+				alu_table[2] = 0;
+				alu_table[3] = 0;
+			}
+		} else {
 			alu_table[0] = 0;
 			alu_table[1] = 0;
 			alu_table[2] = 0;
 			alu_table[3] = 0;
 		}
-	} else {
-		alu_table[0] = 0;
-		alu_table[1] = 0;
-		alu_table[2] = 0;
-		alu_table[3] = 0;
+
+		lan937x_write_table(dev, alu_table);
+
+		ksz_write32(dev, REG_SW_ALU_CTRL(i), ALU_WRITE | ALU_START);
+
+		/* wait to be finished */
+		ret = lan937x_wait_alu_ready(i, dev);
+		if (ret)
+			dev_dbg(dev->dev, "Failed to write ALU\n");
 	}
-
-	lan937x_write_table(dev, alu_table);
-
-	ksz_write32(dev, REG_SW_ALU_CTRL__4, ALU_WRITE | ALU_START);
-
-	/* wait to be finished */
-	ret = lan937x_wait_alu_ready(dev);
-	if (ret)
-		dev_dbg(dev->dev, "Failed to write ALU\n");
 
 exit:
 	mutex_unlock(&dev->alu_mutex);
@@ -539,45 +553,46 @@ static int lan937x_port_fdb_dump(struct dsa_switch *ds, int port,
 	struct lan_alu_struct alu;
 	u32 lan937x_data;
 	u32 alu_table[4];
+	int ret, i;
 	int timeout;
-	int ret;
 
 	mutex_lock(&dev->alu_mutex);
 
-	/* start ALU search */
-	ksz_write32(dev, REG_SW_ALU_CTRL__4, ALU_START | ALU_SEARCH);
+	for (i = 0; i < ALU_STA_DYN_CNT; i++) {
+		/* start ALU search */
+		ksz_write32(dev, REG_SW_ALU_CTRL(i), ALU_START | ALU_SEARCH);
 
-	do {
-		timeout = 1000;
 		do {
-			ksz_read32(dev, REG_SW_ALU_CTRL__4, &lan937x_data);
-			if ((lan937x_data & ALU_VALID) || !(lan937x_data & ALU_START))
-				break;
-			usleep_range(1, 10);
-		} while (timeout-- > 0);
+			timeout = 1000;
+			do {
+				ksz_read32(dev, REG_SW_ALU_CTRL(i), &lan937x_data);
+				if ((lan937x_data & ALU_VALID) || !(lan937x_data & ALU_START))
+					break;
+				usleep_range(1, 10);
+			} while (timeout-- > 0);
 
-		if (!timeout) {
-			dev_dbg(dev->dev, "Failed to search ALU\n");
-			ret = -ETIMEDOUT;
-			goto exit;
-		}
-
-		/* read ALU table */
-		lan937x_read_table(dev, alu_table);
-
-		lan937x_convert_alu(&alu, alu_table);
-
-		if (alu.port_forward & BIT(port)) {
-			ret = cb(alu.mac, alu.fid, alu.is_static, data);
-			if (ret)
+			if (!timeout) {
+				dev_dbg(dev->dev, "Failed to search ALU\n");
+				ret = -ETIMEDOUT;
 				goto exit;
-		}
-	} while (lan937x_data & ALU_START);
+			}
 
-exit:
+			/* read ALU table */
+			lan937x_read_table(dev, alu_table);
 
-	/* stop ALU search */
-	ksz_write32(dev, REG_SW_ALU_CTRL__4, 0);
+			lan937x_convert_alu(&alu, alu_table);
+
+			if (alu.port_forward & BIT(port)) {
+				ret = cb(alu.mac, alu.fid, alu.is_static, data);
+				if (ret)
+					goto exit;
+			}
+		} while (lan937x_data & ALU_START);
+
+		exit:
+			/* stop ALU search & continue to next ALU if available */
+			ksz_write32(dev, REG_SW_ALU_CTRL(i), 0);
+	}
 
 	mutex_unlock(&dev->alu_mutex);
 
@@ -635,7 +650,7 @@ static void lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 
 	/* add entry */
 	static_table[0] = ALU_V_STATIC_VALID;
-	/* set logical port number based on the port arg */
+
 	static_table[1] |= BIT(port);
 	if (fid)
 		static_table[1] |= ALU_V_USE_FID;
@@ -704,7 +719,7 @@ static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
 	if (index == dev->num_statics)
 		goto exit;
 
-	/* clear logical port based on port arg */
+	/* clear port based on port arg */
 	static_table[1] &= ~BIT(port);
 
 	if ((static_table[1] & ALU_V_PORT_MAP) == 0) {
