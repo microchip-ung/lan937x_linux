@@ -289,6 +289,10 @@
 
 #define REG_SW_ALU_CTRL__4		0x0418
 
+#define REG_SW_ALU_CTRL(num)	(REG_SW_ALU_CTRL__4 + (num * 4))
+
+#define ALU_STA_DYN_CNT			2
+
 #define ALU_VALID_CNT_M			(BIT(14) - 1)
 #define ALU_VALID_CNT_S			16
 #define ALU_START			BIT(7)
@@ -331,7 +335,7 @@
 
 #define ALU_V_OVERRIDE			BIT(31)
 #define ALU_V_USE_FID			BIT(30)
-#define ALU_V_PORT_MAP			(BIT(24) - 1)
+#define ALU_V_PORT_MAP			0xFF
 
 #define REG_SW_ALU_VAL_C		0x0428
 

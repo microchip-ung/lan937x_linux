@@ -478,10 +478,10 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 		/* clear forwarding port - switch logical port number has to be set
 		 * based on the port arg when updating alu table registers
 		 */
-		alu_table[2] &= ~BIT(port);
+		alu_table[1] &= ~BIT(port);
 
 		/* if there is no port to forward, clear table */
-		if ((alu_table[2] & ALU_V_PORT_MAP) == 0) {
+		if ((alu_table[1] & ALU_V_PORT_MAP) == 0) {
 			alu_table[0] = 0;
 			alu_table[1] = 0;
 			alu_table[2] = 0;
