@@ -280,7 +280,6 @@
 
 #define ALU_FID_INDEX_S			16
 #define ALU_FID_SIZE			127
-#define ALU_GET_FID(vid)		(vid % (ALU_FID_SIZE - 1))
 #define ALU_MAC_ADDR_HI			0xFFFF
 
 #define REG_SW_ALU_INDEX_1		0x0414
@@ -289,7 +288,7 @@
 
 #define REG_SW_ALU_CTRL__4		0x0418
 
-#define REG_SW_ALU_CTRL(num)	(REG_SW_ALU_CTRL__4 + (num * 4))
+#define REG_SW_ALU_CTRL(num)	(REG_SW_ALU_CTRL__4 + ((num) * 4))
 
 #define ALU_STA_DYN_CNT			2
 
@@ -345,7 +344,7 @@
 
 #define REG_SW_ALU_VAL_D		0x042C
 
-#define PORT_CTRL_ADDR(port, addr)	((addr) | ((port+1)  << 12))
+#define PORT_CTRL_ADDR(port, addr)	((addr) | (((port) + 1)  << 12))
 
 #define REG_GLOBAL_RR_INDEX__1		0x0600
 
@@ -1077,7 +1076,6 @@
 #define PORT_UNK_MCAST_ENABLE		BIT(15)
 #define PORT_UNK_VID_ENABLE		BIT(15)
 
-
 /* Default values are used in lan937x_sw.h if these are not defined. */
 #define PRIO_QUEUES			8
 #define RX_PRIO_QUEUES			8
@@ -1164,7 +1162,7 @@
 #define SGMII_PORT_NUM		4
 #define TXPHY_PORT_NUM		4
 
-#define GET_CHIP_ID_LSB(chip_id) 	((chip_id >> 8) & 0xff)
+#define GET_CHIP_ID_LSB(chip_id)	(((chip_id) >> 8) & 0xff)
 #define LAN937X_RGMII_2_PORT		(RGMII_2_PORT_NUM - 1)
 #define LAN937X_RGMII_1_PORT		(RGMII_1_PORT_NUM - 1)
 #define LAN937X_SGMII_PORT			(SGMII_PORT_NUM - 1)

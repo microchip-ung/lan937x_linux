@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-only
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 %YAML 1.2
 ---
 $id: http://devicetree.org/schemas/net/dsa/microchip,lan937x.yaml#
@@ -47,7 +47,7 @@ unevaluatedProperties: false
 examples:
   - |
     #include <dt-bindings/gpio/gpio.h>
-    
+
     //Ethernet switch connected via spi to the host, CPU port wired to eth1
     eth1 {
       #address-cells = <1>;
@@ -71,7 +71,7 @@ examples:
             reg = <0>;
 
             spi-max-frequency = <44000000>;
-        
+
             ethernet-ports {
               #address-cells = <1>;
               #size-cells = <0>;
@@ -150,7 +150,7 @@ examples:
               };
             };
           };
-          
+
           lan9372: switch@2 {
             compatible = "microchip,lan9372";
             reg = <2>;
@@ -186,7 +186,7 @@ examples:
               };
               port@6 {
                 reg = <4>;
-                label = "cpu";              
+                label = "cpu";
                 ethernet = <&eth1>;
                 phy-mode = "rmii";
                 fixed-link {
@@ -205,7 +205,7 @@ examples:
               };
             };
           };
-          
+
           lan9373: switch@3 {
             compatible = "microchip,lan9373";
             reg = <3>;
@@ -265,7 +265,7 @@ examples:
               };
             };
           };
-          
+
           lan9374: switch@4 {
             compatible = "microchip,lan9374";
             reg = <4>;

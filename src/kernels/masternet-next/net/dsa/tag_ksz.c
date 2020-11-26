@@ -190,8 +190,7 @@ static const struct dsa_device_ops ksz9893_netdev_ops = {
 DSA_TAG_DRIVER(ksz9893_netdev_ops);
 MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
 
-/*
- * For Ingress (Host -> LAN937x), 2 bytes are added before FCS.
+/* For Ingress (Host -> LAN937x), 2 bytes are added before FCS.
  * ---------------------------------------------------------------------------
  * DA(6bytes)|SA(6bytes)|....|Data(nbytes)|tag0(1byte)|tag1(1byte)|FCS(4bytes)
  * ---------------------------------------------------------------------------
@@ -211,10 +210,6 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
 #define LAN937X_TAIL_TAG_LOOKUP		BIT(12)
 #define LAN937X_TAIL_TAG_VALID		BIT(13)
 
-/* Find appropriate slave based on the logical port.
- * Logical port number is stored for each slave of dsa_port priv data 
- * during probe
- */
 static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 				    struct net_device *dev)
 {

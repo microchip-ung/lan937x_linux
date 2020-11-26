@@ -372,7 +372,7 @@ static u8 lan937x_get_fid(u16 vid)
 		fid = (vid % ALU_FID_SIZE) + 1;
 	else
 		fid = vid;
-	
+
 	return fid;
 }
 
@@ -382,10 +382,10 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 	struct ksz_device *dev = ds->priv;
 	u8 fid = lan937x_get_fid(vid);
 	u32 alu_table[4];
-	int ret,i;
+	int ret, i;
 	u32 data;
 	u8 val;
-	
+
 	mutex_lock(&dev->alu_mutex);
 
 	for (i = 0; i < ALU_STA_DYN_CNT; i++) {
@@ -444,7 +444,7 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 		if (val & WRITE_FAIL_INT)
 			val = WRITE_FAIL_INT;
 		else
-			goto exit;	
+			goto exit;
 	}
 
 exit:
@@ -589,7 +589,7 @@ static int lan937x_port_fdb_dump(struct dsa_switch *ds, int port,
 			}
 		} while (lan937x_data & ALU_START);
 
-		exit:
+exit:
 			/* stop ALU search & continue to next ALU if available */
 			ksz_write32(dev, REG_SW_ALU_CTRL(i), 0);
 	}
@@ -878,8 +878,7 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 			if (!p->interface) {
 				if (dev->compat_interface) {
 					dev_warn(dev->dev,
-						 "Using legacy switch \"phy-mode\" property, because it is missing on port %d node. "
-						 "Please update your device tree.\n",
+						 "Using legacy switch \"phy-mode\" property, because it is missing on port %d node. Please update your device tree.\n",
 						 i);
 					p->interface = dev->compat_interface;
 				} else {
@@ -1110,7 +1109,7 @@ int lan937x_switch_register(struct ksz_device *dev)
 	for (i = 0; i < dev->mib_port_cnt; ++i) {
 		if (!dsa_is_user_port(dev->ds, i))
 			continue;
-		
+
 		if (!lan937x_is_internal_phy_port(dev, i))
 			continue;
 
