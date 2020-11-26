@@ -331,7 +331,6 @@ static int lan937x_switch_detect(struct ksz_device *dev)
 	} else {
 		ret = -EINVAL;
 	}
-	pr_info("Reading Chip ID");
 	return ret;
 }
 
