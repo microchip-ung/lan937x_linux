@@ -4,6 +4,7 @@
 #ifndef _MLXSW_SPECTRUM_H
 #define _MLXSW_SPECTRUM_H
 
+#include <linux/ethtool.h>
 #include <linux/types.h>
 #include <linux/netdevice.h>
 #include <linux/rhashtable.h>
@@ -342,6 +343,7 @@ struct mlxsw_sp_port_type_speed_ops {
 				    u32 *p_eth_proto_cap,
 				    u32 *p_eth_proto_admin,
 				    u32 *p_eth_proto_oper);
+	u32 (*ptys_proto_cap_masked_get)(u32 eth_proto_cap);
 };
 
 static inline struct net_device *

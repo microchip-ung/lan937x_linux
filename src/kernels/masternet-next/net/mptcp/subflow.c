@@ -578,6 +578,10 @@ create_child:
 			 */
 			inet_sk_state_store((void *)new_msk, TCP_ESTABLISHED);
 
+			/* link the newly created socket to the msk */
+			mptcp_add_pending_subflow(mptcp_sk(new_msk), ctx);
+			WRITE_ONCE(mptcp_sk(new_msk)->first, child);
+
 			/* new mpc subflow takes ownership of the newly
 			 * created mptcp socket
 			 */
@@ -846,8 +850,6 @@ static void mptcp_subflow_discard_data(struct sock *ssk, struct sk_buff *skb,
 		sk_eat_skb(ssk, skb);
 	if (mptcp_subflow_get_map_offset(subflow) >= subflow->map_data_len)
 		subflow->map_valid = 0;
-	if (incr)
-		tcp_cleanup_rbuf(ssk, incr);
 }
 
 static bool subflow_check_data_avail(struct sock *ssk)
@@ -969,7 +971,7 @@ void mptcp_space(const struct sock *ssk, int *space, int *full_space)
 	const struct mptcp_subflow_context *subflow = mptcp_subflow_ctx(ssk);
 	const struct sock *sk = subflow->conn;
 
-	*space = tcp_space(sk);
+	*space = __mptcp_space(sk);
 	*full_space = tcp_full_space(sk);
 }
 
@@ -997,17 +999,16 @@ static void subflow_data_ready(struct sock *sk)
 static void subflow_write_space(struct sock *sk)
 {
 	struct mptcp_subflow_context *subflow = mptcp_subflow_ctx(sk);
+	struct socket *sock = READ_ONCE(sk->sk_socket);
 	struct sock *parent = subflow->conn;
 
 	if (!sk_stream_is_writeable(sk))
 		return;
 
-	if (sk_stream_is_writeable(parent)) {
-		set_bit(MPTCP_SEND_SPACE, &mptcp_sk(parent)->flags);
-		smp_mb__after_atomic();
-		/* set SEND_SPACE before sk_stream_write_space clears NOSPACE */
-		sk_stream_write_space(parent);
-	}
+	if (sock && sk_stream_is_writeable(parent))
+		clear_bit(SOCK_NOSPACE, &sock->flags);
+
+	sk_stream_write_space(parent);
 }
 
 static struct inet_connection_sock_af_ops *
@@ -1125,13 +1126,11 @@ int __mptcp_subflow_connect(struct sock *sk, const struct mptcp_addr_info *loc,
 	if (err && err != -EINPROGRESS)
 		goto failed;
 
-	spin_lock_bh(&msk->join_list_lock);
-	list_add_tail(&subflow->node, &msk->join_list);
-	spin_unlock_bh(&msk->join_list_lock);
-
+	mptcp_add_pending_subflow(msk, subflow);
 	return err;
 
 failed:
+	subflow->disposable = 1;
 	sock_release(sf);
 	return err;
 }
@@ -1254,7 +1253,6 @@ static void subflow_state_change(struct sock *sk)
 		mptcp_data_ready(parent, sk);
 
 	if (__mptcp_check_fallback(mptcp_sk(parent)) &&
-	    !(parent->sk_shutdown & RCV_SHUTDOWN) &&
 	    !subflow->rx_eof && subflow_is_done(sk)) {
 		subflow->rx_eof = 1;
 		mptcp_subflow_eof(parent);
@@ -1297,17 +1295,26 @@ out:
 	return err;
 }
 
-static void subflow_ulp_release(struct sock *sk)
+static void subflow_ulp_release(struct sock *ssk)
 {
-	struct mptcp_subflow_context *ctx = mptcp_subflow_ctx(sk);
+	struct mptcp_subflow_context *ctx = mptcp_subflow_ctx(ssk);
+	bool release = true;
+	struct sock *sk;
 
 	if (!ctx)
 		return;
 
-	if (ctx->conn)
-		sock_put(ctx->conn);
+	sk = ctx->conn;
+	if (sk) {
+		/* if the msk has been orphaned, keep the ctx
+		 * alive, will be freed by mptcp_done()
+		 */
+		release = ctx->disposable;
+		sock_put(sk);
+	}
 
-	kfree_rcu(ctx, rcu);
+	if (release)
+		kfree_rcu(ctx, rcu);
 }
 
 static void subflow_ulp_clone(const struct request_sock *req,

@@ -77,7 +77,6 @@ struct ksz_device {
 	u32 regs_size;
 	bool phy_errata_9477;
 	bool synclko_125;
-	u8 tx_phy_log_prt;
 
 	struct vlan_table *vlan_cache;
 

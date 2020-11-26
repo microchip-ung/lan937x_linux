@@ -25,6 +25,7 @@
 #include <linux/dcbnl.h>
 #include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/ethtool.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/pci.h>
@@ -278,6 +279,7 @@ struct hnae3_dev_specs {
 	u16 rss_ind_tbl_size;
 	u16 rss_key_size;
 	u16 int_ql_max; /* max value of interrupt coalesce based on INT_QL */
+	u16 max_int_gl; /* max value of interrupt coalesce based on INT_GL */
 	u8 max_non_tso_bd_num; /* max BD number of one non-TSO packet */
 };
 
@@ -688,6 +690,7 @@ struct hnae3_knic_private_info {
 struct hnae3_roce_private_info {
 	struct net_device *netdev;
 	void __iomem *roce_io_base;
+	void __iomem *roce_mem_base;
 	int base_vector;
 	int num_vectors;
 

@@ -111,6 +111,9 @@ enum hclgevf_opcode_type {
 #define HCLGEVF_TQP_REG_OFFSET		0x80000
 #define HCLGEVF_TQP_REG_SIZE		0x200
 
+#define HCLGEVF_TQP_MAX_SIZE_DEV_V2	1024
+#define HCLGEVF_TQP_EXT_REG_OFFSET	0x100
+
 struct hclgevf_tqp_map {
 	__le16 tqp_id;	/* Absolute tqp id for in this pf */
 	u8 tqp_vf; /* VF id */
@@ -283,6 +286,14 @@ struct hclgevf_dev_specs_0_cmd {
 	__le16 int_ql_max;
 	u8 max_non_tso_bd_num;
 	u8 rsv1[5];
+};
+
+#define HCLGEVF_DEF_MAX_INT_GL		0x1FE0U
+
+struct hclgevf_dev_specs_1_cmd {
+	__le32 rsv0;
+	__le16 max_int_gl;
+	u8 rsv1[18];
 };
 
 static inline void hclgevf_write_reg(void __iomem *base, u32 reg, u32 value)

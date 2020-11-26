@@ -176,7 +176,7 @@ static inline struct nvme_request *nvme_req(struct request *req)
 
 static inline u16 nvme_req_qid(struct request *req)
 {
-	if (!req->rq_disk)
+	if (!req->q->queuedata)
 		return 0;
 	return blk_mq_unique_tag_to_hwq(blk_mq_unique_tag(req)) + 1;
 }
@@ -602,6 +602,7 @@ void nvme_stop_queues(struct nvme_ctrl *ctrl);
 void nvme_start_queues(struct nvme_ctrl *ctrl);
 void nvme_kill_queues(struct nvme_ctrl *ctrl);
 void nvme_sync_queues(struct nvme_ctrl *ctrl);
+void nvme_sync_io_queues(struct nvme_ctrl *ctrl);
 void nvme_unfreeze(struct nvme_ctrl *ctrl);
 void nvme_wait_freeze(struct nvme_ctrl *ctrl);
 int nvme_wait_freeze_timeout(struct nvme_ctrl *ctrl, long timeout);
