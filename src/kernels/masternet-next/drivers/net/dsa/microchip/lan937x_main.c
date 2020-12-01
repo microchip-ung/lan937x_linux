@@ -2105,7 +2105,7 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 	for (port = 0; port < dev->port_cnt; port++) {
 		if (data & BIT(port)) {
 			u8 data8;
-			u8 tempPort = 3; //todo arun remove it.
+			u8 tempPort = (port + 1); //todo arun remove it.
 			
 			/* Read port interrupt status register */
 			ret = ksz_read8(dev, PORT_CTRL_ADDR(tempPort, REG_PORT_INT_STATUS),
