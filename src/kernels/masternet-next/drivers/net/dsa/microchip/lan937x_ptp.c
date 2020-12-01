@@ -1103,6 +1103,8 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 	struct ksz_device *dev  = ds->priv;
 	struct ksz_port *prt = &dev->ports[port];
 	struct ptp_header *hdr;
+       enum ksz9477_ptp_event_messages msg_type;
+		struct skb_shared_hwtstamps shhwtstamps;
 
 	if (!(skb_shinfo(clone)->tx_flags & SKBTX_HW_TSTAMP))
 		return false;
@@ -1112,15 +1114,41 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 		return false;
 
 
-	if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_IN_PROGRESS, 
-				&prt->tstamp_state))
-		return false;
+       msg_type = ptp_get_msgtype(hdr, type);
 
-	prt->tstamp_tx_xdelay_skb = clone;
-	prt->tx_tstamp_start = jiffies;
+       switch (msg_type) {
+       /* As the KSZ9563 always performs one step time stamping, only the time
+        * stamp for Delay_Req and Pdelay_Req are reported to the application
+        * via socket error queue. Time stamps for Sync and Pdelay_resp will be
+        * applied directly to the outgoing message (e.g. correction field), but
+        * will NOT be reported to the socket.
+        */
+       case PTP_Event_Message_Pdelay_Req:
+               if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_XDELAY_IN_PROGRESS,
+                                         &prt->tstamp_state))
+                       return false;  /* free cloned skb */
+
+               prt->tstamp_tx_xdelay_skb = clone;
+               break;
+
+	case PTP_Event_Message_Sync:
+               //if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_SYNC_IN_PROGRESS,
+                //                         &prt->tstamp_state))
+                 //      return false;  /* free cloned skb */
+
+               //prt->tstamp_tx_sync_skb = clone;
+		shhwtstamps.hwtstamp = lan937x_tstamp_to_clock(dev, 0x1234);
+		skb_complete_tx_timestamp(clone, &shhwtstamps);
+	       break;
+
+       default:
+               return false;  /* free cloned skb */
+       }
+	
+       prt->tx_tstamp_start = jiffies;
 	prt->tx_seq_id = be16_to_cpu(hdr->sequence_id);
 
-	ptp_schedule_worker(dev->ptp_clock, 0);
+	//ptp_schedule_worker(dev->ptp_clock, 0);
 	return true;
 }
 
@@ -1238,9 +1266,9 @@ static int lan937x_ptp_settime(struct ptp_clock_info *ptp,
 	if (ret)
 		goto error_return;
 
-	spin_lock_irqsave(&dev->ptp_clock_lock, flags);
+	spin_lock_bh(&dev->ptp_clock_lock);
 	dev->ptp_clock_time = *ts;
-	spin_unlock_irqrestore(&dev->ptp_clock_lock, flags);
+	spin_unlock_bh(&dev->ptp_clock_lock);
 
 error_return:
 	mutex_unlock(&dev->ptp_mutex);
@@ -1255,6 +1283,8 @@ static int lan937x_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
 	u16 data16;
 	int ret;
+
+	mutex_lock(&dev->ptp_mutex);
 
 	if (scaled_ppm) {
 		/* basic calculation:
@@ -1281,12 +1311,12 @@ static int lan937x_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 
 		ret = ksz_write32(dev, REG_PTP_SUBNANOSEC_RATE, data32);
 		if (ret)
-			return ret;
+			goto error_return;
 	}
 
 	ret = ksz_read16(dev, REG_PTP_CLK_CTRL, &data16);
 	if (ret)
-		return ret;
+		goto error_return;
 
 	if (scaled_ppm)
 		data16 |= PTP_CLK_ADJ_ENABLE;
@@ -1295,9 +1325,11 @@ static int lan937x_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 
 	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
 	if (ret)
-		return ret;
+		goto error_return;
 
-	return 0; 
+error_return:
+	mutex_unlock(&dev->ptp_mutex);
+	return ret;
 }
 
 
@@ -1330,17 +1362,21 @@ static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 
 	data16 |= PTP_STEP_ADJ;
 	if (delta < 0)
+	{
 		data16 &= ~PTP_STEP_DIR;  /* 0: subtract */
+	}
 	else
+	{
 		data16 |= PTP_STEP_DIR;   /* 1: add */
+	}
 
 	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
 	if (ret)
 		goto error_return;
 
-	spin_lock_irqsave(&dev->ptp_clock_lock, flags);
+	spin_lock_bh(&dev->ptp_clock_lock);
 	dev->ptp_clock_time = timespec64_add(dev->ptp_clock_time, delta64);
-	spin_unlock_irqrestore(&dev->ptp_clock_lock, flags);
+	spin_unlock_bh(&dev->ptp_clock_lock);
 
 error_return:
 	mutex_unlock(&dev->ptp_mutex);
@@ -1352,7 +1388,7 @@ error_return:
  */
 static long lan937x_ptp_do_aux_work(struct ptp_clock_info *ptp)
 {
-	struct ksz_device *dev = container_of(ptp, struct ksz_device, ptp_caps);
+	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
 	struct timespec64 ts;
 	unsigned long flags;
 
@@ -1360,11 +1396,11 @@ static long lan937x_ptp_do_aux_work(struct ptp_clock_info *ptp)
 	_lan937x_ptp_gettime(dev, &ts);
 	mutex_unlock(&dev->ptp_mutex);
 
-	spin_lock_irqsave(&dev->ptp_clock_lock, flags);
+	spin_lock_bh(&dev->ptp_clock_lock);
 	dev->ptp_clock_time = ts;
-	spin_unlock_irqrestore(&dev->ptp_clock_lock, flags);
+	spin_unlock_bh(&dev->ptp_clock_lock);
 
-	return HZ;  /* reschedule in 1 second */
+	return 1; //HZ;  /* reschedule in 1 second */
 }
 
 static int lan937x_ptp_start_clock(struct ksz_device *dev)
@@ -1378,12 +1414,12 @@ static int lan937x_ptp_start_clock(struct ksz_device *dev)
 		return ret;
 
 	/* Perform PTP clock reset */
-	data |= PTP_CLK_RESET;
+/*	data |= PTP_CLK_RESET;
 	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data);
 	if (ret)
 		return ret;
 	data &= ~PTP_CLK_RESET;
-
+*/
 	/* Enable PTP clock */
 	data |= PTP_CLK_ENABLE;
 	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data);
@@ -1639,6 +1675,9 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 	struct ksz_device *dev  = ds->priv;
 	int ret;
 
+	mutex_init(&dev->ptp_mutex);
+	spin_lock_init(&dev->ptp_clock_lock);
+
 	dev->ptp_caps = (struct ptp_clock_info) {
 		.owner		= THIS_MODULE,
 		.name		= "Microchip Clock",
@@ -1711,27 +1750,45 @@ void lan937x_ptp_deinit(struct dsa_switch *ds)
 irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 {
 	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_STATUS__2);
+	u32 enable_addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
 	struct ksz_port *prt = &dev->ports[port - 1];
 	irqreturn_t result = IRQ_NONE;
 	u16 data;
 	int ret;
 
+	
 	ret = ksz_read16(dev, addr, &data);
 	if (ret)
 		return IRQ_NONE;
 
-	if (((data & PTP_PORT_XDELAY_REQ_INT) || (data & PTP_PORT_SYNC_INT)) && prt->tstamp_tx_xdelay_skb) {
+
+//	if (((data & PTP_PORT_XDELAY_REQ_INT) || (data & PTP_PORT_SYNC_INT)) && prt->tstamp_tx_xdelay_skb) {
+	if ((data & PTP_PORT_XDELAY_REQ_INT) || (data & PTP_PORT_SYNC_INT)) {
 		/* Timestamp for Pdelay_Req / Delay_Req */
 		u32 tstamp_raw;
 		ktime_t tstamp;
 		struct skb_shared_hwtstamps shhwtstamps;
 		struct sk_buff *tmp_skb;
+		u32 regaddr;
+		u16 portInt;
+
+		if(data & PTP_PORT_XDELAY_REQ_INT)
+		{
+			regaddr = PORT_CTRL_ADDR(port, REG_PTP_PORT_XDELAY_TS);
+			portInt = PTP_PORT_XDELAY_REQ_INT;
+		}
+		else
+		{
+			regaddr = PORT_CTRL_ADDR(port, REG_PTP_PORT_SYNC_TS);
+			portInt = PTP_PORT_SYNC_INT;
+			pr_err("interrupt sync\n");
+		}
 
 		/* In contrast to the KSZ9563R data sheet, the format of the
 		 * port time stamp registers is also 2 bit seconds + 30 bit
 		 * nanoseconds (same as in the tail tags).
 		 */
-		ret = ksz_read32(dev, PORT_CTRL_ADDR(port, REG_PTP_PORT_XDELAY_TS), &tstamp_raw);
+		ret = ksz_read32(dev, regaddr, &tstamp_raw);
 		if (ret)
 			return result;
 
@@ -1744,16 +1801,26 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 		 * -- by clearing the ps->tx_skb "flag" -- beforehand.
 		 */
 
+		if(data & PTP_PORT_XDELAY_REQ_INT)
+		{
 		tmp_skb = prt->tstamp_tx_xdelay_skb;
 		prt->tstamp_tx_xdelay_skb = NULL;
-		clear_bit_unlock(LAN937X_HWTSTAMP_TX_IN_PROGRESS, &prt->tstamp_state);
-		skb_complete_tx_timestamp(tmp_skb, &shhwtstamps);
-	}
+		clear_bit_unlock(LAN937X_HWTSTAMP_TX_XDELAY_IN_PROGRESS, &prt->tstamp_state);
+		}
+		else
+		{
+		tmp_skb = prt->tstamp_tx_sync_skb;
+		prt->tstamp_tx_sync_skb = NULL;
+		clear_bit_unlock(LAN937X_HWTSTAMP_TX_SYNC_IN_PROGRESS, &prt->tstamp_state);
 
-	/* Clear interrupt(s) (W1C) */
-	ret = ksz_write16(dev, addr, data);
-	if (ret)
-		return IRQ_NONE;
+		}
+		skb_complete_tx_timestamp(tmp_skb, &shhwtstamps);
+
+		/* Clear interrupt(s) (W1C) */
+		ret = ksz_write16(dev, addr, portInt);
+		if (ret)
+			return IRQ_NONE;
+	}
 
 	return IRQ_HANDLED;
 }
