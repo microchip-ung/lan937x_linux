@@ -55,6 +55,7 @@ struct ksz_port {
 	struct hwtstamp_config tstamp_config;
 	unsigned long tx_tstamp_start;
 	struct sk_buff *tstamp_tx_xdelay_skb;
+	struct sk_buff *tstamp_tx_sync_skb;
 	u16 tx_seq_id;
 	u16 tstamp_rx_latency_ns;   /* rx delay from wire to tstamp unit */
 	u16 tstamp_tx_latency_ns;   /* tx delay from tstamp unit to wire */

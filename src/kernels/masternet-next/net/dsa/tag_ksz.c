@@ -6,6 +6,7 @@
 
 #include "../../drivers/net/dsa/microchip/ksz_common.h"
 #include <linux/etherdevice.h>
+#include <linux/ptp_classify.h>
 #include <linux/list.h>
 #include <linux/slab.h>
 #include <net/dsa.h>
@@ -273,7 +274,47 @@ static void lan937x_rcv_timestamp(struct sk_buff *skb __maybe_unused, u8 *tag __
                                  struct net_device *dev __maybe_unused,
                                  unsigned int port __maybe_unused)
 {
+	struct skb_shared_hwtstamps *hwtstamps = skb_hwtstamps(skb);
+	u8 *tstamp_raw = tag - KSZ9477_PTP_TAG_LEN;
+//	enum ksz9477_ptp_event_messages msg_type;
+	struct dsa_switch *ds = dev->dsa_ptr->ds;
+	struct ksz_device *ksz = ds->priv;
+	struct ksz_port *prt = &ksz->ports[port];
+	struct ptp_header *ptp_hdr;
+	unsigned int ptp_type;
+	ktime_t tstamp;
+	u8 data;
 
+	/* convert time stamp and write to skb */
+	tstamp = ksz9477_decode_tstamp(get_unaligned_be32(tstamp_raw),
+				       -prt->tstamp_rx_latency_ns);
+	memset(hwtstamps, 0, sizeof(*hwtstamps));
+	hwtstamps->hwtstamp = lan937x_tstamp_to_clock(ksz, tstamp);
+
+	__skb_push(skb, ETH_HLEN);
+	ptp_type = ptp_classify_raw(skb);
+	__skb_pull(skb, ETH_HLEN);
+
+/*	pr_err("debug 1\n");
+	if (ptp_type == PTP_CLASS_NONE)
+		return;
+*/
+	ptp_hdr = ptp_parse_header(skb, ptp_type);
+	if (!ptp_hdr)
+		return;
+
+	data = ptp_get_msgtype(ptp_hdr, ptp_type);
+	/*if(data == 0)
+	pr_err("packet recv is sync\n");
+	else if(data == 2)
+	pr_err("packet recv is pdelay_req\n");
+	else if(data == 3)
+		pr_err("data recv is delay_resp\n");
+	else
+		pr_err("data recv is %d\n", data);
+	*/	
+	//if (msg_type != PTP_Event_Message_Pdelay_Req)
+//		return;
 }
 
 #else
