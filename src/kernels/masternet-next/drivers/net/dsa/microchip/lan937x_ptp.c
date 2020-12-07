@@ -1131,14 +1131,24 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
                prt->tstamp_tx_xdelay_skb = clone;
                break;
 
-	case PTP_Event_Message_Sync:
-               //if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_SYNC_IN_PROGRESS,
-                //                         &prt->tstamp_state))
-                 //      return false;  /* free cloned skb */
+       case PTP_Event_Message_Pdelay_Resp:
+               if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_XDELAY_RSP_IN_PROGRESS,
+                                         &prt->tstamp_state))
+                       return false;  /* free cloned skb */
 
-               //prt->tstamp_tx_sync_skb = clone;
-		shhwtstamps.hwtstamp = lan937x_tstamp_to_clock(dev, 0x1234);
-		skb_complete_tx_timestamp(clone, &shhwtstamps);
+               prt->tstamp_tx_xdelay_rsp_skb = clone;
+               break;
+
+
+
+	case PTP_Event_Message_Sync:
+               if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_SYNC_IN_PROGRESS,
+                                        &prt->tstamp_state))
+                     return false;  /* free cloned skb */
+
+               prt->tstamp_tx_sync_skb = clone;
+	//	shhwtstamps.hwtstamp = lan937x_tstamp_to_clock(dev, 0x1234);
+	//	skb_complete_tx_timestamp(clone, &shhwtstamps);
 	       break;
 
        default:
@@ -1597,6 +1607,43 @@ static int lan937x_ptp_disable_port_sync_interrupts(struct ksz_device *dev, int 
 	return 0;
 }
 
+static int lan937x_ptp_enable_port_xDelayRsp_interrupts(struct ksz_device *dev, int port)
+{
+	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, addr, &data);
+	if (ret)
+		return ret;
+
+	/* Enable port xdelay egress timestamp interrupt (1 means enabled) */
+	data |= PTP_PORT_PDELAY_RESP_INT;
+	ret = ksz_write16(dev, addr, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int lan937x_ptp_disable_port_xDelayRsp_interrupts(struct ksz_device *dev, int port)
+{
+	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, addr, &data);
+	if (ret)
+		return ret;
+
+	/* Disable port xdelay egress timestamp interrupts (0 means disabled) */
+	data &= PTP_PORT_PDELAY_RESP_INT;
+	ret = ksz_write16(dev, addr, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
 static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
 {
 	struct ksz_port *prt = &dev->ports[port];
@@ -1624,6 +1671,10 @@ static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
 		
 		ret = lan937x_ptp_enable_port_egress_interrupts(dev, port);
 		if (ret)
+			goto error_disable_port_ptp_interrupts;
+
+		ret = lan937x_ptp_enable_port_xDelayRsp_interrupts(dev, port);
+		if(ret)
 			goto error_disable_port_ptp_interrupts;
 	}
 
@@ -1668,6 +1719,69 @@ static void lan937x_ptp_ports_deinit(struct ksz_device *dev)
 
 	for (port = dev->port_cnt - 1; port >= 0; --port)
 		lan937x_ptp_port_deinit(dev, port);
+}
+
+enum ksz9477_ptp_tcmode {
+	KSZ9477_PTP_TCMODE_E2E,
+	KSZ9477_PTP_TCMODE_P2P,
+};
+
+static int ksz9477_ptp_tcmode_set(struct ksz_device *dev,
+				  enum ksz9477_ptp_tcmode tcmode)
+{
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
+	if (ret)
+		return ret;
+
+	if (tcmode == KSZ9477_PTP_TCMODE_P2P)
+		data |= PTP_TC_P2P;
+	else
+		data &= ~PTP_TC_P2P;
+
+	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
+}
+enum lan937x_ptp_ocmode {
+	KSZ9477_PTP_OCMODE_SLAVE,
+	KSZ9477_PTP_OCMODE_MASTER,
+};
+
+static int lan937x_ptp_ocmode_set(struct ksz_device *dev,
+				  enum lan937x_ptp_ocmode ocmode)
+{
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
+	if (ret)
+		return ret;
+
+	if (ocmode == KSZ9477_PTP_OCMODE_MASTER)
+		data |= PTP_INITIATOR;
+	else
+		data &= ~PTP_INITIATOR;
+
+	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
+}
+
+static int lan937x_ptp_twostep_set(struct ksz_device *dev,
+				 bool val)
+{
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
+	if (ret)
+		return ret;
+
+	if (val == 1)
+		data &= ~PTP_1STEP;		
+	else
+		data |= PTP_1STEP;		
+
+	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
 }
 
 int lan937x_ptp_init(struct dsa_switch *ds)
@@ -1716,6 +1830,9 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 	if (ret)
 		goto error_disable_mode;
 
+	ksz9477_ptp_tcmode_set(dev, KSZ9477_PTP_TCMODE_P2P);
+	lan937x_ptp_ocmode_set(dev, KSZ9477_PTP_OCMODE_MASTER);
+	lan937x_ptp_twostep_set(dev, 1);
 
 	/* Schedule cyclic call of ptp_do_aux_work() */
 	ret = ptp_schedule_worker(dev->ptp_clock, 0);
@@ -1763,7 +1880,7 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 
 
 //	if (((data & PTP_PORT_XDELAY_REQ_INT) || (data & PTP_PORT_SYNC_INT)) && prt->tstamp_tx_xdelay_skb) {
-	if ((data & PTP_PORT_XDELAY_REQ_INT) || (data & PTP_PORT_SYNC_INT)) {
+	if ((data & PTP_PORT_XDELAY_REQ_INT) || (data & PTP_PORT_SYNC_INT)|| (data & PTP_PORT_PDELAY_RESP_INT)) {
 		/* Timestamp for Pdelay_Req / Delay_Req */
 		u32 tstamp_raw;
 		ktime_t tstamp;
@@ -1777,11 +1894,20 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 			regaddr = PORT_CTRL_ADDR(port, REG_PTP_PORT_XDELAY_TS);
 			portInt = PTP_PORT_XDELAY_REQ_INT;
 		}
-		else
+		else if(data & PTP_PORT_PDELAY_RESP_INT)
+		{
+			regaddr = PORT_CTRL_ADDR(port, REG_PTP_PORT_PDRESP_TS);
+			portInt = PTP_PORT_PDELAY_RESP_INT;
+
+		}
+		else if(data & PTP_PORT_SYNC_INT)
 		{
 			regaddr = PORT_CTRL_ADDR(port, REG_PTP_PORT_SYNC_TS);
 			portInt = PTP_PORT_SYNC_INT;
-			pr_err("interrupt sync\n");
+		}
+		else
+		{
+
 		}
 
 		/* In contrast to the KSZ9563R data sheet, the format of the
@@ -1807,7 +1933,14 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 		prt->tstamp_tx_xdelay_skb = NULL;
 		clear_bit_unlock(LAN937X_HWTSTAMP_TX_XDELAY_IN_PROGRESS, &prt->tstamp_state);
 		}
-		else
+		else if(data & PTP_PORT_PDELAY_RESP_INT)
+		{
+		tmp_skb = prt->tstamp_tx_xdelay_rsp_skb;
+		prt->tstamp_tx_xdelay_rsp_skb = NULL;
+		clear_bit_unlock(LAN937X_HWTSTAMP_TX_XDELAY_RSP_IN_PROGRESS, &prt->tstamp_state);
+
+		}
+		else if(data & PTP_PORT_SYNC_INT)
 		{
 		tmp_skb = prt->tstamp_tx_sync_skb;
 		prt->tstamp_tx_sync_skb = NULL;
