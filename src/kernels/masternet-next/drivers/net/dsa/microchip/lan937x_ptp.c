@@ -874,8 +874,8 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 		goto error_disable_mode;
 
 	ksz9477_ptp_tcmode_set(dev, KSZ9477_PTP_TCMODE_P2P);
-	lan937x_ptp_ocmode_set(dev, KSZ9477_PTP_OCMODE_MASTER);
-	lan937x_ptp_twostep_set(dev, 1);
+//	lan937x_ptp_ocmode_set(dev, KSZ9477_PTP_OCMODE_MASTER);
+//	lan937x_ptp_twostep_set(dev, 1);
 
 	/* Schedule cyclic call of ptp_do_aux_work() */
 	ret = ptp_schedule_worker(dev->ptp_clock, 0);
