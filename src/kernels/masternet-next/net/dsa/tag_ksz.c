@@ -369,11 +369,11 @@ static void lan937x_xmit_timestamp(struct sk_buff *skb __maybe_unused)
 	u8 ptp_msg_type;
 	s64 correction;
 
-	if (!clone)
-		return;
+//	if (!clone)
+//		goto out_put_tag;
 
 	/* Use cached PTP type from ksz9477_ptp_port_txtstamp().  */
-	ptp_type = KSZ9477_SKB_CB(clone)->ptp_type;
+/*	ptp_type = KSZ9477_SKB_CB(clone)->ptp_type;
 	if (ptp_type == PTP_CLASS_NONE)
 	{
 		return;
@@ -386,6 +386,9 @@ static void lan937x_xmit_timestamp(struct sk_buff *skb __maybe_unused)
 	}
 
 	ptp_msg_type = KSZ9477_SKB_CB(clone)->ptp_msg_type;
+*/	
+out_put_tag:
+	put_unaligned_be32(tstamp_raw, skb_put(skb, LAN937X_PTP_TAG_LEN));
 }
 
 static void lan937x_rcv_timestamp(struct sk_buff *skb __maybe_unused, u8 *tag __maybe_unused,
