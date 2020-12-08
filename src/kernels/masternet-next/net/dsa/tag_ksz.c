@@ -349,45 +349,11 @@ ktime_t lan937x_tstamp_to_clock(struct ksz_device *ksz, u32 tstamp)
 }
 EXPORT_SYMBOL(lan937x_tstamp_to_clock);
 
-struct ksz9477_skb_cb {
-	unsigned int ptp_type;
-	/* Do not cache pointer to PTP header between ksz9477_ptp_port_txtstamp
-	 * and ksz9xxx_xmit() (will become invalid during dsa_realloc_skb()).
-	 */
-	u8 ptp_msg_type;
-};
-
-#define KSZ9477_SKB_CB(skb) \
-	((struct ksz9477_skb_cb *)DSA_SKB_CB_PRIV(skb))
 
 static void lan937x_xmit_timestamp(struct sk_buff *skb __maybe_unused) 
 { 
-	struct sk_buff *clone = DSA_SKB_CB(skb)->clone;
-	struct ptp_header *ptp_hdr;
-	unsigned int ptp_type;
 	u32 tstamp_raw = 0;
-	u8 ptp_msg_type;
-	s64 correction;
 
-//	if (!clone)
-//		goto out_put_tag;
-
-	/* Use cached PTP type from ksz9477_ptp_port_txtstamp().  */
-/*	ptp_type = KSZ9477_SKB_CB(clone)->ptp_type;
-	if (ptp_type == PTP_CLASS_NONE)
-	{
-		return;
-	}
-
-	ptp_hdr = ptp_parse_header(skb, ptp_type);
-	if (!ptp_hdr)
-	{
-		return;
-	}
-
-	ptp_msg_type = KSZ9477_SKB_CB(clone)->ptp_msg_type;
-*/	
-out_put_tag:
 	put_unaligned_be32(tstamp_raw, skb_put(skb, LAN937X_PTP_TAG_LEN));
 }
 
@@ -397,7 +363,6 @@ static void lan937x_rcv_timestamp(struct sk_buff *skb __maybe_unused, u8 *tag __
 {
 	struct skb_shared_hwtstamps *hwtstamps = skb_hwtstamps(skb);
 	u8 *tstamp_raw = tag - KSZ9477_PTP_TAG_LEN;
-//	enum ksz9477_ptp_event_messages msg_type;
 	struct dsa_switch *ds = dev->dsa_ptr->ds;
 	struct ksz_device *ksz = ds->priv;
 	struct ksz_port *prt = &ksz->ports[port];
