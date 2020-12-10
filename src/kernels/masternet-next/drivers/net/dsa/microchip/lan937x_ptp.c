@@ -1459,24 +1459,39 @@ static int lan937x_ptp_stop_clock(struct ksz_device *dev)
 
 /*Time Stamping support - accessing the register */
 static int lan937x_ptp_enable_mode(struct ksz_device *dev, bool enable) {
-       u16 data;
-       int ret;
+	u16 data;
+	int ret;
 
-       ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
-       if (ret)
-               return ret;
+	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
+	if (ret)
+		return ret;
 
-       /* Enable PTP mode */
-       if(enable)
-           data |= PTP_ENABLE;
-       else
-	       data &= ~PTP_ENABLE;
+	/* Enable PTP mode */
+	if(enable)
+		data |= PTP_ENABLE;
+	else
+		data &= ~PTP_ENABLE;
 
-       ret = ksz_write16(dev, REG_PTP_MSG_CONF1, data);
-       if (ret)
-               return ret;
+	ret = ksz_write16(dev, REG_PTP_MSG_CONF1, data);
+	if (ret)
+		return ret;
 
-       return 0;
+	return 0;
+
+	if (enable) {
+		/* Schedule cyclic call of ksz_ptp_do_aux_work() */
+		ret = ptp_schedule_worker(dev->ptp_clock, 0);
+		if (ret)
+			goto error_disable_mode;
+	} else {
+		ptp_cancel_worker_sync(dev->ptp_clock);
+	}
+
+	return 0;
+
+error_disable_mode:
+	ksz_write16(dev, REG_PTP_MSG_CONF1, data & ~PTP_ENABLE);
+	return ret;
 }
 
 
@@ -1841,15 +1856,9 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 //	lan937x_ptp_ocmode_set(dev, KSZ9477_PTP_OCMODE_MASTER);
 //	lan937x_ptp_twostep_set(dev, 1);
 
-	/* Schedule cyclic call of ptp_do_aux_work() */
-	ret = ptp_schedule_worker(dev->ptp_clock, 0);
-	if (ret)
-		goto error_ports_deinit;
 
  	return 0;
  
-error_ports_deinit:
-	lan937x_ptp_ports_deinit(dev);
 error_disable_mode:
 	lan937x_ptp_enable_mode(dev, false);
 error_unregister_clock:
