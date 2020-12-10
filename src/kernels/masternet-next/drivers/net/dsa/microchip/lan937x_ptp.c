@@ -1784,6 +1784,24 @@ static int lan937x_ptp_twostep_set(struct ksz_device *dev,
 	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
 }
 
+static int lan937x_ptp_8021as_set(struct ksz_device *dev,
+				 bool val)
+{
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
+	if (ret)
+		return ret;
+
+	if (val == 1)
+		data |= PTP_802_1AS;
+	else
+		data &= ~PTP_802_1AS;		
+
+	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
+}
+
 int lan937x_ptp_init(struct dsa_switch *ds)
 {
 	struct ksz_device *dev  = ds->priv;
@@ -1830,7 +1848,8 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 	if (ret)
 		goto error_disable_mode;
 
-	ksz9477_ptp_tcmode_set(dev, KSZ9477_PTP_TCMODE_P2P);
+	//ksz9477_ptp_tcmode_set(dev, KSZ9477_PTP_TCMODE_P2P);
+	lan937x_ptp_8021as_set(dev, 1);
 //	lan937x_ptp_ocmode_set(dev, KSZ9477_PTP_OCMODE_MASTER);
 //	lan937x_ptp_twostep_set(dev, 1);
 
