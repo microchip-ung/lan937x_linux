@@ -372,8 +372,7 @@ static void lan937x_rcv_timestamp(struct sk_buff *skb __maybe_unused, u8 *tag __
 	u8 data;
 
 	/* convert time stamp and write to skb */
-	tstamp = ksz9477_decode_tstamp(get_unaligned_be32(tstamp_raw),
-				       -prt->tstamp_rx_latency_ns);
+	tstamp = ksz9477_decode_tstamp(get_unaligned_be32(tstamp_raw));
 	memset(hwtstamps, 0, sizeof(*hwtstamps));
 	hwtstamps->hwtstamp = lan937x_tstamp_to_clock(ksz, tstamp);
 

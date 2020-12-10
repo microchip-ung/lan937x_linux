@@ -1652,39 +1652,39 @@ static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
 	struct ksz_port *prt = &dev->ports[port];
 	int ret;
 
-	/* Read rx and tx delay from port registers */
-	ret = ksz_read16(dev, PORT_CTRL_ADDR(port, REG_PTP_PORT_RX_DELAY__2),
-			 &prt->tstamp_rx_latency_ns);
+	if (port == dev->cpu_port)
+		return 0;
+
+	/* Set rx and tx latency to 0 (will be handled by user space) */
+	ret = ksz_write16(dev, PORT_CTRL_ADDR(port, REG_PTP_PORT_RX_DELAY__2),
+			0);
 	if (ret)
 		return ret;
 
-	ret = ksz_read16(dev, PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_DELAY__2),
-			 &prt->tstamp_tx_latency_ns);
+	ret = ksz_write16(dev, PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_DELAY__2),
+			0);
 	if (ret)
 		return ret;
 
-	if (port != dev->cpu_port) {
-		ret = lan937x_ptp_enable_port_ptp_interrupts(dev, port);
-		if (ret)
-			return ret;
+	ret = lan937x_ptp_enable_port_ptp_interrupts(dev, port);
+	if (ret)
+		return ret;
 
-		ret = lan937x_ptp_enable_port_sync_interrupts(dev, port);
-		if (ret)
-			goto error_disable_port_ptp_interrupts;
-		
-		ret = lan937x_ptp_enable_port_egress_interrupts(dev, port);
-		if (ret)
-			goto error_disable_port_ptp_interrupts;
+	ret = lan937x_ptp_enable_port_sync_interrupts(dev, port);
+	if (ret)
+		goto error_disable_port_ptp_interrupts;
 
-		ret = lan937x_ptp_enable_port_xDelayRsp_interrupts(dev, port);
-		if(ret)
-			goto error_disable_port_ptp_interrupts;
-	}
+	ret = lan937x_ptp_enable_port_egress_interrupts(dev, port);
+	if (ret)
+		goto error_disable_port_ptp_interrupts;
+
+	ret = lan937x_ptp_enable_port_xDelayRsp_interrupts(dev, port);
+	if(ret)
+		goto error_disable_port_ptp_interrupts;
 
 	return 0;
 
 error_disable_port_ptp_interrupts:
-	if (port != dev->cpu_port)
 		lan937x_ptp_disable_port_ptp_interrupts(dev, port);
 	return ret;
 }
@@ -1887,7 +1887,6 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_STATUS__2);
 	u32 enable_addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
 	struct ksz_port *prt = &dev->ports[port - 1];
-	irqreturn_t result = IRQ_NONE;
 	u16 data;
 	int ret;
 
@@ -1934,9 +1933,9 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 		 */
 		ret = ksz_read32(dev, regaddr, &tstamp_raw);
 		if (ret)
-			return result;
+			return IRQ_NONE;
 
-		tstamp = ksz9477_decode_tstamp(tstamp_raw, prt->tstamp_tx_latency_ns);
+		tstamp = ksz9477_decode_tstamp(tstamp_raw);
 		memset(&shhwtstamps, 0, sizeof(shhwtstamps));
 		shhwtstamps.hwtstamp = lan937x_tstamp_to_clock(dev, tstamp);
 
