@@ -1458,7 +1458,7 @@ static int lan937x_ptp_stop_clock(struct ksz_device *dev)
 }
 
 /*Time Stamping support - accessing the register */
-static int lan937x_ptp_enable_mode(struct ksz_device *dev) {
+static int lan937x_ptp_enable_mode(struct ksz_device *dev, bool enable) {
        u16 data;
        int ret;
 
@@ -1467,7 +1467,11 @@ static int lan937x_ptp_enable_mode(struct ksz_device *dev) {
                return ret;
 
        /* Enable PTP mode */
-       data |= PTP_ENABLE;
+       if(enable)
+           data |= PTP_ENABLE;
+       else
+	       data &= ~PTP_ENABLE;
+
        ret = ksz_write16(dev, REG_PTP_MSG_CONF1, data);
        if (ret)
                return ret;
@@ -1475,22 +1479,6 @@ static int lan937x_ptp_enable_mode(struct ksz_device *dev) {
        return 0;
 }
 
-static int lan937x_ptp_disable_mode(struct ksz_device *dev) {
-       u16 data;
-       int ret;
-
-       ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
-       if (ret)
-               return ret;
-
-       /* Disable PTP mode */
-       data &= ~PTP_ENABLE;
-       ret = ksz_write16(dev, REG_PTP_MSG_CONF1, data);
-       if (ret)
-               return ret;
-
-       return 0;
-}
 
 static int lan937x_ptp_enable_port_ptp_interrupts(struct ksz_device *dev, int port)
 {
@@ -1839,7 +1827,7 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 	}
 
 	/* Enable PTP mode (will affect tail tagging format) */
-	ret = lan937x_ptp_enable_mode(dev);
+	ret = lan937x_ptp_enable_mode(dev, true);
 	if (ret)
 		goto error_unregister_clock;
 
@@ -1863,7 +1851,7 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 error_ports_deinit:
 	lan937x_ptp_ports_deinit(dev);
 error_disable_mode:
-	lan937x_ptp_disable_mode(dev);
+	lan937x_ptp_enable_mode(dev, false);
 error_unregister_clock:
 	ptp_clock_unregister(dev->ptp_clock);
 error_stop_clock:
@@ -1878,8 +1866,10 @@ void lan937x_ptp_deinit(struct dsa_switch *ds)
 	if (IS_ERR_OR_NULL(dev->ptp_clock))
 		return;
 
-	ptp_clock_unregister(dev->ptp_clock);
 	dev->ptp_clock = NULL;
+	lan937x_ptp_ports_deinit(dev);
+	lan937x_ptp_enable_mode(dev, false);
+	ptp_clock_unregister(dev->ptp_clock);
 	lan937x_ptp_stop_clock(dev);
 }
 
