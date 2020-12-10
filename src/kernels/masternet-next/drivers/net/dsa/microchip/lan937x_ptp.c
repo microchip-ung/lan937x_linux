@@ -1,6 +1,8 @@
-/*
+// SPDX-License-Identifier: GPL-2.0
+/* Microchip LAN937X PTP Implementation 
+ * Copyright (C) 2019-2020 Microchip Technology Inc.
+ */
 *
-*/
 #include "lan937x_reg.h"
 #include "ksz_common.h"
 #include <linux/ptp_classify.h>
@@ -105,7 +107,10 @@ int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct ifreq *ifr)
 	struct ksz_device *dev  = ds->priv;
 	struct hwtstamp_config *port_tconfig = &dev->ports[port].tstamp_config;
 	struct hwtstamp_config config;
+	unsigned long bytes_copied;
 	int err;	
+
+	mutex_lock(&dev->ptp_mutex);
 
 	if(copy_from_user(&config, ifr->ifr_data, sizeof(config)))
 		return -EFAULT;
@@ -116,10 +121,11 @@ int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct ifreq *ifr)
 
 	/* Save the chosen configuration to be returned later. */
 	memcpy(port_tconfig, &config, sizeof(config));
+	bytes_copied = copy_to_user(ifr->ifr_data, &config, sizeof(config)); 
 	
+	mutex_unlock(&dev->ptp_mutex);
 
-	return copy_to_user(ifr->ifr_data, &config, sizeof(config)) ?  
-	        -EFAULT : 0;
+	return bytes_copied ?  -EFAULT : 0;
 }
 
 /* Returns a pointer to the PTP header if the caller should time stamp,
@@ -827,6 +833,24 @@ static int lan937x_ptp_twostep_set(struct ksz_device *dev,
 	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
 }
 
+static int lan937x_ptp_8021as_set(struct ksz_device *dev,
+				 bool val)
+{
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
+	if (ret)
+		return ret;
+
+	if (val == 1)
+		data |= PTP_802_1AS;
+	else
+		data &= ~PTP_802_1AS;		
+
+	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
+}
+
 int lan937x_ptp_init(struct dsa_switch *ds)
 {
 	struct ksz_device *dev  = ds->priv;
@@ -873,7 +897,8 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 	if (ret)
 		goto error_disable_mode;
 
-	ksz9477_ptp_tcmode_set(dev, KSZ9477_PTP_TCMODE_P2P);
+	//ksz9477_ptp_tcmode_set(dev, KSZ9477_PTP_TCMODE_P2P);
+	lan937x_ptp_8021as_set(dev, 1);
 //	lan937x_ptp_ocmode_set(dev, KSZ9477_PTP_OCMODE_MASTER);
 //	lan937x_ptp_twostep_set(dev, 1);
 
