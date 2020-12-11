@@ -1236,6 +1236,7 @@ static int lan937x_ptp_settime(struct ptp_clock_info *ptp,
 		const struct timespec64 *ts)
 {
 	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
+	struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
 	u16 data16;
 	unsigned long flags;
 	int ret;
@@ -1276,9 +1277,9 @@ static int lan937x_ptp_settime(struct ptp_clock_info *ptp,
 	if (ret)
 		goto error_return;
 
-	spin_lock_bh(&dev->ptp_clock_lock);
-	dev->ptp_clock_time = *ts;
-	spin_unlock_bh(&dev->ptp_clock_lock);
+	spin_lock_bh(&ptp_shared->ptp_clock_lock);
+	ptp_shared->ptp_clock_time = *ts;
+	spin_unlock_bh(&ptp_shared->ptp_clock_lock);
 
 error_return:
 	mutex_unlock(&dev->ptp_mutex);
@@ -1346,6 +1347,7 @@ error_return:
 static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 {
 	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
+	struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
 	struct timespec64 delta64 = ns_to_timespec64(delta);
 	int ret;
 	s32 sec, nsec;
@@ -1384,9 +1386,9 @@ static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 	if (ret)
 		goto error_return;
 
-	spin_lock_bh(&dev->ptp_clock_lock);
-	dev->ptp_clock_time = timespec64_add(dev->ptp_clock_time, delta64);
-	spin_unlock_bh(&dev->ptp_clock_lock);
+	spin_lock_bh(&ptp_shared->ptp_clock_lock);
+	ptp_shared->ptp_clock_time = timespec64_add(ptp_shared->ptp_clock_time, delta64);
+	spin_unlock_bh(&ptp_shared->ptp_clock_lock);
 
 error_return:
 	mutex_unlock(&dev->ptp_mutex);
@@ -1399,6 +1401,7 @@ error_return:
 static long lan937x_ptp_do_aux_work(struct ptp_clock_info *ptp)
 {
 	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
+	struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
 	struct timespec64 ts;
 	unsigned long flags;
 
@@ -1406,17 +1409,17 @@ static long lan937x_ptp_do_aux_work(struct ptp_clock_info *ptp)
 	_lan937x_ptp_gettime(dev, &ts);
 	mutex_unlock(&dev->ptp_mutex);
 
-	spin_lock_bh(&dev->ptp_clock_lock);
-	dev->ptp_clock_time = ts;
-	spin_unlock_bh(&dev->ptp_clock_lock);
+	spin_lock_bh(&ptp_shared->ptp_clock_lock);
+	ptp_shared->ptp_clock_time = ts;
+	spin_unlock_bh(&ptp_shared->ptp_clock_lock);
 
 	return 1; //HZ;  /* reschedule in 1 second */
 }
 
 static int lan937x_ptp_start_clock(struct ksz_device *dev)
 {
+	struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
 	u16 data;
-	unsigned long flags;
 	int ret;
 
 	ret = ksz_read16(dev, REG_PTP_CLK_CTRL, &data);
@@ -1811,7 +1814,7 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 	int ret;
 
 	mutex_init(&dev->ptp_mutex);
-	spin_lock_init(&dev->ptp_clock_lock);
+	spin_lock_init(&dev->ptp_shared.ptp_clock_lock);
 
 	dev->ptp_caps = (struct ptp_clock_info) {
 		.owner		= THIS_MODULE,
@@ -1937,7 +1940,7 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 
 		tstamp = ksz9477_decode_tstamp(tstamp_raw);
 		memset(&shhwtstamps, 0, sizeof(shhwtstamps));
-		shhwtstamps.hwtstamp = lan937x_tstamp_reconstruct(dev, tstamp);
+		shhwtstamps.hwtstamp = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
 
 		/* skb_complete_tx_timestamp() will free up the client to make
 		 * another timestamp-able transmit. We have to be ready for it
