@@ -339,7 +339,7 @@ static inline ktime_t ksz9477_decode_tstamp(u32 tstamp)
 	/* Add/remove excess delay between wire and time stamp unit */
 	return ns_to_ktime(ns);
 }
-ktime_t lan937x_tstamp_to_clock(struct ksz_device *ksz, u32 tstamp);
+ktime_t lan937x_tstamp_reconstruct(struct ksz_device *ksz, u32 tstamp);
 
 /* Regmap tables generation */
 #define KSZ_SPI_OP_RD		3
