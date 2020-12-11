@@ -23,6 +23,8 @@
 #define KSZ_TSTAMP_SEC_MASK  GENMASK(31, 30)
 #define KSZ_TSTAMP_NSEC_MASK GENMASK(29, 0)
 
+#define LAN937X_HWTS_EN  0
+
 struct vlan_table {
 	u32 table[3];
 };
