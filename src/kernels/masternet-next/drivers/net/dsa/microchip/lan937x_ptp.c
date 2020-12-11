@@ -1450,42 +1450,6 @@ static int lan937x_ptp_stop_clock(struct ksz_device *dev)
 	return 0;
 }
 
-/*Time Stamping support - accessing the register */
-static int lan937x_ptp_enable_mode(struct ksz_device *dev, bool enable) {
-	u16 data;
-	int ret;
-
-	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
-	if (ret)
-		return ret;
-
-	/* Enable PTP mode */
-	if(enable)
-		data |= PTP_ENABLE;
-	else
-		data &= ~PTP_ENABLE;
-
-	ret = ksz_write16(dev, REG_PTP_MSG_CONF1, data);
-	if (ret)
-		return ret;
-
-	return 0;
-
-	if (enable) {
-		/* Schedule cyclic call of ksz_ptp_do_aux_work() */
-		ret = ptp_schedule_worker(dev->ptp_clock, 0);
-		if (ret)
-			goto error_disable_mode;
-	} else {
-		ptp_cancel_worker_sync(dev->ptp_clock);
-	}
-
-	return 0;
-
-error_disable_mode:
-	ksz_write16(dev, REG_PTP_MSG_CONF1, data & ~PTP_ENABLE);
-	return ret;
-}
 
 
 static int lan937x_ptp_enable_port_ptp_interrupts(struct ksz_device *dev, int port)
