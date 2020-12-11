@@ -216,7 +216,7 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
 #define LAN937X_TAIL_TAG_PORT_MASK	7
 
 
-ktime_t lan937x_tstamp_reconstruct(struct ksz_device *ksz, u32 tstamp) 
+ktime_t lan937x_tstamp_reconstruct(struct ksz_device_ptp_shared *ksz, u32 tstamp) 
 {
 	struct timespec64 ts = ktime_to_timespec64(tstamp);
 	struct timespec64 ptp_clock_time;
@@ -266,7 +266,7 @@ static void lan937x_rcv_timestamp(struct sk_buff *skb __maybe_unused, u8 *tag __
 	/* convert time stamp and write to skb */
 	tstamp = ksz9477_decode_tstamp(get_unaligned_be32(tstamp_raw));
 	memset(hwtstamps, 0, sizeof(*hwtstamps));
-	hwtstamps->hwtstamp = lan937x_tstamp_reconstruct(ksz, tstamp);
+	hwtstamps->hwtstamp = lan937x_tstamp_reconstruct(&ksz->ptp_shared, tstamp);
 
 	__skb_push(skb, ETH_HLEN);
 	ptp_type = ptp_classify_raw(skb);

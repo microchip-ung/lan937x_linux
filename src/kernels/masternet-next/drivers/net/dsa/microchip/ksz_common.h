@@ -33,6 +33,16 @@ struct ksz_port_mib {
 	u64 *counters;
 };
 
+struct ksz_device_ptp_shared {
+	/* protects ptp_clock_time (user space (various syscalls)
+	 * vs. softirq in ksz9477_rcv_timestamp()).
+	 */
+	spinlock_t ptp_clock_lock;
+	/* approximated current time, read once per second from hardware */
+	struct timespec64 ptp_clock_time;
+	unsigned long state;
+};
+
 struct ksz_port {
 	u16 member;
 	u16 vid_member;
@@ -115,9 +125,10 @@ struct ksz_device {
 	struct ptp_clock_info ptp_caps;
 	struct ptp_clock *ptp_clock;
 	struct mutex ptp_mutex;  //to serialize the activity in the phc
-
-	spinlock_t ptp_clock_lock;
-	struct timespec64 ptp_clock_time;
+	
+	struct ksz_device_ptp_shared ptp_shared;
+	//spinlock_t ptp_clock_lock;
+	//struct timespec64 ptp_clock_time;
 #endif
 };
 
@@ -330,7 +341,7 @@ static inline ktime_t ksz9477_decode_tstamp(u32 tstamp)
 	/* Add/remove excess delay between wire and time stamp unit */
 	return ns_to_ktime(ns);
 }
-ktime_t lan937x_tstamp_reconstruct(struct ksz_device *ksz, u32 tstamp);
+ktime_t lan937x_tstamp_reconstruct(struct ksz_device_ptp_shared *ksz, u32 tstamp);
 
 /* Regmap tables generation */
 #define KSZ_SPI_OP_RD		3
