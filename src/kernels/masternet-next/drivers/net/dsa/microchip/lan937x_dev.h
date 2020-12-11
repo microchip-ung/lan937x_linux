@@ -51,7 +51,6 @@ struct lan937x_chip_data {
 	int cpu_ports;
 	int port_cnt;
 	int phy_port_cnt;
-	int mib_port_cnt;
 };
 
 struct lan_alu_struct {

@@ -907,7 +907,7 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 
 	dev->member = dev->host_mask;
 
-	for (i = 0; i < dev->mib_port_cnt; i++) {
+	for (i = 0; i < dev->port_cnt; i++) {
 		if (i == dev->cpu_port)
 			continue;
 		p = &dev->ports[i];
@@ -1105,7 +1105,7 @@ int lan937x_switch_register(struct ksz_device *dev)
 	if (ret)
 		return ret;
 
-	for (i = 0; i < dev->mib_port_cnt; ++i) {
+	for (i = 0; i < dev->port_cnt; ++i) {
 		if (!dsa_is_user_port(dev->ds, i))
 			continue;
 

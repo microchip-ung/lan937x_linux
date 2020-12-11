@@ -65,7 +65,6 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.cpu_ports = 0x10,
 		/* total physical port count */
 		.port_cnt = 5,
-		.mib_port_cnt = 5,
 		.phy_port_cnt = 4,
 	},
 	{
@@ -78,7 +77,6 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.cpu_ports = 0x30,
 		/* total physical port count */
 		.port_cnt = 6,
-		.mib_port_cnt = 6,
 		.phy_port_cnt = 4,
 	},
 	{
@@ -91,7 +89,6 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.cpu_ports = 0x30,
 		/* total port count */
 		.port_cnt = 8,
-		.mib_port_cnt = 8,
 		.phy_port_cnt = 6,
 	},
 	{
@@ -104,7 +101,6 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.cpu_ports = 0x38,
 		/* total physical port count */
 		.port_cnt = 5,
-		.mib_port_cnt = 5,
 		.phy_port_cnt = 3,
 	},
 	{
@@ -117,7 +113,6 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.cpu_ports = 0x30,
 		/* total physical port count */
 		.port_cnt = 8,
-		.mib_port_cnt = 8,
 		.phy_port_cnt = 6,
 	},
 
@@ -200,7 +195,7 @@ static void lan937x_flush_dyn_mac_table(struct ksz_device *dev, int port)
 			   SW_FLUSH_OPTION_M << SW_FLUSH_OPTION_S,
 			   SW_FLUSH_OPTION_DYN_MAC << SW_FLUSH_OPTION_S);
 
-	if (port < dev->mib_port_cnt) {
+	if (port < dev->port_cnt) {
 		/* flush individual port */
 		lan937x_pread8(dev, port, P_STP_CTRL, &data);
 		if (!(data & PORT_LEARN_DISABLE))
@@ -501,6 +496,7 @@ int lan937x_t1_tx_phy_read(struct ksz_device *dev, int addr,
 			return ret;
 		}
 
+		pr_info("prt:%d,rg:%x", addr,reg);
 		if (lan937x_is_internal_tx_phy_port(dev, addr))
 			addr_base = REG_PORT_TX_PHY_CTRL_BASE;
 		else
@@ -949,7 +945,6 @@ static int lan937x_switch_init(struct ksz_device *dev)
 			dev->num_statics = chip->num_statics;
 			dev->port_cnt = chip->port_cnt;
 			dev->cpu_ports = chip->cpu_ports;
-			dev->mib_port_cnt = chip->mib_port_cnt;
 			dev->phy_port_cnt = chip->phy_port_cnt;
 			break;
 		}
@@ -964,13 +959,13 @@ static int lan937x_switch_init(struct ksz_device *dev)
 	dev->reg_mib_cnt = SWITCH_COUNTER_NUM;
 	dev->mib_cnt = TOTAL_SWITCH_COUNTER_NUM;
 
-	i = dev->mib_port_cnt;
-	dev->ports = devm_kzalloc(dev->dev, sizeof(struct ksz_port) * i,
-				  GFP_KERNEL);
+	dev->ports = devm_kzalloc(dev->dev,
+							 dev->port_cnt * sizeof(struct ksz_port),
+							 GFP_KERNEL);
 	if (!dev->ports)
 		return -ENOMEM;
 
-	for (i = 0; i < dev->mib_port_cnt; i++) {
+	for (i = 0; i < dev->port_cnt; i++) {
 		mutex_init(&dev->ports[i].mib.cnt_mutex);
 		dev->ports[i].mib.counters =
 			devm_kzalloc(dev->dev,

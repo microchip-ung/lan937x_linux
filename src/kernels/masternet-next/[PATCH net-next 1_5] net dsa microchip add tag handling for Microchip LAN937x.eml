@@ -1,0 +1,221 @@
+Delivered-To: prasana4me@gmail.com
+Received: by 2002:a4a:d889:0:0:0:0:0 with SMTP id b9csp5264564oov;
+        Tue, 1 Dec 2020 02:54:17 -0800 (PST)
+X-Google-Smtp-Source: ABdhPJysrKIE/Hdx/bvR7XsB7lSynwTYVFb2Myct3mg1NjkVnRjRApbdhgSEYBOylNoGXlsq0Ocf
+X-Received: by 2002:a17:906:a195:: with SMTP id s21mr2442767ejy.146.1606820057850;
+        Tue, 01 Dec 2020 02:54:17 -0800 (PST)
+ARC-Seal: i=1; a=rsa-sha256; t=1606820057; cv=none;
+        d=google.com; s=arc-20160816;
+        b=l0gnns9NAJTXkcZiSrMlTSTtuX4d4aoyPmTDxeEHTC9AVW5o1LWExhYWjMfkO7uQm4
+         aFLNZGfQlyjF1gVWty1HHo6RRyGSVy7oV0Nmy8eVuLtnhiv5pUarr4Xx0tC8qjwVkkIO
+         l0HjZOazU1oIZBuJLglCaYuc0mW9KKHGT1STPX8gXd0qQ9bbCHyJUoB/I4ykfWZK7zBY
+         zzpESJxEhEva5DxDrzh2NRme9ypNMTb7sqMXQqtzCwlesHImfDMySlq2tH9hmmj6VzBN
+         BHjo+VFagAdfflmR4m5cIUeD7w0DOS/pgubgwd8hV5dxiIHxs5D9aDctokyaxlPZanUR
+         DXuQ==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20160816;
+        h=content-transfer-encoding:mime-version:references:in-reply-to
+         :message-id:date:subject:cc:to:from:ironport-sdr:dkim-signature;
+        bh=hbdcIA7+arBTZ4KI0RnSLoG16Dx6z0rTfZxQ5nFFS8I=;
+        b=aWjaA9wN92BxAdf/uxeSkpRwYpi19VcWg1u6JbKtfW1eWLky5HLpsFLDszLWZjZzn2
+         WF9xU/npkygp11605N4eNM5JUEMbbjLkNyoAwm4btslzhRu3T4LkAjupbD10ZqrCb2fs
+         PvAViWiZ6Yzt9W7Mkzv+VdC4WsvYCheEpImSeZ3gHbbNZOCc51duhp7DR9ljCzM34nrS
+         pkRn/hRW4BVwbr8FRvDgm6AhGXLNGxK2cH9/KgpU1Gtt1AjABT6u/MU0rhastQMhHHCa
+         6So7T7aTtxECVMlWdiXPV0SGuCXAU3A3sSkPJef8LL33/YtdifTacNP20yTH/OoWwLpj
+         OLcQ==
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@microchip.com header.s=mchp header.b=XOnkgOeJ;
+       spf=pass (google.com: domain of prasanna.vengateshanvaradharajan@microchip.com designates 68.232.154.123 as permitted sender) smtp.mailfrom=Prasanna.VengateshanVaradharajan@microchip.com;
+       dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=microchip.com
+Return-Path: <Prasanna.VengateshanVaradharajan@microchip.com>
+Received: from esa4.microchip.iphmx.com (esa4.microchip.iphmx.com. [68.232.154.123])
+        by mx.google.com with ESMTPS id k11si659944ejb.369.2020.12.01.02.54.17
+        for <prasana4me@gmail.com>
+        (version=TLS1_2 cipher=ECDHE-ECDSA-AES128-GCM-SHA256 bits=128/128);
+        Tue, 01 Dec 2020 02:54:17 -0800 (PST)
+Received-SPF: pass (google.com: domain of prasanna.vengateshanvaradharajan@microchip.com designates 68.232.154.123 as permitted sender) client-ip=68.232.154.123;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@microchip.com header.s=mchp header.b=XOnkgOeJ;
+       spf=pass (google.com: domain of prasanna.vengateshanvaradharajan@microchip.com designates 68.232.154.123 as permitted sender) smtp.mailfrom=Prasanna.VengateshanVaradharajan@microchip.com;
+       dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=microchip.com
+DKIM-Signature: v=1; a=rsa-sha256; c=simple/simple;
+  d=microchip.com; i=@microchip.com; q=dns/txt; s=mchp;
+  t=1606820057; x=1638356057;
+  h=from:to:cc:subject:date:message-id:in-reply-to:
+   references:mime-version:content-transfer-encoding;
+  bh=06MQunHNAu8zNsAPd8JYKHNDCMBiqG+NReavt/bJEvQ=;
+  b=XOnkgOeJaIR6iXkAPVtIS+JrBknGoSf7y+eG/g1k5mXo5WYrHnu76qNP
+   nfg1zO/EYrl1zj9FANX/nCmRQJ7bRFKkbKNuTViLY1y08Yco80WpbfZxb
+   WA1g+iNW257UFLWUVzTY5F4ar6DnU0cmcgFCGCEQOC6snYLli2BiQFTko
+   nJubIhwGJhnZDN3tPqfWuEWjapeIC2ZP0iCUnCCypfNqRUBYcRDwPm2M9
+   yvZX1IV2LwVyoz3dnEpGdqzuGTVj/kaisXae1MDjKuc3oM7dD+uHnReMq
+   zHNgJRZx1aHpCt8rHkLZNlpnPHxYaxT/FVnnKBDRTsCpt1E107lBe4Cl5
+   Q==;
+IronPort-SDR: l7W4xc77SMgQ+vtOwBXcncPPrKx6xHi7/L3o9tT3Bob5D7MHtVRtknt+T0i8bcSh/KxbE4IIh5
+ qfA2yyNnAO54Uo3SQ+kQJGWYuacH2kCBI1p4rVNZ0oXf3SMEVoV26yt5ev0WLd4p3KQUIXGELJ
+ NJ9XrTfI6gvB7hGo1hbdbJUYKBzTbMavBeTQK13HRYRAgfx56biyx1wXcjKw2QaimmE2NP/vuP
+ 7uULPXD3N7tETqQHMwu6jKxVIJZ1KKzGvBGPPQLeuj6WoHQEvWgAuKDa48I3adu/krZZUuG5Eh
+ Yto=
+X-IronPort-AV: E=Sophos;i="5.78,384,1599548400"; 
+   d="scan'208";a="95389403"
+Received: from smtpout.microchip.com (HELO email.microchip.com) ([198.175.253.82])
+  by esa4.microchip.iphmx.com with ESMTP/TLS/AES256-SHA256; 01 Dec 2020 03:54:16 -0700
+Received: from chn-vm-ex02.mchp-main.com (10.10.85.144) by
+ chn-vm-ex04.mchp-main.com (10.10.85.152) with Microsoft SMTP Server
+ (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256) id
+ 15.1.1979.3; Tue, 1 Dec 2020 03:54:15 -0700
+Received: from CHE-LT-I21427U.microchip.com (10.10.115.15) by
+ chn-vm-ex02.mchp-main.com (10.10.85.144) with Microsoft SMTP Server id
+ 15.1.1979.3 via Frontend Transport; Tue, 1 Dec 2020 03:54:14 -0700
+From: <prasanna.vengateshan@microchip.com>
+To: <prasanna.vengateshan@microchip.com>
+CC: <prasana4me@gmail.com>
+Subject: [PATCH net-next 1/5] net: dsa: microchip: add tag handling for Microchip LAN937x
+Date: Tue, 1 Dec 2020 16:24:05 +0530
+Message-ID: <20201201105409.64571-2-prasanna.vengateshan@microchip.com>
+X-Mailer: git-send-email 2.25.1
+In-Reply-To: <20201201105409.64571-1-prasanna.vengateshan@microchip.com>
+References: <20201201105409.64571-1-prasanna.vengateshan@microchip.com>
+MIME-Version: 1.0
+Content-Transfer-Encoding: 8bit
+Return-Path: prasanna.vengateshan@microchip.com
+Content-Type: text/plain
+
+The Microchip LAN937X switches have a tagging protocol which is
+very similar to KSZ tagging. So that the implementation is added to
+tag_ksz.c and reused common APIs
+
+Signed-off-by: Prasanna Vengateshan <prasanna.vengateshan@microchip.com>
+---
+ include/net/dsa.h |  2 ++
+ net/dsa/Kconfig   |  4 +--
+ net/dsa/tag_ksz.c | 73 +++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 77 insertions(+), 2 deletions(-)
+
+diff --git a/include/net/dsa.h b/include/net/dsa.h
+index 4e60d2610f20..5a57172fd2ae 100644
+--- a/include/net/dsa.h
++++ b/include/net/dsa.h
+@@ -46,6 +46,7 @@ struct phylink_link_state;
+ #define DSA_TAG_PROTO_AR9331_VALUE		16
+ #define DSA_TAG_PROTO_RTL4_A_VALUE		17
+ #define DSA_TAG_PROTO_HELLCREEK_VALUE		18
++#define DSA_TAG_PROTO_LAN937X_VALUE		19
+ 
+ enum dsa_tag_protocol {
+ 	DSA_TAG_PROTO_NONE		= DSA_TAG_PROTO_NONE_VALUE,
+@@ -67,6 +68,7 @@ enum dsa_tag_protocol {
+ 	DSA_TAG_PROTO_AR9331		= DSA_TAG_PROTO_AR9331_VALUE,
+ 	DSA_TAG_PROTO_RTL4_A		= DSA_TAG_PROTO_RTL4_A_VALUE,
+ 	DSA_TAG_PROTO_HELLCREEK		= DSA_TAG_PROTO_HELLCREEK_VALUE,
++	DSA_TAG_PROTO_LAN937X		= DSA_TAG_PROTO_LAN937X_VALUE,
+ };
+ 
+ struct packet_type;
+diff --git a/net/dsa/Kconfig b/net/dsa/Kconfig
+index dfecd7b22fd7..033b85504235 100644
+--- a/net/dsa/Kconfig
++++ b/net/dsa/Kconfig
+@@ -92,10 +92,10 @@ config NET_DSA_TAG_MTK
+ 	  Mediatek switches.
+ 
+ config NET_DSA_TAG_KSZ
+-	tristate "Tag driver for Microchip 8795/9477/9893 families of switches"
++	tristate "Tag driver for Microchip 8795/9477/9893/937x families of switches"
+ 	help
+ 	  Say Y if you want to enable support for tagging frames for the
+-	  Microchip 8795/9477/9893 families of switches.
++	  Microchip 8795/9477/9893/937x families of switches.
+ 
+ config NET_DSA_TAG_RTL4_A
+ 	tristate "Tag driver for Realtek 4 byte protocol A tags"
+diff --git a/net/dsa/tag_ksz.c b/net/dsa/tag_ksz.c
+index 4820dbcedfa2..78c22c329bb5 100644
+--- a/net/dsa/tag_ksz.c
++++ b/net/dsa/tag_ksz.c
+@@ -190,10 +190,83 @@ static const struct dsa_device_ops ksz9893_netdev_ops = {
+ DSA_TAG_DRIVER(ksz9893_netdev_ops);
+ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
+ 
++/* For Ingress (Host -> LAN937x), 2 bytes are added before FCS.
++ * ---------------------------------------------------------------------------
++ * DA(6bytes)|SA(6bytes)|....|Data(nbytes)|tag0(1byte)|tag1(1byte)|FCS(4bytes)
++ * ---------------------------------------------------------------------------
++ * tag0 : Prioritization (not used now)
++ * tag1 : each bit represents port (eg, 0x01=port1, 0x02=port2, 0x10=port5)
++ *
++ * For Egress (LAN937x -> Host), 1 byte is added before FCS.
++ * ---------------------------------------------------------------------------
++ * DA(6bytes)|SA(6bytes)|....|Data(nbytes)|tag0(1byte)|FCS(4bytes)
++ * ---------------------------------------------------------------------------
++ * tag0 : zero-based value represents port
++ *	  (eg, 0x00=port1, 0x02=port3, 0x06=port7)
++ */
++#define LAN937X_INGRESS_TAG_LEN		2
++
++#define LAN937X_TAIL_TAG_OVERRIDE	BIT(11)
++#define LAN937X_TAIL_TAG_LOOKUP		BIT(12)
++#define LAN937X_TAIL_TAG_VALID		BIT(13)
++
++static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
++				    struct net_device *dev)
++{
++	struct dsa_port *dp = dsa_slave_to_port(dev);
++	__be16 *tag;
++	u8 *addr;
++	u16 val;
++
++	/* Tag encoding */
++	tag = skb_put(skb, LAN937X_INGRESS_TAG_LEN);
++	addr = skb_mac_header(skb);
++
++	val = BIT(dp->index);
++
++	if (is_link_local_ether_addr(addr))
++		val |= LAN937X_TAIL_TAG_OVERRIDE;
++
++	/* Tail tag valid bit - This bit should always be set by the CPU*/
++	val |= LAN937X_TAIL_TAG_VALID;
++
++	*tag = cpu_to_be16(val);
++
++	return skb;
++}
++
++static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev,
++				   struct packet_type *pt)
++{
++	/* Tag decoding */
++	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
++	unsigned int len = KSZ_EGRESS_TAG_LEN;
++	unsigned int port = tag[0] & 7;
++
++	/* Extra 4-bytes PTP timestamp */
++	if (tag[0] & KSZ9477_PTP_TAG_INDICATION)
++		len += KSZ9477_PTP_TAG_LEN;
++
++	return ksz_common_rcv(skb, dev, port, len);
++}
++
++static const struct dsa_device_ops lan937x_netdev_ops = {
++	.name	= "lan937x",
++	.proto	= DSA_TAG_PROTO_LAN937X,
++	.xmit	= lan937x_xmit,
++	.rcv	= lan937x_rcv,
++	.overhead = LAN937X_INGRESS_TAG_LEN,
++	.tail_tag = true,
++};
++
++DSA_TAG_DRIVER(lan937x_netdev_ops);
++MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_LAN937X);
++
+ static struct dsa_tag_driver *dsa_tag_driver_array[] = {
+ 	&DSA_TAG_DRIVER_NAME(ksz8795_netdev_ops),
+ 	&DSA_TAG_DRIVER_NAME(ksz9477_netdev_ops),
+ 	&DSA_TAG_DRIVER_NAME(ksz9893_netdev_ops),
++	&DSA_TAG_DRIVER_NAME(lan937x_netdev_ops),
+ };
+ 
+ module_dsa_tag_drivers(dsa_tag_driver_array);
+-- 
+2.25.1
+

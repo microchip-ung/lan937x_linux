@@ -1,0 +1,13 @@
+cp ../../lan_937x_linux_dsa/src/kernels/masternet-next/include/net/dsa.h include/net/
+cp ../../lan_937x_linux_dsa/src/kernels/masternet-next/net/dsa/tag_ksz.c net/dsa/
+cp ../../lan_937x_linux_dsa/src/kernels/masternet-next/drivers/net/dsa/microchip/ksz_common.h drivers/net/dsa/microchip/
+cp ../../lan_937x_linux_dsa/src/kernels/masternet-next/drivers/net/dsa/microchip/Kconfig drivers/net/dsa/microchip/
+cp ../../lan_937x_linux_dsa/src/kernels/masternet-next/drivers/net/dsa/microchip/Makefile drivers/net/dsa/microchip/
+cp ../../lan_937x_linux_dsa/src/kernels/masternet-next/drivers/net/dsa/microchip/lan937x_main.c drivers/net/dsa/microchip/
+cp ../../lan_937x_linux_dsa/src/kernels/masternet-next/drivers/net/dsa/microchip/lan937x_dev.c drivers/net/dsa/microchip/
+cp ../../lan_937x_linux_dsa/src/kernels/masternet-next/drivers/net/dsa/microchip/lan937x_dev.h drivers/net/dsa/microchip/
+cp ../../lan_937x_linux_dsa/src/kernels/masternet-next/drivers/net/dsa/microchip/lan937x_spi.c drivers/net/dsa/microchip/
+cp ../../lan_937x_linux_dsa/src/kernels/masternet-next/drivers/net/dsa/microchip/lan937x_reg.h drivers/net/dsa/microchip/
+cp ../../lan_937x_linux_dsa/src/kernels/masternet-next/Documentation/devicetree/bindings/net/dsa/microchip,lan937x.yaml Documentation/devicetree/bindings/net/dsa/
+cp ../../lan_937x_linux_dsa/src/kernels/masternet-next/net/dsa/Kconfig net/dsa
+cp ../../lan_937x_linux_dsa/src/kernels/masternet-next/MAINTAINERS  .

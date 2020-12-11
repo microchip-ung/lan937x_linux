@@ -380,10 +380,6 @@ void m_can_config_endisable(struct m_can_classdev *cdev, bool enable)
 		cccr &= ~CCCR_CSR;
 
 	if (enable) {
-		/* Clear the Clock stop request if it was set */
-		if (cccr & CCCR_CSR)
-			cccr &= ~CCCR_CSR;
-
 		/* enable m_can configuration */
 		m_can_write(cdev, M_CAN_CCCR, cccr | CCCR_INIT);
 		udelay(5);
@@ -1033,7 +1029,7 @@ static const struct can_bittiming_const m_can_bittiming_const_31X = {
 	.name = KBUILD_MODNAME,
 	.tseg1_min = 2,		/* Time segment 1 = prop_seg + phase_seg1 */
 	.tseg1_max = 256,
-	.tseg2_min = 1,		/* Time segment 2 = phase_seg2 */
+	.tseg2_min = 2,		/* Time segment 2 = phase_seg2 */
 	.tseg2_max = 128,
 	.sjw_max = 128,
 	.brp_min = 1,
@@ -1385,6 +1381,8 @@ static int m_can_dev_setup(struct m_can_classdev *m_can_dev)
 						&m_can_data_bittiming_const_31X;
 		break;
 	case 32:
+	case 33:
+		/* Support both MCAN version v3.2.x and v3.3.0 */
 		m_can_dev->can.bittiming_const = m_can_dev->bit_timing ?
 			m_can_dev->bit_timing : &m_can_bittiming_const_31X;
 
@@ -1653,7 +1651,7 @@ static int m_can_open(struct net_device *dev)
 		INIT_WORK(&cdev->tx_work, m_can_tx_work_queue);
 
 		err = request_threaded_irq(dev->irq, NULL, m_can_isr,
-					   IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
+					   IRQF_ONESHOT,
 					   dev->name, dev);
 	} else {
 		err = request_irq(dev->irq, m_can_isr, IRQF_SHARED, dev->name,
@@ -1828,10 +1826,9 @@ int m_can_class_register(struct m_can_classdev *m_can_dev)
 	int ret;
 
 	if (m_can_dev->pm_clock_support) {
-		pm_runtime_enable(m_can_dev->dev);
 		ret = m_can_clk_start(m_can_dev);
 		if (ret)
-			goto pm_runtime_fail;
+			return ret;
 	}
 
 	ret = m_can_dev_setup(m_can_dev);
@@ -1857,15 +1854,18 @@ int m_can_class_register(struct m_can_classdev *m_can_dev)
 	 */
 clk_disable:
 	m_can_clk_stop(m_can_dev);
-pm_runtime_fail:
-	if (ret) {
-		if (m_can_dev->pm_clock_support)
-			pm_runtime_disable(m_can_dev->dev);
-	}
 
 	return ret;
 }
 EXPORT_SYMBOL_GPL(m_can_class_register);
+
+void m_can_class_unregister(struct m_can_classdev *m_can_dev)
+{
+	unregister_candev(m_can_dev->net);
+
+	m_can_clk_stop(m_can_dev);
+}
+EXPORT_SYMBOL_GPL(m_can_class_unregister);
 
 int m_can_class_suspend(struct device *dev)
 {
@@ -1912,14 +1912,6 @@ int m_can_class_resume(struct device *dev)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(m_can_class_resume);
-
-void m_can_class_unregister(struct m_can_classdev *m_can_dev)
-{
-	unregister_candev(m_can_dev->net);
-
-	m_can_clk_stop(m_can_dev);
-}
-EXPORT_SYMBOL_GPL(m_can_class_unregister);
 
 MODULE_AUTHOR("Dong Aisheng <b29396@freescale.com>");
 MODULE_AUTHOR("Dan Murphy <dmurphy@ti.com>");
