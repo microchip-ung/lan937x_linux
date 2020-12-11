@@ -31,6 +31,44 @@ enum ksz9477_ptp_event_messages {
        PTP_Event_Message_Pdelay_Req  = 0x2,
        PTP_Event_Message_Pdelay_Resp = 0x3, };
 
+
+/*Time Stamping support - accessing the register */
+static int lan937x_ptp_enable_mode(struct ksz_device *dev, bool enable) {
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
+	if (ret)
+		return ret;
+
+	/* Enable PTP mode */
+	if(enable)
+		data |= PTP_ENABLE;
+	else
+		data &= ~PTP_ENABLE;
+
+	ret = ksz_write16(dev, REG_PTP_MSG_CONF1, data);
+	if (ret)
+		return ret;
+
+	return 0;
+
+	if (enable) {
+		/* Schedule cyclic call of ksz_ptp_do_aux_work() */
+		ret = ptp_schedule_worker(dev->ptp_clock, 0);
+		if (ret)
+			goto error_disable_mode;
+	} else {
+		ptp_cancel_worker_sync(dev->ptp_clock);
+	}
+
+	return 0;
+
+error_disable_mode:
+	ksz_write16(dev, REG_PTP_MSG_CONF1, data & ~PTP_ENABLE);
+	return ret;
+}
+
 /* The function is return back the capability of timestamping feature when requested
    through ethtool -T <interface> utility
    */
@@ -53,7 +91,6 @@ int lan937x_get_ts_info(struct dsa_switch *ds, int port, struct ethtool_ts_info 
 	return 0;
 }
 
-
 int lan937x_hwtstamp_get(struct dsa_switch *ds, int port, struct ifreq *ifr)
 {
 	struct ksz_device *dev  = ds->priv;
@@ -65,6 +102,11 @@ int lan937x_hwtstamp_get(struct dsa_switch *ds, int port, struct ifreq *ifr)
 	else
 		config.tx_type = HWTSTAMP_TX_OFF;
 
+	if (test_bit(LAN937X_HWTS_EN, &dev->ptp_shared.state))
+		config.rx_filter = HWTSTAMP_FILTER_ALL;
+	else
+		config.rx_filter = HWTSTAMP_FILTER_NONE;
+
 	return copy_to_user(ifr->ifr_data, &config, sizeof(struct hwtstamp_config)) ?  
 	        -EFAULT : 0;
 }
@@ -73,8 +115,7 @@ static int lan937x_set_hwtstamp_config(struct ksz_device *dev, int port,
 					 struct hwtstamp_config *config)
 {
 	struct ksz_port *prt = &dev->ports[port];
-	bool tstamp_enable = false;
-
+	bool rx_on;
 
 	/* reserved for future extensions */
 	if (config->flags)
@@ -91,8 +132,27 @@ static int lan937x_set_hwtstamp_config(struct ksz_device *dev, int port,
 			return -ERANGE;
 	}
 
-	//Todo: insert the switch statement for rx_filter
+	switch (config->rx_filter) {
+	case HWTSTAMP_FILTER_NONE:
+		rx_on = false;
+		break;
+	default:
+		rx_on = true;
+		break;
+	}
 
+	if (rx_on != test_bit(LAN937X_HWTS_EN, &dev->ptp_shared.state)) {
+		int ret = 0;
+
+		clear_bit(LAN937X_HWTS_EN, &dev->ptp_shared.state);
+
+		ret = lan937x_ptp_enable_mode(dev, rx_on);
+		if (ret) {
+			return ret;
+		}
+		if (rx_on)
+			set_bit(LAN937X_HWTS_EN, &dev->ptp_shared.state);
+	}
 
 	return 0;
 }
@@ -493,42 +553,6 @@ static int lan937x_ptp_stop_clock(struct ksz_device *dev)
 	return 0;
 }
 
-/*Time Stamping support - accessing the register */
-static int lan937x_ptp_enable_mode(struct ksz_device *dev, bool enable) {
-	u16 data;
-	int ret;
-
-	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
-	if (ret)
-		return ret;
-
-	/* Enable PTP mode */
-	if(enable)
-		data |= PTP_ENABLE;
-	else
-		data &= ~PTP_ENABLE;
-
-	ret = ksz_write16(dev, REG_PTP_MSG_CONF1, data);
-	if (ret)
-		return ret;
-
-	return 0;
-
-	if (enable) {
-		/* Schedule cyclic call of ksz_ptp_do_aux_work() */
-		ret = ptp_schedule_worker(dev->ptp_clock, 0);
-		if (ret)
-			goto error_disable_mode;
-	} else {
-		ptp_cancel_worker_sync(dev->ptp_clock);
-	}
-
-	return 0;
-
-error_disable_mode:
-	ksz_write16(dev, REG_PTP_MSG_CONF1, data & ~PTP_ENABLE);
-	return ret;
-}
 
 
 static int lan937x_ptp_enable_port_ptp_interrupts(struct ksz_device *dev, int port)
