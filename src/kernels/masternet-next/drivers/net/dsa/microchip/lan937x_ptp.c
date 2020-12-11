@@ -1084,18 +1084,6 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 	return IRQ_HANDLED;
 }
 
-/* Returns a pointer to the PTP header if the caller should time stamp,
- * or NULL if the caller should not.
- */
-static struct ptp_header *lan937x_ptp_should_tstamp(struct ksz_port *port, struct sk_buff *skb,
-		unsigned int type) 
-{
-	if (!test_bit(LAN937X_HWTSTAMP_ENABLED, &port->tstamp_state))
-		return NULL;
-
-	return ptp_parse_header(skb, type); 
-}
-
 
 bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 			     struct sk_buff *clone, unsigned int type)
@@ -1103,59 +1091,61 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 	struct ksz_device *dev  = ds->priv;
 	struct ksz_port *prt = &dev->ports[port];
 	struct ptp_header *hdr;
-       enum ksz9477_ptp_event_messages msg_type;
-		struct skb_shared_hwtstamps shhwtstamps;
+	enum ksz9477_ptp_event_messages msg_type;
+	struct skb_shared_hwtstamps shhwtstamps;
 
 	if (!(skb_shinfo(clone)->tx_flags & SKBTX_HW_TSTAMP))
 		return false;
 
-	hdr = lan937x_ptp_should_tstamp(prt, clone, type);
+	if (!prt->hwts_tx_en)
+		return false;
+
+	hdr = ptp_parse_header(clone, type);
 	if (!hdr)
 		return false;
 
+	msg_type = ptp_get_msgtype(hdr, type);
 
-       msg_type = ptp_get_msgtype(hdr, type);
+	switch (msg_type) {
+		/* As the KSZ9563 always performs one step time stamping, only the time
+		 * stamp for Delay_Req and Pdelay_Req are reported to the application
+		 * via socket error queue. Time stamps for Sync and Pdelay_resp will be
+		 * applied directly to the outgoing message (e.g. correction field), but
+		 * will NOT be reported to the socket.
+		 */
+		case PTP_Event_Message_Pdelay_Req:
+			if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_XDELAY_IN_PROGRESS,
+						&prt->tstamp_state))
+				return false;  /* free cloned skb */
 
-       switch (msg_type) {
-       /* As the KSZ9563 always performs one step time stamping, only the time
-        * stamp for Delay_Req and Pdelay_Req are reported to the application
-        * via socket error queue. Time stamps for Sync and Pdelay_resp will be
-        * applied directly to the outgoing message (e.g. correction field), but
-        * will NOT be reported to the socket.
-        */
-       case PTP_Event_Message_Pdelay_Req:
-               if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_XDELAY_IN_PROGRESS,
-                                         &prt->tstamp_state))
-                       return false;  /* free cloned skb */
+			prt->tstamp_tx_xdelay_skb = clone;
+			break;
 
-               prt->tstamp_tx_xdelay_skb = clone;
-               break;
+		case PTP_Event_Message_Pdelay_Resp:
+			if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_XDELAY_RSP_IN_PROGRESS,
+						&prt->tstamp_state))
+				return false;  /* free cloned skb */
 
-       case PTP_Event_Message_Pdelay_Resp:
-               if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_XDELAY_RSP_IN_PROGRESS,
-                                         &prt->tstamp_state))
-                       return false;  /* free cloned skb */
-
-               prt->tstamp_tx_xdelay_rsp_skb = clone;
-               break;
-
+			prt->tstamp_tx_xdelay_rsp_skb = clone;
+			break;
 
 
-	case PTP_Event_Message_Sync:
-               if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_SYNC_IN_PROGRESS,
-                                        &prt->tstamp_state))
-                     return false;  /* free cloned skb */
 
-               prt->tstamp_tx_sync_skb = clone;
-	//	shhwtstamps.hwtstamp = lan937x_tstamp_reconstruct(dev, 0x1234);
-	//	skb_complete_tx_timestamp(clone, &shhwtstamps);
-	       break;
+		case PTP_Event_Message_Sync:
+			if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_SYNC_IN_PROGRESS,
+						&prt->tstamp_state))
+				return false;  /* free cloned skb */
 
-       default:
-               return false;  /* free cloned skb */
-       }
-	
-       prt->tx_tstamp_start = jiffies;
+			prt->tstamp_tx_sync_skb = clone;
+			//	shhwtstamps.hwtstamp = lan937x_tstamp_reconstruct(dev, 0x1234);
+			//	skb_complete_tx_timestamp(clone, &shhwtstamps);
+			break;
+
+		default:
+			return false;  /* free cloned skb */
+	}
+
+	prt->tx_tstamp_start = jiffies;
 	prt->tx_seq_id = be16_to_cpu(hdr->sequence_id);
 
 	//ptp_schedule_worker(dev->ptp_clock, 0);
