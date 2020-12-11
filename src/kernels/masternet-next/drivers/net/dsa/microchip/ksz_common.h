@@ -52,7 +52,6 @@ struct ksz_port {
 	
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
 	/* Resources for transmit timestamping */
-	struct hwtstamp_config tstamp_config;
 	unsigned long tx_tstamp_start;
 	struct sk_buff *tstamp_tx_xdelay_skb;
 	struct sk_buff *tstamp_tx_xdelay_rsp_skb;
@@ -112,6 +111,7 @@ struct ksz_device {
 	u16 port_mask;
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
 	//struct lan937x_ptp_data  ptp_data;
+	struct hwtstamp_config tstamp_config;
 	struct ptp_clock_info ptp_caps;
 	struct ptp_clock *ptp_clock;
 	struct mutex ptp_mutex;  //to serialize the activity in the phc
