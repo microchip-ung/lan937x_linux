@@ -1147,7 +1147,7 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
                      return false;  /* free cloned skb */
 
                prt->tstamp_tx_sync_skb = clone;
-	//	shhwtstamps.hwtstamp = lan937x_tstamp_to_clock(dev, 0x1234);
+	//	shhwtstamps.hwtstamp = lan937x_tstamp_reconstruct(dev, 0x1234);
 	//	skb_complete_tx_timestamp(clone, &shhwtstamps);
 	       break;
 
@@ -1937,7 +1937,7 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 
 		tstamp = ksz9477_decode_tstamp(tstamp_raw);
 		memset(&shhwtstamps, 0, sizeof(shhwtstamps));
-		shhwtstamps.hwtstamp = lan937x_tstamp_to_clock(dev, tstamp);
+		shhwtstamps.hwtstamp = lan937x_tstamp_reconstruct(dev, tstamp);
 
 		/* skb_complete_tx_timestamp() will free up the client to make
 		 * another timestamp-able transmit. We have to be ready for it
