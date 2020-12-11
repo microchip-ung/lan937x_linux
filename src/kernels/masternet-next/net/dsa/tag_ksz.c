@@ -391,6 +391,8 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 {
 	struct dsa_port *dp = dsa_slave_to_port(dev);
 	struct lan937x_port_ext *kp = dp->priv;
+	struct dsa_switch *ds = dev->dsa_ptr->ds;
+	struct ksz_device *ksz = ds->priv;
 	struct sk_buff *nskb;
 	__be16 *tag;
 	u8 *addr;
@@ -402,7 +404,9 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 		return NULL;
 
 	/* Tag encoding */
-        lan937x_xmit_timestamp(skb);
+	if (test_bit(LAN937X_HWTS_EN, &ksz->ptp_shared.state))
+        	lan937x_xmit_timestamp(skb);
+
 	tag = skb_put(nskb, LAN937X_INGRESS_TAG_LEN);
 	addr = skb_mac_header(nskb);
 
