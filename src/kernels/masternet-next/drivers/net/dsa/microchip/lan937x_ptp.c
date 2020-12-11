@@ -57,10 +57,8 @@ int lan937x_get_ts_info(struct dsa_switch *ds, int port, struct ethtool_ts_info 
 int lan937x_hwtstamp_get(struct dsa_switch *ds, int port, struct ifreq *ifr)
 {
 	struct ksz_device *dev  = ds->priv;
-	struct hwtstamp_config *port_tconfig = &dev->ports[port].tstamp_config;
 
-
-	return copy_to_user(ifr->ifr_data, port_tconfig, sizeof(struct hwtstamp_config)) ?  
+	return copy_to_user(ifr->ifr_data, &dev->tstamp_config, sizeof(struct hwtstamp_config)) ?  
 	        -EFAULT : 0;
 }
 
@@ -105,7 +103,6 @@ static int lan937x_set_hwtstamp_config(struct ksz_device *dev, int port,
 int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct ifreq *ifr)
 {
 	struct ksz_device *dev  = ds->priv;
-	struct hwtstamp_config *port_tconfig = &dev->ports[port].tstamp_config;
 	struct hwtstamp_config config;
 	unsigned long bytes_copied;
 	int err;	
@@ -120,7 +117,7 @@ int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct ifreq *ifr)
 		return err;
 
 	/* Save the chosen configuration to be returned later. */
-	memcpy(port_tconfig, &config, sizeof(config));
+	memcpy(&dev->tstamp_config, &config, sizeof(config));
 	bytes_copied = copy_to_user(ifr->ifr_data, &config, sizeof(config)); 
 	
 	mutex_unlock(&dev->ptp_mutex);
