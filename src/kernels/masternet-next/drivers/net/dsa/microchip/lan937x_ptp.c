@@ -1339,10 +1339,9 @@ static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
         struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
         struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
         struct timespec64 delta64 = ns_to_timespec64(delta);
-        int ret;
         s32 sec, nsec;
         u16 data16;
-        unsigned long flags;
+        int ret;
 
         mutex_lock(&dev->ptp_mutex);
 
@@ -1614,7 +1613,7 @@ static int lan937x_ptp_ports_init(struct ksz_device *dev)
         return 0;
 
 error_deinit:
-        for (--port; port >= 0; --port)
+        while (port-- > 0)
                 lan937x_ptp_port_deinit(dev, port);
         return ret;
 }
@@ -1623,7 +1622,7 @@ static void lan937x_ptp_ports_deinit(struct ksz_device *dev)
 {
         int port;
 
-        for (port = dev->port_cnt - 1; port >= 0; --port)
+        for (port = 0; port < dev->port_cnt; port++)
                 lan937x_ptp_port_deinit(dev, port);
 }
 
