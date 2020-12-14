@@ -340,9 +340,8 @@ static void lan937x_xmit_timestamp(struct sk_buff *skb __maybe_unused)
 	put_unaligned_be32(tstamp_raw, skb_put(skb, LAN937X_PTP_TAG_LEN));
 }
 
-static void lan937x_rcv_timestamp(struct sk_buff *skb __maybe_unused, u8 *tag __maybe_unused,
-                                 struct net_device *dev __maybe_unused,
-                                 unsigned int port __maybe_unused)
+static void lan937x_rcv_timestamp(struct sk_buff *skb , u8 *tag ,
+                                 struct net_device *dev, unsigned int port )
 {
 	struct skb_shared_hwtstamps *hwtstamps = skb_hwtstamps(skb);
 	u8 *tstamp_raw = tag - KSZ9477_PTP_TAG_LEN;
