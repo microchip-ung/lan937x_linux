@@ -496,7 +496,6 @@ int lan937x_t1_tx_phy_read(struct ksz_device *dev, int addr,
 			return ret;
 		}
 
-		pr_info("prt:%d,rg:%x", addr,reg);
 		if (lan937x_is_internal_tx_phy_port(dev, addr))
 			addr_base = REG_PORT_TX_PHY_CTRL_BASE;
 		else
