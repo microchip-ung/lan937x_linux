@@ -9,6 +9,9 @@
 
 struct lan937x_port_ptp_shared{
 	struct ksz_device_ptp_shared *dev;
+        struct kthread_worker *xmit_worker;
+	struct kthread_work xmit_sync_work;
+	struct sk_buff_head xmit_sync_queue;
 };
 
 /* Lan937x port extended information which is used to refer
@@ -19,6 +22,8 @@ struct lan937x_port_ext {
 	u8 tx_phy_log_prt; /*tx phy port number in the device*/
 	struct dsa_port *dp;
         struct lan937x_port_ptp_shared ptp_shared;
+        ktime_t tstamp_sync;
+	struct completion tstamp_sync_comp;	
 };
 
 #endif/* _NET_DSA_LAN937X_H */
