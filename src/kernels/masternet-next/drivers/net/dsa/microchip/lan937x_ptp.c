@@ -648,10 +648,64 @@ static int lan937x_ptp_disable_port_xDelayRsp_interrupts(struct ksz_device *dev,
 
         return 0;
 }
+
+static void lan937x_sync_txtstamp_skb(struct ksz_device *dev,
+				     struct lan937x_port_ext *prt_ext, struct sk_buff *skb)
+{
+	struct skb_shared_hwtstamps hwtstamps = {};
+	int ret;
+
+	skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
+
+	/* timeout must include tstamp latency, IRQ latency and time for
+	 * reading the time stamp via I2C.
+	 */
+	ret = wait_for_completion_timeout(&prt_ext->tstamp_sync_comp,
+					  msecs_to_jiffies(100));
+	if (!ret) {
+		dev_err(dev->dev, "timeout waiting for time stamp\n");
+		return;
+	}
+	hwtstamps.hwtstamp = prt_ext->tstamp_sync;
+	skb_complete_tx_timestamp(skb, &hwtstamps);
+}
+
+#define work_to_port(work) \
+		container_of((work), struct lan937x_port_ptp_shared, xmit_sync_work)
+#define ptp_shared_to_port_ext(t) \
+		container_of((t), struct lan937x_port_ext, ptp_shared)
+#define ptp_shared_to_ksz_device(t) \
+		container_of((t), struct ksz_device, ptp_shared)
+
+/* Deferred work is necessary for time stamped PDelay_Req messages. This cannot
+ * be done from atomic context as we have to wait for the hardware interrupt.
+ */
+static void lan937x_sync_deferred_xmit(struct kthread_work *work)
+{
+	struct lan937x_port_ptp_shared *prt_ptp_shared = work_to_port(work);
+	struct lan937x_port_ext *prt_ext = ptp_shared_to_port_ext(prt_ptp_shared);
+	struct ksz_device_ptp_shared *ptp_shared = prt_ptp_shared->dev;
+	struct ksz_device *dev = ptp_shared_to_ksz_device(ptp_shared);
+	int port = prt_ext - dev->prts_ext;
+	struct sk_buff *skb;
+
+	while ((skb = skb_dequeue(&prt_ptp_shared->xmit_sync_queue)) != NULL) {
+		struct sk_buff *clone = DSA_SKB_CB(skb)->clone;
+
+		reinit_completion(&prt_ext->tstamp_sync_comp);
+
+		/* Transfer skb to the host port. */
+		dsa_enqueue_skb(skb, dsa_to_port(dev->ds, port)->slave);
+
+		lan937x_sync_txtstamp_skb(dev, prt_ext, clone);
+	}
+}
+
 static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
 {
-        struct ksz_port *prt = &dev->ports[port];
-	struct lan937x_port_ptp_shared *ptp_shared = &dev->prts_ext[port].ptp_shared;
+        struct lan937x_port_ext *prt_ext = &dev->prts_ext[port];
+	struct lan937x_port_ptp_shared *ptp_shared = &prt_ext->ptp_shared;
+	struct dsa_port *dp = dsa_to_port(dev->ds, port);
         int ret;
 
         if (port == dev->cpu_port)
@@ -684,12 +738,19 @@ static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
         if(ret)
                 goto error_disable_port_xdelayreq_interrupts;
 
-<<<<<<< HEAD
-=======
 	/* ksz_port::ptp_shared is used in tagging driver */
 	ptp_shared->dev = &dev->ptp_shared;
 
->>>>>>> moved the port_shared to new structure
+	init_completion(&prt_ext->tstamp_sync_comp);
+	kthread_init_work(&ptp_shared->xmit_sync_work,
+			  lan937x_sync_deferred_xmit);
+	ptp_shared->xmit_worker = kthread_create_worker(0, "%s_xmit",
+							dp->slave->name);
+	if (IS_ERR(ptp_shared->xmit_worker)) 
+		goto error_disable_port_xdelayreq_interrupts;
+	
+	skb_queue_head_init(&ptp_shared->xmit_sync_queue);
+
         return 0;
 
 error_disable_port_xdelayreq_interrupts:
