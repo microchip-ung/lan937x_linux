@@ -255,13 +255,13 @@ static void lan937x_rcv_timestamp(struct sk_buff *skb , u8 *tag ,
 	struct skb_shared_hwtstamps *hwtstamps = skb_hwtstamps(skb);
 	u8 *tstamp_raw = tag - KSZ9477_PTP_TAG_LEN;
 	struct lan937x_port_ext *kp = dp->priv;
-	struct ksz_device_ptp_shared *ptp_shared = kp->ptp_dev;
+	struct lan937x_port_ptp_shared *ptp_shared = &kp->ptp_shared;
 	ktime_t tstamp;
  
 	/* convert time stamp and write to skb */
 	tstamp = ksz9477_decode_tstamp(get_unaligned_be32(tstamp_raw));
 	memset(hwtstamps, 0, sizeof(*hwtstamps));
-	hwtstamps->hwtstamp = lan937x_tstamp_reconstruct(ptp_shared, tstamp);
+	hwtstamps->hwtstamp = lan937x_tstamp_reconstruct(ptp_shared->dev, tstamp);
 }
 
 
@@ -270,7 +270,8 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 {
 	struct dsa_port *dp = dsa_slave_to_port(dev);
 	struct lan937x_port_ext *kp = dp->priv;
-	struct ksz_device_ptp_shared *ptp_shared = kp->ptp_dev;
+	struct lan937x_port_ptp_shared *port_ptp_shared = &kp->ptp_shared;
+	struct ksz_device_ptp_shared *ptp_shared = port_ptp_shared->dev;
 	struct sk_buff *nskb;
 	__be16 *tag;
 	u8 *addr;
