@@ -361,43 +361,15 @@ static void lan937x_rcv_timestamp(struct sk_buff *skb , u8 *tag ,
 {
 	struct skb_shared_hwtstamps *hwtstamps = skb_hwtstamps(skb);
 	u8 *tstamp_raw = tag - KSZ9477_PTP_TAG_LEN;
-	struct dsa_switch *ds = dev->dsa_ptr->ds;
-	struct ksz_device *ksz = ds->priv;
-	struct ksz_port *prt = &ksz->ports[port];
-	struct ptp_header *ptp_hdr;
-	unsigned int ptp_type;
+	struct lan937x_port_ext *kp = dp->priv;
+	struct lan937x_port_ptp_shared *ptp_shared = &kp->ptp_shared;
 	ktime_t tstamp;
 	u8 data;
 
 	/* convert time stamp and write to skb */
 	tstamp = ksz9477_decode_tstamp(get_unaligned_be32(tstamp_raw));
 	memset(hwtstamps, 0, sizeof(*hwtstamps));
-	hwtstamps->hwtstamp = lan937x_tstamp_reconstruct(&ksz->ptp_shared, tstamp);
-
-	__skb_push(skb, ETH_HLEN);
-	ptp_type = ptp_classify_raw(skb);
-	__skb_pull(skb, ETH_HLEN);
-
-/*	pr_err("debug 1\n");
-	if (ptp_type == PTP_CLASS_NONE)
-		return;
-*/
-	ptp_hdr = ptp_parse_header(skb, ptp_type);
-	if (!ptp_hdr)
-		return;
-
-	data = ptp_get_msgtype(ptp_hdr, ptp_type);
-	/*if(data == 0)
-	pr_err("packet recv is sync\n");
-	else if(data == 2)
-	pr_err("packet recv is pdelay_req\n");
-	else if(data == 3)
-		pr_err("data recv is delay_resp\n");
-	else
-		pr_err("data recv is %d\n", data);
-	*/	
-	//if (msg_type != PTP_Event_Message_Pdelay_Req)
-//		return;
+	hwtstamps->hwtstamp = lan937x_tstamp_reconstruct(ptp_shared->dev, tstamp);
 }
 
 
@@ -406,13 +378,8 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 {
 	struct dsa_port *dp = dsa_slave_to_port(dev);
 	struct lan937x_port_ext *kp = dp->priv;
-<<<<<<< HEAD
 	struct lan937x_port_ptp_shared *port_ptp_shared = &kp->ptp_shared;
 	struct ksz_device_ptp_shared *ptp_shared = port_ptp_shared->dev;
-=======
-	struct dsa_switch *ds = dev->dsa_ptr->ds;
-	struct ksz_device *ksz = ds->priv;
->>>>>>> added the flag for sending 4 bytes tail depends on ioctl
 	struct sk_buff *nskb;
 	__be16 *tag;
 	u8 *addr;
@@ -424,13 +391,8 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 		return NULL;
 
 	/* Tag encoding */
-<<<<<<< HEAD
 	if (test_bit(LAN937X_HWTS_EN, &ptp_shared->state))
 		lan937x_xmit_timestamp(skb);
-=======
-	if (test_bit(LAN937X_HWTS_EN, &ksz->ptp_shared.state))
-        	lan937x_xmit_timestamp(skb);
->>>>>>> added the flag for sending 4 bytes tail depends on ioctl
 
 	tag = skb_put(nskb, LAN937X_INGRESS_TAG_LEN);
 	addr = skb_mac_header(nskb);
