@@ -621,6 +621,9 @@ struct ocelot {
 	/* Keep track of the vlan port masks */
 	u32				vlan_mask[VLAN_N_VID];
 
+	/* Switches like VSC9959 have flooding per traffic class */
+	int				num_flooding_pgids;
+
 	/* In tables like ANA:PORT and the ANA:PGID:PGID mask,
 	 * the CPU is located after the physical ports (at the
 	 * num_phys_ports index).
@@ -646,6 +649,8 @@ struct ocelot {
 	u64				*stats;
 	struct delayed_work		stats_work;
 	struct workqueue_struct		*stats_queue;
+
+	struct workqueue_struct		*owq;
 
 	u8				ptp:1;
 	struct ptp_clock		*ptp_clock;
