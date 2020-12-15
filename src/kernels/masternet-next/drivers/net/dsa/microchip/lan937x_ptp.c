@@ -1402,7 +1402,7 @@ static long lan937x_ptp_do_aux_work(struct ptp_clock_info *ptp)
         ptp_shared->ptp_clock_time = ts;
         spin_unlock_bh(&ptp_shared->ptp_clock_lock);
 
-        return 1; //HZ;  /* reschedule in 1 second */
+        return HZ;  /* reschedule in 1 second */
 }
 
 static int lan937x_ptp_start_clock(struct ksz_device *dev)
@@ -1743,15 +1743,10 @@ int lan937x_ptp_init(struct dsa_switch *ds)
                 goto error_stop_clock;
         }
 
-        /* Enable PTP mode (will affect tail tagging format) */
-        ret = lan937x_ptp_enable_mode(dev, true);
-        if (ret)
-                goto error_unregister_clock;
-
         /* Init switch ports */
         ret = lan937x_ptp_ports_init(dev);
         if (ret)
-                goto error_disable_mode;
+                goto error_unregister_clock;
 
         //ksz9477_ptp_tcmode_set(dev, KSZ9477_PTP_TCMODE_P2P);
         lan937x_ptp_8021as_set(dev, 1);
@@ -1761,8 +1756,6 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 
         return 0;
 
-error_disable_mode:
-        lan937x_ptp_enable_mode(dev, false);
 error_unregister_clock:
         ptp_clock_unregister(dev->ptp_clock);
 error_stop_clock:
@@ -1796,7 +1789,6 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
         ret = ksz_read16(dev, addr, &data);
         if (ret)
                 return IRQ_NONE;
-
 
         //	if (((data & PTP_PORT_XDELAY_REQ_INT) || (data & PTP_PORT_SYNC_INT)) && prt->tstamp_tx_xdelay_skb) {
         if ((data & PTP_PORT_XDELAY_REQ_INT) || (data & PTP_PORT_SYNC_INT)|| (data & PTP_PORT_PDELAY_RESP_INT)) {
