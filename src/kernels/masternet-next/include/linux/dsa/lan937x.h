@@ -13,6 +13,7 @@ struct lan937x_port_ext {
 	u8 lp_num; /*logical port number*/
 	u8 tx_phy_log_prt; /*tx phy port number in the device*/
 	struct dsa_port *dp;
+	struct ksz_device_ptp_shared *ptp_dev;
 };
 
 #endif/* _NET_DSA_LAN937X_H */

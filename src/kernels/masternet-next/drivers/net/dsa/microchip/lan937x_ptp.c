@@ -8,6 +8,7 @@
 #include <linux/ptp_classify.h>
 #include <linux/ptp_clock_kernel.h>
 #include <linux/irqreturn.h>
+#include <linux/dsa/lan937x.h>
 
 #define ptp_clock_info_to_dev(d) \
         container_of((d), struct ksz_device, ptp_caps)
@@ -50,8 +51,6 @@ static int lan937x_ptp_enable_mode(struct ksz_device *dev, bool enable) {
         ret = ksz_write16(dev, REG_PTP_MSG_CONF1, data);
         if (ret)
                 return ret;
-
-        return 0;
 
         if (enable) {
                 /* Schedule cyclic call of ksz_ptp_do_aux_work() */
@@ -114,6 +113,7 @@ int lan937x_hwtstamp_get(struct dsa_switch *ds, int port, struct ifreq *ifr)
 static int lan937x_set_hwtstamp_config(struct ksz_device *dev, int port,
                 struct hwtstamp_config *config)
 {
+	struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
         struct ksz_port *prt = &dev->ports[port];
         bool rx_on;
 
@@ -141,7 +141,7 @@ static int lan937x_set_hwtstamp_config(struct ksz_device *dev, int port,
                         break;
         }
 
-        if (rx_on != test_bit(LAN937X_HWTS_EN, &dev->ptp_shared.state)) {
+        if (rx_on != test_bit(LAN937X_HWTS_EN, &ptp_shared->state)) {
                 int ret = 0;
 
                 clear_bit(LAN937X_HWTS_EN, &dev->ptp_shared.state);
@@ -151,7 +151,7 @@ static int lan937x_set_hwtstamp_config(struct ksz_device *dev, int port,
                         return ret;
                 }
                 if (rx_on)
-                        set_bit(LAN937X_HWTS_EN, &dev->ptp_shared.state);
+                        set_bit(LAN937X_HWTS_EN, &ptp_shared->state);
         }
 
         return 0;
@@ -286,7 +286,7 @@ static int _lan937x_ptp_gettime(struct ksz_device *dev, struct timespec64 *ts)
 
         data16 |= PTP_READ_TIME;
 
-        ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16)
+        ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
                 if (ret)
                         return ret;
 
@@ -653,6 +653,8 @@ static int lan937x_ptp_disable_port_xDelayRsp_interrupts(struct ksz_device *dev,
 static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
 {
         struct ksz_port *prt = &dev->ports[port];
+	struct lan937x_port_ext *kp = &dev->prts_ext[port];
+	//struct ksz_port_ptp_shared *ptp_shared = &dev->prts_ext[port].ptp_shared;
         int ret;
 
         if (port == dev->cpu_port)
@@ -684,6 +686,9 @@ static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
         ret = lan937x_ptp_enable_port_xdelayrsp_interrupts(dev, port, true);
         if(ret)
                 goto error_disable_port_xdelayreq_interrupts;
+
+	/* ksz_port::ptp_shared is used in tagging driver */
+	kp->ptp_dev = &dev->ptp_shared;
 
         return 0;
 
@@ -861,8 +866,8 @@ int lan937x_ptp_init(struct dsa_switch *ds)
         if (ret)
                 goto error_disable_mode;
 
-        //ksz9477_ptp_tcmode_set(dev, KSZ9477_PTP_TCMODE_P2P);
-        lan937x_ptp_8021as_set(dev, 1);
+        ksz9477_ptp_tcmode_set(dev, KSZ9477_PTP_TCMODE_P2P);
+        //lan937x_ptp_8021as_set(dev, 1);
         //	lan937x_ptp_ocmode_set(dev, KSZ9477_PTP_OCMODE_MASTER);
         //	lan937x_ptp_twostep_set(dev, 1);
 

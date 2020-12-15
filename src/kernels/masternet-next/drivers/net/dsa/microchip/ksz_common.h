@@ -45,6 +45,13 @@ struct ksz_device_ptp_shared {
 	unsigned long state;
 };
 
+struct ksz_port_ptp_shared {
+	struct ksz_device_ptp_shared *dev;
+	struct kthread_worker *xmit_worker;
+	struct kthread_work xmit_work;
+	struct sk_buff_head xmit_queue;
+};
+
 struct ksz_port {
 	u16 member;
 	u16 vid_member;
@@ -71,6 +78,7 @@ struct ksz_port {
 	u16 tx_seq_id;
 	unsigned long tstamp_state;
 	bool hwts_tx_en;
+	struct ksz_port_ptp_shared ptp_shared;
 #endif
 };
 
