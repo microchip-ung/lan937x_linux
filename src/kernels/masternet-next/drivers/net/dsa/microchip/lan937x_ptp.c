@@ -192,7 +192,6 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
         struct ksz_port *prt = &dev->ports[port];
         struct ptp_header *hdr;
         enum ksz9477_ptp_event_messages msg_type;
-        struct skb_shared_hwtstamps shhwtstamps;
 
         if (!(skb_shinfo(clone)->tx_flags & SKBTX_HW_TSTAMP))
                 return false;
@@ -328,7 +327,6 @@ static int lan937x_ptp_settime(struct ptp_clock_info *ptp,
         struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
         struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
         u16 data16;
-        unsigned long flags;
         int ret;
 
         mutex_lock(&dev->ptp_mutex);
@@ -492,7 +490,6 @@ static long lan937x_ptp_do_aux_work(struct ptp_clock_info *ptp)
         struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
         struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
         struct timespec64 ts;
-        unsigned long flags;
 
         mutex_lock(&dev->ptp_mutex);
         _lan937x_ptp_gettime(dev, &ts);
@@ -958,7 +955,7 @@ void lan937x_ptp_deinit(struct dsa_switch *ds)
 irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 {
         u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_STATUS__2);
-        u32 enable_addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
+        struct lan937x_port_ext *prt_ext = &dev->prts_ext[port - 1];
         struct ksz_port *prt = &dev->ports[port - 1];
         u16 data;
         int ret;
@@ -1009,7 +1006,6 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 
                 tstamp = ksz9477_decode_tstamp(tstamp_raw);
                 memset(&shhwtstamps, 0, sizeof(shhwtstamps));
-                shhwtstamps.hwtstamp = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
 
                 /* skb_complete_tx_timestamp() will free up the client to make
                 * another timestamp-able transmit. We have to be ready for it
@@ -1018,25 +1014,25 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 
                 if(data & PTP_PORT_XDELAY_REQ_INT)
                 {
+                        shhwtstamps.hwtstamp = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
                         tmp_skb = prt->tstamp_tx_xdelay_skb;
                         prt->tstamp_tx_xdelay_skb = NULL;
                         clear_bit_unlock(LAN937X_HWTSTAMP_TX_XDELAY_IN_PROGRESS, &prt->tstamp_state);
+                        skb_complete_tx_timestamp(tmp_skb, &shhwtstamps);
                 }
                 else if(data & PTP_PORT_PDELAY_RESP_INT)
                 {
+                        shhwtstamps.hwtstamp = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
                         tmp_skb = prt->tstamp_tx_xdelay_rsp_skb;
                         prt->tstamp_tx_xdelay_rsp_skb = NULL;
                         clear_bit_unlock(LAN937X_HWTSTAMP_TX_XDELAY_RSP_IN_PROGRESS, &prt->tstamp_state);
-
+                        skb_complete_tx_timestamp(tmp_skb, &shhwtstamps);
                 }
                 else if(data & PTP_PORT_SYNC_INT)
                 {
-                        tmp_skb = prt->tstamp_tx_sync_skb;
-                        prt->tstamp_tx_sync_skb = NULL;
-                        clear_bit_unlock(LAN937X_HWTSTAMP_TX_SYNC_IN_PROGRESS, &prt->tstamp_state);
-
+                        prt_ext->tstamp_sync = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
+                        complete(&prt_ext->tstamp_sync_comp);
                 }
-                skb_complete_tx_timestamp(tmp_skb, &shhwtstamps);
 
                 /* Clear interrupt(s) (W1C) */
                 ret = ksz_write16(dev, addr, portInt);
