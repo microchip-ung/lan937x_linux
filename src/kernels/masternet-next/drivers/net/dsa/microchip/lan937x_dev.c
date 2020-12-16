@@ -491,10 +491,6 @@ int lan937x_t1_tx_phy_read(struct ksz_device *dev, int addr,
 			break;
 		}
 	} else {
-		if (ret) {
-			dev_dbg(dev->dev, "Failed to enable VPHY indirect access from SPI");
-			return ret;
-		}
 
 		if (lan937x_is_internal_tx_phy_port(dev, addr))
 			addr_base = REG_PORT_TX_PHY_CTRL_BASE;
@@ -798,29 +794,6 @@ static void t1_phy_port_init(struct ksz_device *dev, int port)
 				   PORT_T1_POWER_DOWN, false);
 }
 
-static void lan937x_set_xmii(struct ksz_device *dev, int mode, u8 *data)
-{
-	u8 xmii;
-
-	switch (mode) {
-	case 0:
-		xmii = PORT_MII_SEL;
-		break;
-	case 1:
-		xmii = PORT_RMII_SEL;
-		break;
-	case 2:
-		xmii = PORT_RGMII_SEL;
-		break;
-	default:
-		xmii = PORT_RGMII_SEL;
-		break;
-	}
-
-	*data &= ~PORT_MII_SEL_M;
-	*data |= xmii;
-}
-
 static void lan937x_set_gbit(struct ksz_device *dev, bool gbit, u8 *data)
 {
 	if (gbit)
@@ -881,31 +854,34 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 				 PORT_FORCE_TX_FLOW_CTRL | PORT_FORCE_RX_FLOW_CTRL,
 			     false);
 
-		/* configure MAC to 1G & RGMII mode  */
 		lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
+		
+		/* clear MII selection & set it based on interface later */	
+		data8 &= ~PORT_MII_SEL_M;
 
+		/* configure MAC based on p->interface */
 		switch (p->interface) {
 		case PHY_INTERFACE_MODE_MII:
-			lan937x_set_xmii(dev, 0, &data8);
 			lan937x_set_gbit(dev, false, &data8);
-			data8 |= PORT_MII_NOT_1GBIT;
+			data8 |= PORT_MII_SEL;
 			p->phydev.speed = SPEED_100;
 			break;
 		case PHY_INTERFACE_MODE_RMII:
-			lan937x_set_xmii(dev, 1, &data8);
 			lan937x_set_gbit(dev, false, &data8);
-			data8 |= PORT_MII_NOT_1GBIT;
+			data8 |= PORT_RMII_SEL;;
 			p->phydev.speed = SPEED_100;
 			break;
 		default:
-			lan937x_set_xmii(dev, 3, &data8);
 			lan937x_set_gbit(dev, true, &data8);
-			data8 |= PORT_MII_NOT_1GBIT;
+			data8 |= PORT_RGMII_SEL;
+
 			data8 &= ~PORT_RGMII_ID_IG_ENABLE;
 			data8 &= ~PORT_RGMII_ID_EG_ENABLE;
+
 			if (p->interface == PHY_INTERFACE_MODE_RGMII_ID ||
 			    p->interface == PHY_INTERFACE_MODE_RGMII_RXID)
 				data8 |= PORT_RGMII_ID_IG_ENABLE;
+
 			if (p->interface == PHY_INTERFACE_MODE_RGMII_ID ||
 			    p->interface == PHY_INTERFACE_MODE_RGMII_TXID)
 				data8 |= PORT_RGMII_ID_EG_ENABLE;
@@ -915,12 +891,12 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 		lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, data8);
 		p->phydev.duplex = 1;
 	}
-	mutex_lock(&dev->dev_mutex);
+
 	if (cpu_port)
 		member = dev->port_mask;
 	else
 		member = dev->host_mask | p->vid_member;
-	mutex_unlock(&dev->dev_mutex);
+
 	lan937x_cfg_port_member(dev, port, member);
 
 	/* clear pending interrupts */
