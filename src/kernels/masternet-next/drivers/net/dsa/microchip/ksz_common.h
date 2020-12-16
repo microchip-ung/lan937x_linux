@@ -74,7 +74,6 @@ struct ksz_port {
 	unsigned long tx_tstamp_start;
 	struct sk_buff *tstamp_tx_xdelay_skb;
 	struct sk_buff *tstamp_tx_xdelay_rsp_skb;
-	struct sk_buff *tstamp_tx_sync_skb;
 	u16 tx_seq_id;
 	unsigned long tstamp_state;
 	bool hwts_tx_en;
