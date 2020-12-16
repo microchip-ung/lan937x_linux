@@ -785,34 +785,10 @@ static void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
 				 PORT_MIRROR_SNIFFER, false);
 }
 
-static int lan937x_get_xmii(struct ksz_device *dev, u8 data)
-{
-	int mode;
-
-	switch (data & PORT_MII_SEL_M) {
-	case PORT_MII_SEL:
-		mode = 0;
-		break;
-	case PORT_RMII_SEL:
-		mode = 1;
-		break;
-	case PORT_RGMII_SEL:
-		mode = 2;
-		break;
-	default:
-		/* MII Interface*/
-		mode = 0;
-		break;
-	}
-
-	return mode;
-}
-
 static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 {
 	phy_interface_t interface;
 	bool gbit;
-	int mode;
 	u8 data8;
 
 	if (port < dev->phy_port_cnt)
@@ -824,14 +800,11 @@ static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 	/* get interface speed */
 	gbit = !(data8 & PORT_MII_NOT_1GBIT);
 
-	/* get interface mode */
-	mode = lan937x_get_xmii(dev, data8);
-
-	switch (mode) {
-	case 1:
+	switch (data8 & PORT_MII_SEL_M) {
+	case PORT_RMII_SEL:
 		interface = PHY_INTERFACE_MODE_RMII;
 		break;
-	case 2:
+	case PORT_RGMII_SEL:
 		interface = PHY_INTERFACE_MODE_RGMII;
 		if (data8 & PORT_RGMII_ID_EG_ENABLE)
 			interface = PHY_INTERFACE_MODE_RGMII_TXID;
@@ -841,9 +814,9 @@ static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 				interface = PHY_INTERFACE_MODE_RGMII_ID;
 		}
 		break;
-	case 0:
+	case PORT_MII_SEL:
 	default:
-		/* Mode 0 & Mode 3 are MII */
+		/* Interface is MII */
 		interface = PHY_INTERFACE_MODE_MII;
 		break;
 	}

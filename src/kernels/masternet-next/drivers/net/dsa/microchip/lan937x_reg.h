@@ -10,13 +10,11 @@
 #define REG_CHIP_ID1__1			0x0001
 #define REG_CHIP_ID2__1			0x0002
 
-#define CHIP_ID_77			0x77
 #define CHIP_ID_74			0x74
 #define CHIP_ID_73			0x73
 #define CHIP_ID_72			0x72
 #define CHIP_ID_71			0x71
 #define CHIP_ID_70			0x70
-#define CHIP_ID_84			0x84
 
 #define REG_CHIP_ID3__1			0x0003
 
