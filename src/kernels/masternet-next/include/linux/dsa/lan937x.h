@@ -9,7 +9,7 @@
 
 struct lan937x_port_ptp_shared{
 	struct ksz_device_ptp_shared *dev;
-        struct kthread_worker *xmit_worker;
+        struct kthread_worker *xmit_sync_worker;
         struct kthread_worker *xmit_pdelayreq_worker;
         struct kthread_worker *xmit_pdelayrsp_worker;
 	struct kthread_work xmit_sync_work;

@@ -18,12 +18,6 @@
 #define KSZ_PTP_INC_NS 40  /* HW clock is incremented every 40 ns (by 40) */
 #define KSZ_PTP_SUBNS_BITS 32  /* Number of bits in sub-nanoseconds counter */
 
-/* state flags for _port_hwtstamp::state */
-enum {
-        LAN937X_HWTSTAMP_ENABLED,
-        LAN937X_HWTSTAMP_TX_XDELAY_IN_PROGRESS,
-        LAN937X_HWTSTAMP_TX_XDELAY_RSP_IN_PROGRESS,
-};
 
 enum ksz9477_ptp_event_messages {
         PTP_Event_Message_Sync        = 0x0,
@@ -51,7 +45,6 @@ static int lan937x_ptp_enable_mode(struct ksz_device *dev, bool enable) {
         if (ret)
                 return ret;
 
-        //return 0;
 
         if (enable) {
                 /* Schedule cyclic call of ksz_ptp_do_aux_work() */
@@ -205,29 +198,11 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
         ptp_msg_type = ptp_get_msgtype(hdr, type);
 
         switch (ptp_msg_type) {
-                /* As the KSZ9563 always performs one step time stamping, only the time
-                * stamp for Delay_Req and Pdelay_Req are reported to the application
-                * via socket error queue. Time stamps for Sync and Pdelay_resp will be
-                * applied directly to the outgoing message (e.g. correction field), but
-                * will NOT be reported to the socket.
-                 */
                 case PTP_Event_Message_Pdelay_Req:
-           /*             if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_XDELAY_IN_PROGRESS,
-                                                &prt->tstamp_state))
-                                return false;  // free cloned skb 
-
-                        prt->tstamp_tx_xdelay_skb = clone;
-            */            break;
+                        break;
 
                 case PTP_Event_Message_Pdelay_Resp:
-                  /*      if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_XDELAY_RSP_IN_PROGRESS,
-                                                &prt->tstamp_state))
-                                return false;  // free cloned skb 
-
-                        prt->tstamp_tx_xdelay_rsp_skb = clone;
-                       */ break;
-
-
+                        break;
 
                 case PTP_Event_Message_Sync:
                         break;
@@ -241,7 +216,7 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 
         KSZ9477_SKB_CB(clone)->ptp_type = type;
 	KSZ9477_SKB_CB(clone)->ptp_msg_type = ptp_msg_type;
-        //ptp_schedule_worker(dev->ptp_clock, 0);
+
         return true;
 }
 
@@ -625,25 +600,6 @@ static int lan937x_ptp_enable_port_xdelayrsp_interrupts(struct ksz_device *dev,
         return ksz_write16(dev, addr, data);
 }
 
-static int lan937x_ptp_disable_port_xDelayRsp_interrupts(struct ksz_device *dev, int port)
-{
-        u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
-        u16 data;
-        int ret;
-
-        ret = ksz_read16(dev, addr, &data);
-        if (ret)
-                return ret;
-
-        /* Disable port xdelay egress timestamp interrupts (0 means disabled) */
-        data &= PTP_PORT_PDELAY_RESP_INT;
-        ret = ksz_write16(dev, addr, data);
-        if (ret)
-                return ret;
-
-        return 0;
-}
-
 
 static void lan937x_sync_txtstamp_skb(struct ksz_device *dev,
 				     struct lan937x_port_ext *prt_ext, struct sk_buff *skb)
@@ -838,13 +794,13 @@ static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
 	kthread_init_work(&ptp_shared->xmit_pdelayrsp_work,
 			  lan937x_pdelayrsp_deferred_xmit);
 
-	ptp_shared->xmit_worker = kthread_create_worker(0, "%s_xmit",
+	ptp_shared->xmit_sync_worker = kthread_create_worker(0, "%s_xmit",
 							dp->slave->name);
 	ptp_shared->xmit_pdelayreq_worker = kthread_create_worker(0, "%s_req_xmit",
 							dp->slave->name);
 	ptp_shared->xmit_pdelayrsp_worker = kthread_create_worker(0, "%s_rsp_xmit",
 							dp->slave->name);
-	if (IS_ERR(ptp_shared->xmit_worker)) 
+	if (IS_ERR(ptp_shared->xmit_sync_worker)) 
 		goto error_disable_port_xdelayreq_interrupts;
 	
 	skb_queue_head_init(&ptp_shared->xmit_sync_queue);
@@ -864,8 +820,15 @@ error_disable_port_ptp_interrupts:
 
 static void lan937x_ptp_port_deinit(struct ksz_device *dev, int port)
 {
+        struct lan937x_port_ext *prt_ext = &dev->prts_ext[port];
+	struct lan937x_port_ptp_shared *ptp_shared = &prt_ext->ptp_shared;
+
         if (port == dev->cpu_port) 
                 return;
+
+        kthread_destroy_worker(ptp_shared->xmit_sync_worker);
+        kthread_destroy_worker(ptp_shared->xmit_pdelayreq_worker);
+        kthread_destroy_worker(ptp_shared->xmit_pdelayrsp_worker);
 
         lan937x_ptp_enable_port_xdelayrsp_interrupts(dev, port, false);
         lan937x_ptp_enable_port_xdelayreq_interrupts(dev, port, false);
@@ -1055,6 +1018,8 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 {
         u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_STATUS__2);
         struct lan937x_port_ext *prt_ext = &dev->prts_ext[port - 1];
+        u32 tstamp_raw;
+        ktime_t tstamp;
         u16 data;
         int ret;
 
@@ -1063,70 +1028,44 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
         if (ret)
                 return IRQ_NONE;
 
-        if ((data & PTP_PORT_XDELAY_REQ_INT) || (data & PTP_PORT_SYNC_INT)|| (data & PTP_PORT_PDELAY_RESP_INT)) {
-                /* Timestamp for Pdelay_Req / Delay_Req */
-                u32 tstamp_raw;
-                ktime_t tstamp;
-                u32 regaddr;
-                u16 portInt;
-
-                if(data & PTP_PORT_XDELAY_REQ_INT)
-                {
-                        regaddr = PORT_CTRL_ADDR(port, REG_PTP_PORT_XDELAY_TS);
-                        portInt = PTP_PORT_XDELAY_REQ_INT;
-                }
-                else if(data & PTP_PORT_PDELAY_RESP_INT)
-                {
-                        regaddr = PORT_CTRL_ADDR(port, REG_PTP_PORT_PDRESP_TS);
-                        portInt = PTP_PORT_PDELAY_RESP_INT;
-
-                }
-                else if(data & PTP_PORT_SYNC_INT)
-                {
-                        regaddr = PORT_CTRL_ADDR(port, REG_PTP_PORT_SYNC_TS);
-                        portInt = PTP_PORT_SYNC_INT;
-                }
-                else
-                {
-
-                }
-
-                /* In contrast to the KSZ9563R data sheet, the format of the
-                * port time stamp registers is also 2 bit seconds + 30 bit
-                * nanoseconds (same as in the tail tags).
-                 */
-                ret = ksz_read32(dev, regaddr, &tstamp_raw);
+        if(data & PTP_PORT_XDELAY_REQ_INT)
+        {
+                ret = ksz_read32(dev, REG_PTP_PORT_XDELAY_TS, &tstamp_raw);
                 if (ret)
                         return IRQ_NONE;
 
                 tstamp = ksz9477_decode_tstamp(tstamp_raw);
 
-                /* skb_complete_tx_timestamp() will free up the client to make
-                * another timestamp-able transmit. We have to be ready for it
-                * -- by clearing the ps->tx_skb "flag" -- beforehand.
-                 */
-
-                if(data & PTP_PORT_XDELAY_REQ_INT)
-                {
-                        prt_ext->tstamp_pdelayreq = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
-                        complete(&prt_ext->tstamp_pdelayreq_comp);
-                }
-                else if(data & PTP_PORT_PDELAY_RESP_INT)
-                {
-                        prt_ext->tstamp_pdelayrsp = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
-                        complete(&prt_ext->tstamp_pdelayrsp_comp);
-                }
-                else if(data & PTP_PORT_SYNC_INT)
-                {
-                        prt_ext->tstamp_sync = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
-                        complete(&prt_ext->tstamp_sync_comp);
-                }
-
-                /* Clear interrupt(s) (W1C) */
-                ret = ksz_write16(dev, addr, portInt);
+                prt_ext->tstamp_pdelayreq = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
+                complete(&prt_ext->tstamp_pdelayreq_comp);
+        }
+        if(data & PTP_PORT_PDELAY_RESP_INT)
+        {
+                ret = ksz_read32(dev, REG_PTP_PORT_PDRESP_TS, &tstamp_raw);
                 if (ret)
                         return IRQ_NONE;
+
+                tstamp = ksz9477_decode_tstamp(tstamp_raw);
+
+                prt_ext->tstamp_pdelayrsp = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
+                complete(&prt_ext->tstamp_pdelayrsp_comp);
         }
+        if(data & PTP_PORT_SYNC_INT)
+        {
+                ret = ksz_read32(dev, REG_PTP_PORT_SYNC_TS, &tstamp_raw);
+                if (ret)
+                        return IRQ_NONE;
+
+                tstamp = ksz9477_decode_tstamp(tstamp_raw);
+
+                prt_ext->tstamp_sync = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
+                complete(&prt_ext->tstamp_sync_comp);
+        }
+
+        /* Clear interrupt(s) (W1C) */
+        ret = ksz_write16(dev, addr, data);
+        if (ret)
+                return IRQ_NONE;
 
         return IRQ_HANDLED;
 }
