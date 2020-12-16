@@ -1022,8 +1022,8 @@ int lan937x_ptp_init(struct dsa_switch *ds)
         if (ret)
                 goto error_unregister_clock;
 
-        ksz9477_ptp_tcmode_set(dev, KSZ9477_PTP_TCMODE_P2P);
-        //lan937x_ptp_8021as_set(dev, 1);
+        //ksz9477_ptp_tcmode_set(dev, KSZ9477_PTP_TCMODE_P2P);
+        lan937x_ptp_8021as_set(dev, 1);
         //	lan937x_ptp_ocmode_set(dev, KSZ9477_PTP_OCMODE_MASTER);
         //	lan937x_ptp_twostep_set(dev, 1);
 
@@ -1055,7 +1055,6 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 {
         u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_STATUS__2);
         struct lan937x_port_ext *prt_ext = &dev->prts_ext[port - 1];
-        struct ksz_port *prt = &dev->ports[port - 1];
         u16 data;
         int ret;
 
@@ -1064,13 +1063,10 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
         if (ret)
                 return IRQ_NONE;
 
-        //	if (((data & PTP_PORT_XDELAY_REQ_INT) || (data & PTP_PORT_SYNC_INT)) && prt->tstamp_tx_xdelay_skb) {
         if ((data & PTP_PORT_XDELAY_REQ_INT) || (data & PTP_PORT_SYNC_INT)|| (data & PTP_PORT_PDELAY_RESP_INT)) {
                 /* Timestamp for Pdelay_Req / Delay_Req */
                 u32 tstamp_raw;
                 ktime_t tstamp;
-                struct skb_shared_hwtstamps shhwtstamps;
-                struct sk_buff *tmp_skb;
                 u32 regaddr;
                 u16 portInt;
 
@@ -1104,7 +1100,6 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
                         return IRQ_NONE;
 
                 tstamp = ksz9477_decode_tstamp(tstamp_raw);
-                memset(&shhwtstamps, 0, sizeof(shhwtstamps));
 
                 /* skb_complete_tx_timestamp() will free up the client to make
                 * another timestamp-able transmit. We have to be ready for it
