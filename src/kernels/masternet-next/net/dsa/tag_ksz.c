@@ -356,7 +356,7 @@ static struct sk_buff *ksz9477_defer_xmit(struct dsa_port *dp,
 	if (ptp_msg_type == 0x00)
 	{
 		skb_queue_tail(&ptp_shared->xmit_sync_queue, skb_get(skb));
-		kthread_queue_work(ptp_shared->xmit_worker, &ptp_shared->xmit_sync_work);
+		kthread_queue_work(ptp_shared->xmit_sync_worker, &ptp_shared->xmit_sync_work);
 
 		return NULL;
 	}
