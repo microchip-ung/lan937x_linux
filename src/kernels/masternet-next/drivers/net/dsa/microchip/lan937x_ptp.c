@@ -22,7 +22,6 @@ enum {
         LAN937X_HWTSTAMP_ENABLED,
         LAN937X_HWTSTAMP_TX_XDELAY_IN_PROGRESS,
         LAN937X_HWTSTAMP_TX_XDELAY_RSP_IN_PROGRESS,
-        LAN937X_HWTSTAMP_TX_SYNC_IN_PROGRESS
 };
 
 enum ksz9477_ptp_event_messages {
@@ -227,13 +226,6 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 
 
                 case PTP_Event_Message_Sync:
-                        /*if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_SYNC_IN_PROGRESS,
-                                                &prt->tstamp_state))
-                                return false;  *//* free cloned skb */
-
-                        prt->tstamp_tx_sync_skb = clone;
-                        //	shhwtstamps.hwtstamp = lan937x_tstamp_reconstruct(dev, 0x1234);
-                        //	skb_complete_tx_timestamp(clone, &shhwtstamps);
                         break;
 
                 default:
