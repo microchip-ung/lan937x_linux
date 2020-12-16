@@ -1017,9 +1017,9 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
         struct lan937x_port_ext *prt_ext = &dev->prts_ext[port - 1];
         u32 tstamp_raw;
         ktime_t tstamp;
+        u32 regaddr;
         u16 data;
         int ret;
-
 
         ret = ksz_read16(dev, addr, &data);
         if (ret)
@@ -1027,7 +1027,9 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 
         if(data & PTP_PORT_XDELAY_REQ_INT)
         {
-                ret = ksz_read32(dev, REG_PTP_PORT_XDELAY_TS, &tstamp_raw);
+                regaddr = PORT_CTRL_ADDR(port, REG_PTP_PORT_XDELAY_TS);
+
+                ret = ksz_read32(dev, regaddr, &tstamp_raw);
                 if (ret)
                         return IRQ_NONE;
 
@@ -1036,9 +1038,12 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
                 prt_ext->tstamp_pdelayreq = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
                 complete(&prt_ext->tstamp_pdelayreq_comp);
         }
+
         if(data & PTP_PORT_PDELAY_RESP_INT)
         {
-                ret = ksz_read32(dev, REG_PTP_PORT_PDRESP_TS, &tstamp_raw);
+                regaddr = PORT_CTRL_ADDR(port, REG_PTP_PORT_PDRESP_TS);
+
+                ret = ksz_read32(dev, regaddr, &tstamp_raw);
                 if (ret)
                         return IRQ_NONE;
 
@@ -1047,9 +1052,12 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
                 prt_ext->tstamp_pdelayrsp = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
                 complete(&prt_ext->tstamp_pdelayrsp_comp);
         }
+
         if(data & PTP_PORT_SYNC_INT)
         {
-                ret = ksz_read32(dev, REG_PTP_PORT_SYNC_TS, &tstamp_raw);
+                regaddr = PORT_CTRL_ADDR(port, REG_PTP_PORT_SYNC_TS);
+
+                ret = ksz_read32(dev, regaddr, &tstamp_raw);
                 if (ret)
                         return IRQ_NONE;
 
@@ -1059,10 +1067,11 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
                 complete(&prt_ext->tstamp_sync_comp);
         }
 
-        /* Clear interrupt(s) (W1C) */
+        //Clear the interrupts W1C
         ret = ksz_write16(dev, addr, data);
         if (ret)
                 return IRQ_NONE;
+
 
         return IRQ_HANDLED;
 }
