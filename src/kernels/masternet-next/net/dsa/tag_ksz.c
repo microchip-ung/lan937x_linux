@@ -272,6 +272,43 @@ static void lan937x_xmit_timestamp(struct sk_buff *skb __maybe_unused)
 	put_unaligned_be32(tstamp_raw, skb_put(skb, LAN937X_PTP_TAG_LEN));
 }
 
+static struct sk_buff *ksz9477_defer_xmit(struct dsa_port *dp,
+					  struct sk_buff *skb)
+{
+	struct lan937x_port_ext *kp = dp->priv;
+	struct lan937x_port_ptp_shared *ptp_shared = &kp->ptp_shared;
+	struct sk_buff *clone = DSA_SKB_CB(skb)->clone;
+	u8 ptp_msg_type;
+
+	if (!clone)
+		return skb;  /* no deferred xmit for this packet */
+
+	/* Use cached PTP msg type from ksz9477_ptp_port_txtstamp().  */
+	ptp_msg_type = KSZ9477_SKB_CB(clone)->ptp_msg_type;
+	if (ptp_msg_type == 0x00)
+	{
+		//goto out_free_clone;  /* only PDelay_Req is deferred */
+
+
+		/* Increase refcount so the kfree_skb in dsa_slave_xmit
+		 * won't really free the packet.
+		 */
+		skb_queue_tail(&ptp_shared->xmit_sync_queue, skb_get(skb));
+		kthread_queue_work(ptp_shared->xmit_worker, &ptp_shared->xmit_sync_work);
+
+		return NULL;
+	}
+	else
+	{
+		return skb;
+	}
+
+out_free_clone:
+	kfree_skb(clone);
+	DSA_SKB_CB(skb)->clone = NULL;
+	return skb;
+}
+
 static void lan937x_rcv_timestamp(struct sk_buff *skb , u8 *tag ,
                                  struct net_device *dev, unsigned int port )
 {
@@ -323,7 +360,7 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 
 	*tag = cpu_to_be16(val);
 
-	return skb;
+	return ksz9477_defer_xmit(dp, nskb);
 }
 
 static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev,
