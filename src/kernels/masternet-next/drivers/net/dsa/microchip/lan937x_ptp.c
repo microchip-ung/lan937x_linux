@@ -1113,20 +1113,20 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
                 * will NOT be reported to the socket.
                  */
                 case PTP_Event_Message_Pdelay_Req:
-                        if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_XDELAY_IN_PROGRESS,
+           /*             if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_XDELAY_IN_PROGRESS,
                                                 &prt->tstamp_state))
-                                return false;  /* free cloned skb */
+                                return false;  // free cloned skb 
 
                         prt->tstamp_tx_xdelay_skb = clone;
-                        break;
+            */            break;
 
                 case PTP_Event_Message_Pdelay_Resp:
-                        if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_XDELAY_RSP_IN_PROGRESS,
+                  /*      if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_XDELAY_RSP_IN_PROGRESS,
                                                 &prt->tstamp_state))
-                                return false;  /* free cloned skb */
+                                return false;  // free cloned skb 
 
                         prt->tstamp_tx_xdelay_rsp_skb = clone;
-                        break;
+                       */ break;
 
 
 
@@ -1535,6 +1535,7 @@ static int lan937x_ptp_disable_port_xDelayRsp_interrupts(struct ksz_device *dev,
         return 0;
 }
 
+
 static void lan937x_sync_txtstamp_skb(struct ksz_device *dev,
 				     struct lan937x_port_ext *prt_ext, struct sk_buff *skb)
 {
@@ -1556,8 +1557,54 @@ static void lan937x_sync_txtstamp_skb(struct ksz_device *dev,
 	skb_complete_tx_timestamp(skb, &hwtstamps);
 }
 
+static void lan937x_pdelayreq_txtstamp_skb(struct ksz_device *dev,
+				     struct lan937x_port_ext *prt_ext, struct sk_buff *skb)
+{
+	struct skb_shared_hwtstamps hwtstamps = {};
+	int ret;
+
+	skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
+
+	/* timeout must include tstamp latency, IRQ latency and time for
+	 * reading the time stamp via I2C.
+	 */
+	ret = wait_for_completion_timeout(&prt_ext->tstamp_pdelayreq_comp,
+					  msecs_to_jiffies(100));
+	if (!ret) {
+		dev_err(dev->dev, "timeout waiting for time stamp\n");
+		return;
+	}
+	hwtstamps.hwtstamp = prt_ext->tstamp_pdelayreq;
+	skb_complete_tx_timestamp(skb, &hwtstamps);
+}
+
+static void lan937x_pdelayrsp_txtstamp_skb(struct ksz_device *dev,
+				     struct lan937x_port_ext *prt_ext, struct sk_buff *skb)
+{
+	struct skb_shared_hwtstamps hwtstamps = {};
+	int ret;
+
+	skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
+
+	/* timeout must include tstamp latency, IRQ latency and time for
+	 * reading the time stamp via I2C.
+	 */
+	ret = wait_for_completion_timeout(&prt_ext->tstamp_pdelayrsp_comp,
+					  msecs_to_jiffies(100));
+	if (!ret) {
+		dev_err(dev->dev, "timeout waiting for time stamp\n");
+		return;
+	}
+	hwtstamps.hwtstamp = prt_ext->tstamp_pdelayrsp;
+	skb_complete_tx_timestamp(skb, &hwtstamps);
+}
+
 #define work_to_port(work) \
 		container_of((work), struct lan937x_port_ptp_shared, xmit_sync_work)
+#define pdelayreq_to_port(work) \
+		container_of((work), struct lan937x_port_ptp_shared, xmit_pdelayreq_work)
+#define pdelayrsp_to_port(work) \
+		container_of((work), struct lan937x_port_ptp_shared, xmit_pdelayrsp_work)
 #define ptp_shared_to_port_ext(t) \
 		container_of((t), struct lan937x_port_ext, ptp_shared)
 #define ptp_shared_to_ksz_device(t) \
@@ -1584,6 +1631,49 @@ static void lan937x_sync_deferred_xmit(struct kthread_work *work)
 		dsa_enqueue_skb(skb, dsa_to_port(dev->ds, port)->slave);
 
 		lan937x_sync_txtstamp_skb(dev, prt_ext, clone);
+	}
+}
+
+
+static void lan937x_pdelayreq_deferred_xmit(struct kthread_work *work)
+{
+	struct lan937x_port_ptp_shared *prt_ptp_shared = pdelayreq_to_port(work);
+	struct lan937x_port_ext *prt_ext = ptp_shared_to_port_ext(prt_ptp_shared);
+	struct ksz_device_ptp_shared *ptp_shared = prt_ptp_shared->dev;
+	struct ksz_device *dev = ptp_shared_to_ksz_device(ptp_shared);
+	int port = prt_ext - dev->prts_ext;
+	struct sk_buff *skb;
+
+	while ((skb = skb_dequeue(&prt_ptp_shared->xmit_pdelayreq_queue)) != NULL) {
+		struct sk_buff *clone = DSA_SKB_CB(skb)->clone;
+
+		reinit_completion(&prt_ext->tstamp_pdelayreq_comp);
+
+		/* Transfer skb to the host port. */
+		dsa_enqueue_skb(skb, dsa_to_port(dev->ds, port)->slave);
+
+		lan937x_pdelayreq_txtstamp_skb(dev, prt_ext, clone);
+	}
+}
+
+static void lan937x_pdelayrsp_deferred_xmit(struct kthread_work *work)
+{
+	struct lan937x_port_ptp_shared *prt_ptp_shared = pdelayrsp_to_port(work);
+	struct lan937x_port_ext *prt_ext = ptp_shared_to_port_ext(prt_ptp_shared);
+	struct ksz_device_ptp_shared *ptp_shared = prt_ptp_shared->dev;
+	struct ksz_device *dev = ptp_shared_to_ksz_device(ptp_shared);
+	int port = prt_ext - dev->prts_ext;
+	struct sk_buff *skb;
+
+	while ((skb = skb_dequeue(&prt_ptp_shared->xmit_pdelayrsp_queue)) != NULL) {
+		struct sk_buff *clone = DSA_SKB_CB(skb)->clone;
+
+		reinit_completion(&prt_ext->tstamp_pdelayrsp_comp);
+
+		/* Transfer skb to the host port. */
+		dsa_enqueue_skb(skb, dsa_to_port(dev->ds, port)->slave);
+
+		lan937x_pdelayrsp_txtstamp_skb(dev, prt_ext, clone);
 	}
 }
 
@@ -1630,12 +1720,27 @@ static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
 	init_completion(&prt_ext->tstamp_sync_comp);
 	kthread_init_work(&ptp_shared->xmit_sync_work,
 			  lan937x_sync_deferred_xmit);
+
+	init_completion(&prt_ext->tstamp_pdelayreq_comp);
+	kthread_init_work(&ptp_shared->xmit_pdelayreq_work,
+			  lan937x_pdelayreq_deferred_xmit);
+
+	init_completion(&prt_ext->tstamp_pdelayrsp_comp);
+	kthread_init_work(&ptp_shared->xmit_pdelayrsp_work,
+			  lan937x_pdelayrsp_deferred_xmit);
+
 	ptp_shared->xmit_worker = kthread_create_worker(0, "%s_xmit",
+							dp->slave->name);
+	ptp_shared->xmit_pdelayreq_worker = kthread_create_worker(0, "%s_req_xmit",
+							dp->slave->name);
+	ptp_shared->xmit_pdelayrsp_worker = kthread_create_worker(0, "%s_rsp_xmit",
 							dp->slave->name);
 	if (IS_ERR(ptp_shared->xmit_worker)) 
 		goto error_disable_port_xdelayreq_interrupts;
 	
 	skb_queue_head_init(&ptp_shared->xmit_sync_queue);
+	skb_queue_head_init(&ptp_shared->xmit_pdelayreq_queue);
+	skb_queue_head_init(&ptp_shared->xmit_pdelayrsp_queue);
 
         return 0;
 
@@ -1899,19 +2004,13 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 
                 if(data & PTP_PORT_XDELAY_REQ_INT)
                 {
-                        shhwtstamps.hwtstamp = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
-                        tmp_skb = prt->tstamp_tx_xdelay_skb;
-                        prt->tstamp_tx_xdelay_skb = NULL;
-                        clear_bit_unlock(LAN937X_HWTSTAMP_TX_XDELAY_IN_PROGRESS, &prt->tstamp_state);
-                        skb_complete_tx_timestamp(tmp_skb, &shhwtstamps);
+                        prt_ext->tstamp_pdelayreq = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
+                        complete(&prt_ext->tstamp_pdelayreq_comp);
                 }
                 else if(data & PTP_PORT_PDELAY_RESP_INT)
                 {
-                        shhwtstamps.hwtstamp = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
-                        tmp_skb = prt->tstamp_tx_xdelay_rsp_skb;
-                        prt->tstamp_tx_xdelay_rsp_skb = NULL;
-                        clear_bit_unlock(LAN937X_HWTSTAMP_TX_XDELAY_RSP_IN_PROGRESS, &prt->tstamp_state);
-                        skb_complete_tx_timestamp(tmp_skb, &shhwtstamps);
+                        prt_ext->tstamp_pdelayrsp = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
+                        complete(&prt_ext->tstamp_pdelayrsp_comp);
                 }
                 else if(data & PTP_PORT_SYNC_INT)
                 {

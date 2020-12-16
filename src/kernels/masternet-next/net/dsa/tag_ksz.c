@@ -371,20 +371,29 @@ static struct sk_buff *ksz9477_defer_xmit(struct dsa_port *dp,
 	ptp_msg_type = KSZ9477_SKB_CB(clone)->ptp_msg_type;
 	if (ptp_msg_type == 0x00)
 	{
-		//goto out_free_clone;  /* only PDelay_Req is deferred */
-
-
-		/* Increase refcount so the kfree_skb in dsa_slave_xmit
-		 * won't really free the packet.
-		 */
 		skb_queue_tail(&ptp_shared->xmit_sync_queue, skb_get(skb));
 		kthread_queue_work(ptp_shared->xmit_worker, &ptp_shared->xmit_sync_work);
 
 		return NULL;
 	}
+        else if (ptp_msg_type == 0x02)
+	{
+		skb_queue_tail(&ptp_shared->xmit_pdelayreq_queue, skb_get(skb));
+		kthread_queue_work(ptp_shared->xmit_pdelayreq_worker, &ptp_shared->xmit_pdelayreq_work);
+
+		return NULL;
+	}
+        else if (ptp_msg_type == 0x03)
+	{
+		skb_queue_tail(&ptp_shared->xmit_pdelayrsp_queue, skb_get(skb));
+		kthread_queue_work(ptp_shared->xmit_pdelayrsp_worker, &ptp_shared->xmit_pdelayrsp_work);
+
+		return NULL;
+	}
 	else
 	{
-		return skb;
+                //goto out_free_clone;
+                return skb;
 	}
 
 out_free_clone:
