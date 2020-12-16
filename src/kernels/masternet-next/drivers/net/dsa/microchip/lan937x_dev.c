@@ -15,7 +15,7 @@
 #include "ksz_common.h"
 #include "lan937x_dev.h"
 
-const struct mib_names lan937x_mib_names[TOTAL_SWITCH_COUNTER_NUM] = {
+const struct mib_names lan937x_mib_names[] = {
 	{ 0x00, "rx_hi" },
 	{ 0x01, "rx_undersize" },
 	{ 0x02, "rx_fragments" },
@@ -932,7 +932,7 @@ static int lan937x_switch_init(struct ksz_device *dev)
 	dev->port_mask = (1 << dev->port_cnt) - 1;
 
 	dev->reg_mib_cnt = SWITCH_COUNTER_NUM;
-	dev->mib_cnt = TOTAL_SWITCH_COUNTER_NUM;
+	dev->mib_cnt = ARRAY_SIZE(lan937x_mib_names);
 
 	dev->ports = devm_kzalloc(dev->dev,
 							 dev->port_cnt * sizeof(struct ksz_port),
@@ -945,7 +945,7 @@ static int lan937x_switch_init(struct ksz_device *dev)
 		dev->ports[i].mib.counters =
 			devm_kzalloc(dev->dev,
 				     sizeof(u64) *
-				     (TOTAL_SWITCH_COUNTER_NUM + 1),
+				     (dev->mib_cnt + 1),
 				     GFP_KERNEL);
 		if (!dev->ports[i].mib.counters)
 			return -ENOMEM;

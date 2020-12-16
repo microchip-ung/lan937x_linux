@@ -63,67 +63,8 @@
 				status = "okay";
 
 				lan9374: lan9374@0 {
-					compatible = "microchip,lan937x";
+					compatible = "microchip,lan9374";
 					reg = <0>;
-					phy-mode = "rmii";
-					/*44 MHz did not work*/
-					spi-max-frequency = <6000000>;
-					spi-cpha;
-					spi-cpol;
-					interrupt-parent = <&pioB>;
-					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;					
-					status = "disabled";
-					ports {
-						#address-cells = <1>;
-						#size-cells = <0>;
-						port@0 {
-							reg = <0>;
-							label = "lan1";
-						};
-						port@1 {
-							reg = <1>;
-							label = "lan2";
-						};
-						port@2 {
-							reg = <2>;
-							label = "lan3";
-						};
-						port@3 {
-							reg = <3>;
-							label = "lan4";
-						};
-						port@4 {
-							reg = <4>;
-							label = "lan5";
-						};
-						port@5 {
-							reg = <5>;
-							label = "lan6";
-						};
-						port@6 {
-							reg = <6>;
-							label = "cpu";
-							ethernet = <&macb0>;
-							fixed-link {
-								speed = <100>;
-								full-duplex;
-							};
-						};
-						port@7 {
-							reg = <7>;
-							label = "lan7";
-							fixed-link {
-								speed = <100>;
-								full-duplex;
-							};
-						};
-					};
-				};
-				
-				lan9372: lan9372@0 {
-					compatible = "microchip,lan937x";
-					reg = <0>;
-					phy-mode = "rmii";
 					/*44 MHz did not work*/
 					spi-max-frequency = <6000000>;
 					spi-cpha;
@@ -143,23 +84,24 @@
 							label = "lan2";
 						};
 						port@2 {
-							reg = <2>;
+							reg = <7>;
 							label = "lan3";
 						};
 						port@3 {
-							reg = <3>;
+							reg = <2>;
 							label = "lan4";
 						};
 						port@4 {
-							reg = <4>;
+							reg = <6>;
 							label = "lan5";
 						};
 						port@5 {
-							reg = <5>;
+							reg = <3>;
 							label = "lan6";
 						};
 						port@6 {
-							reg = <6>;
+							reg = <4>;
+							phy-mode = "rmii";
 							label = "cpu";
 							ethernet = <&macb0>;
 							fixed-link {
@@ -168,8 +110,73 @@
 							};
 						};
 						port@7 {
-							reg = <7>;
+							reg = <5>;
+							phy-mode = "rmii";
 							label = "lan7";
+							fixed-link {
+								speed = <100>;
+								full-duplex;
+							};
+						};
+					};
+				};
+				
+				lan9373: lan9373@0 {
+					compatible = "microchip,lan9373";
+					reg = <0>;
+					/*44 MHz did not work*/
+					spi-max-frequency = <6000000>;
+					spi-cpha;
+					spi-cpol;
+					interrupt-parent = <&pioB>;
+					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;					
+					status = "disabled";
+					ports {
+						#address-cells = <1>;
+						#size-cells = <0>;
+						port@0 {
+							reg = <0>;
+							label = "lan1";
+						};
+						port@1 {
+							reg = <1>;
+							label = "lan2";
+						};
+						port@2 {
+							reg = <7>;
+							label = "lan3";
+						};
+						port@3 {
+							reg = <2>;
+							label = "lan4";
+						};
+						port@4 {
+							reg = <6>;
+							label = "lan5";
+						};
+						port@5 {
+							reg = <3>;
+							label = "lan6";
+							phy-mode = "sgmii";
+							fixed-link {
+								speed = <100>;
+								full-duplex;
+							};
+						};
+						port@6 {
+							reg = <4>;
+							phy-mode = "rmii";
+							label = "cpu";
+							ethernet = <&macb0>;
+							fixed-link {
+								speed = <100>;
+								full-duplex;
+							};
+						};
+						port@7 {
+							reg = <5>;
+							label = "lan7";
+							phy-mode = "rmii";
 							fixed-link {
 								speed = <100>;
 								full-duplex;

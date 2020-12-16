@@ -74,6 +74,6 @@ struct lan_alu_struct {
 
 extern const struct dsa_switch_ops lan937x_switch_ops;
 extern const struct ksz_dev_ops lan937x_dev_ops;
-extern const struct mib_names lan937x_mib_names[TOTAL_SWITCH_COUNTER_NUM];
+extern const struct mib_names lan937x_mib_names[];
 
 #endif

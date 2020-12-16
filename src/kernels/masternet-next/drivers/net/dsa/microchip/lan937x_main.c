@@ -176,12 +176,13 @@ static int lan937x_phy_write16(struct dsa_switch *ds, int addr, int reg,
 static void lan937x_get_strings(struct dsa_switch *ds, int port,
 				u32 stringset, uint8_t *buf)
 {
+	struct ksz_device *dev = ds->priv;
 	int i;
 
 	if (stringset != ETH_SS_STATS)
 		return;
 
-	for (i = 0; i < TOTAL_SWITCH_COUNTER_NUM; i++) {
+	for (i = 0; i < dev->mib_cnt; i++) {
 		memcpy(buf + i * ETH_GSTRING_LEN, lan937x_mib_names[i].string,
 		       ETH_GSTRING_LEN);
 	}
