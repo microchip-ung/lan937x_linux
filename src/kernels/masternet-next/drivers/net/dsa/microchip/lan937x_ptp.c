@@ -1091,7 +1091,7 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
         struct ksz_device *dev  = ds->priv;
         struct ksz_port *prt = &dev->ports[port];
         struct ptp_header *hdr;
-        enum ksz9477_ptp_event_messages msg_type;
+        u8 ptp_msg_type;
 
         if (!(skb_shinfo(clone)->tx_flags & SKBTX_HW_TSTAMP))
                 return false;
@@ -1103,9 +1103,9 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
         if (!hdr)
                 return false;
 
-        msg_type = ptp_get_msgtype(hdr, type);
+        ptp_msg_type = ptp_get_msgtype(hdr, type);
 
-        switch (msg_type) {
+        switch (ptp_msg_type) {
                 /* As the KSZ9563 always performs one step time stamping, only the time
                 * stamp for Delay_Req and Pdelay_Req are reported to the application
                 * via socket error queue. Time stamps for Sync and Pdelay_resp will be
@@ -1131,9 +1131,9 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 
 
                 case PTP_Event_Message_Sync:
-                        if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_SYNC_IN_PROGRESS,
+                        /*if (test_and_set_bit_lock(LAN937X_HWTSTAMP_TX_SYNC_IN_PROGRESS,
                                                 &prt->tstamp_state))
-                                return false;  /* free cloned skb */
+                                return false;  *//* free cloned skb */
 
                         prt->tstamp_tx_sync_skb = clone;
                         //	shhwtstamps.hwtstamp = lan937x_tstamp_reconstruct(dev, 0x1234);
@@ -1147,6 +1147,8 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
         prt->tx_tstamp_start = jiffies;
         prt->tx_seq_id = be16_to_cpu(hdr->sequence_id);
 
+        KSZ9477_SKB_CB(clone)->ptp_type = type;
+	KSZ9477_SKB_CB(clone)->ptp_msg_type = ptp_msg_type;
         //ptp_schedule_worker(dev->ptp_clock, 0);
         return true;
 }
