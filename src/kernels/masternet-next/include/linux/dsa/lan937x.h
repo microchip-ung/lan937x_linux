@@ -10,8 +10,14 @@
 struct lan937x_port_ptp_shared{
 	struct ksz_device_ptp_shared *dev;
         struct kthread_worker *xmit_worker;
+        struct kthread_worker *xmit_pdelayreq_worker;
+        struct kthread_worker *xmit_pdelayrsp_worker;
 	struct kthread_work xmit_sync_work;
 	struct sk_buff_head xmit_sync_queue;
+	struct kthread_work xmit_pdelayreq_work;
+	struct sk_buff_head xmit_pdelayreq_queue;
+	struct kthread_work xmit_pdelayrsp_work;
+	struct sk_buff_head xmit_pdelayrsp_queue;
 };
 
 /* Lan937x port extended information which is used to refer
@@ -24,6 +30,10 @@ struct lan937x_port_ext {
         struct lan937x_port_ptp_shared ptp_shared;
         ktime_t tstamp_sync;
 	struct completion tstamp_sync_comp;	
+        ktime_t tstamp_pdelayreq;
+	struct completion tstamp_pdelayreq_comp;	
+        ktime_t tstamp_pdelayrsp;
+	struct completion tstamp_pdelayrsp_comp;	
 };
 
 #endif/* _NET_DSA_LAN937X_H */
