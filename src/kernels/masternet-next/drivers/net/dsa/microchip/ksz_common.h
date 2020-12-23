@@ -320,28 +320,6 @@ static inline void ksz_regmap_unlock(void *__mtx)
 	mutex_unlock(mtx);
 }
 
-/* net/dsa/tag_ksz.c */
-static inline ktime_t ksz9477_decode_tstamp(u32 tstamp)
-{
-	u64 ns = FIELD_GET(KSZ_TSTAMP_SEC_MASK, tstamp) * NSEC_PER_SEC +
-		 FIELD_GET(KSZ_TSTAMP_NSEC_MASK, tstamp);
-
-	/* Add/remove excess delay between wire and time stamp unit */
-	return ns_to_ktime(ns);
-}
-ktime_t lan937x_tstamp_reconstruct(struct ksz_device_ptp_shared *ksz, u32 tstamp);
-
-struct ksz9477_skb_cb {
-	unsigned int ptp_type;
-	/* Do not cache pointer to PTP header between ksz9477_ptp_port_txtstamp
-	 * and ksz9xxx_xmit() (will become invalid during dsa_realloc_skb()).
-	 */
-	u8 ptp_msg_type;
-};
-
-#define KSZ9477_SKB_CB(skb) \
-	((struct ksz9477_skb_cb *)DSA_SKB_CB_PRIV(skb))
-
 /* Regmap tables generation */
 #define KSZ_SPI_OP_RD		3
 #define KSZ_SPI_OP_WR		2
