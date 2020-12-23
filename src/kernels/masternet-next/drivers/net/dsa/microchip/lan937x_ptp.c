@@ -220,17 +220,6 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 static int lan937x_ptp_enable(struct ptp_clock_info *ptp,
                 struct ptp_clock_request *req, int on)
 {
-        /*	struct lan937x_ptp_data *ptp_data = ptp_caps_to_data(ptp);
-                struct ksz_device *priv = ptp_data_to_lan937x(ptp_data);
-                int rc = -EOPNOTSUPP;
-
-                if (req->type == PTP_CLK_REQ_PPS)
-                rc = 0;  //todo: add code here
-                else if (req->type == PTP_CLK_REQ_EXTTS)
-                rc = 0;  //todo: add code here
-
-                return rc; 
-         */
         return -ENOTTY;
 }
 
@@ -287,7 +276,7 @@ static int lan937x_ptp_gettime(struct ptp_clock_info *ptp,
 static int lan937x_ptp_settime(struct ptp_clock_info *ptp,
                 const struct timespec64 *ts)
 {
-        struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
+        struct ksz_device *dev = container_of(ptp, struct ksz_device, ptp_caps);
         struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
         u16 data16;
         int ret;
@@ -397,7 +386,7 @@ error_return:
 
 static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 {
-        struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
+        struct ksz_device *dev = container_of(ptp, struct ksz_device, ptp_caps);
         struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
         struct timespec64 delta64 = ns_to_timespec64(delta);
         s32 sec, nsec;
@@ -406,7 +395,8 @@ static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 
         mutex_lock(&dev->ptp_mutex);
 
-        /* do not use ns_to_timespec64(), both sec and nsec are subtracted by hw */
+        /* do not use ns_to_timespec64(),
+         * both sec and nsec are subtracted by hw */
         sec = div_s64_rem(delta, NSEC_PER_SEC, &nsec);
 
         ret = ksz_write32(dev, REG_PTP_RTC_NANOSEC, abs(nsec));
@@ -450,7 +440,7 @@ error_return:
  */
 static long lan937x_ptp_do_aux_work(struct ptp_clock_info *ptp)
 {
-        struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
+        struct ksz_device *dev = container_of(ptp, struct ksz_device, ptp_caps);
         struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
         struct timespec64 ts;
 
@@ -596,7 +586,7 @@ static int lan937x_ptp_enable_port_xdelayrsp_interrupts(struct ksz_device *dev,
 
 
 static void lan937x_sync_txtstamp_skb(struct ksz_device *dev,
-				     struct lan937x_port_ext *prt_ext, struct sk_buff *skb)
+	              struct lan937x_port_ext *prt_ext, struct sk_buff *skb)
 {
 	struct skb_shared_hwtstamps hwtstamps = {};
 	int ret;
@@ -617,7 +607,7 @@ static void lan937x_sync_txtstamp_skb(struct ksz_device *dev,
 }
 
 static void lan937x_pdelayreq_txtstamp_skb(struct ksz_device *dev,
-				     struct lan937x_port_ext *prt_ext, struct sk_buff *skb)
+		         struct lan937x_port_ext *prt_ext, struct sk_buff *skb)
 {
 	struct skb_shared_hwtstamps hwtstamps = {};
 	int ret;
@@ -638,7 +628,7 @@ static void lan937x_pdelayreq_txtstamp_skb(struct ksz_device *dev,
 }
 
 static void lan937x_pdelayrsp_txtstamp_skb(struct ksz_device *dev,
-				     struct lan937x_port_ext *prt_ext, struct sk_buff *skb)
+		         struct lan937x_port_ext *prt_ext, struct sk_buff *skb)
 {
 	struct skb_shared_hwtstamps hwtstamps = {};
 	int ret;
@@ -857,13 +847,13 @@ static void lan937x_ptp_ports_deinit(struct ksz_device *dev)
                 lan937x_ptp_port_deinit(dev, port);
 }
 
-enum ksz9477_ptp_tcmode {
-        KSZ9477_PTP_TCMODE_E2E,
-        KSZ9477_PTP_TCMODE_P2P,
+enum lan937x_ptp_tcmode {
+        LAN937x_PTP_TCMODE_E2E,
+        LAN937x_PTP_TCMODE_P2P,
 };
 
-static int ksz9477_ptp_tcmode_set(struct ksz_device *dev,
-                enum ksz9477_ptp_tcmode tcmode)
+static int lan937x_ptp_tcmode_set(struct ksz_device *dev,
+                enum lan937x_ptp_tcmode tcmode)
 {
         u16 data;
         int ret;
@@ -872,16 +862,17 @@ static int ksz9477_ptp_tcmode_set(struct ksz_device *dev,
         if (ret)
                 return ret;
 
-        if (tcmode == KSZ9477_PTP_TCMODE_P2P)
+        if (tcmode == LAN937x_PTP_TCMODE_P2P)
                 data |= PTP_TC_P2P;
         else
                 data &= ~PTP_TC_P2P;
 
         return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
 }
+
 enum lan937x_ptp_ocmode {
-        KSZ9477_PTP_OCMODE_SLAVE,
-        KSZ9477_PTP_OCMODE_MASTER,
+        LAN937x_PTP_OCMODE_SLAVE,
+        LAN937x_PTP_OCMODE_MASTER,
 };
 
 static int lan937x_ptp_ocmode_set(struct ksz_device *dev,
@@ -894,7 +885,7 @@ static int lan937x_ptp_ocmode_set(struct ksz_device *dev,
         if (ret)
                 return ret;
 
-        if (ocmode == KSZ9477_PTP_OCMODE_MASTER)
+        if (ocmode == LAN937x_PTP_OCMODE_MASTER)
                 data |= PTP_INITIATOR;
         else
                 data &= ~PTP_INITIATOR;
@@ -979,9 +970,9 @@ int lan937x_ptp_init(struct dsa_switch *ds)
         if (ret)
                 goto error_unregister_clock;
 
-        //ksz9477_ptp_tcmode_set(dev, KSZ9477_PTP_TCMODE_P2P);
+        //lan937x_ptp_tcmode_set(dev, LAN937x_PTP_TCMODE_P2P);
         lan937x_ptp_8021as_set(dev, 1);
-        //	lan937x_ptp_ocmode_set(dev, KSZ9477_PTP_OCMODE_MASTER);
+        //	lan937x_ptp_ocmode_set(dev, LAN937x_PTP_OCMODE_MASTER);
         //	lan937x_ptp_twostep_set(dev, 1);
 
 
