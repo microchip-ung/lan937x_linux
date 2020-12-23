@@ -19,13 +19,6 @@
 #define KSZ_PTP_SUBNS_BITS 32  /* Number of bits in sub-nanoseconds counter */
 
 
-enum ksz9477_ptp_event_messages {
-        PTP_Event_Message_Sync        = 0x0,
-        PTP_Event_Message_Delay_Req   = 0x1,
-        PTP_Event_Message_Pdelay_Req  = 0x2,
-        PTP_Event_Message_Pdelay_Resp = 0x3, };
-
-
 /*Time Stamping support - accessing the register */
 static int lan937x_ptp_enable_mode(struct ksz_device *dev, bool enable) {
         u16 data;
@@ -201,9 +194,9 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
         ptp_msg_type = ptp_get_msgtype(hdr, type);
 
         switch (ptp_msg_type) {
-                case PTP_Event_Message_Pdelay_Req:
-                case PTP_Event_Message_Pdelay_Resp:
-                case PTP_Event_Message_Sync:
+                case PTP_MSGTYPE_PDELAY_REQ:
+                case PTP_MSGTYPE_PDELAY_RESP:
+                case PTP_MSGTYPE_SYNC:
                         break;
 
                 default:
