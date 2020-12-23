@@ -4,10 +4,10 @@
  * Copyright (c) 2017 Microchip Technology
  */
 
-#include "../../drivers/net/dsa/microchip/ksz_common.h"
+#include <linux/dsa/ksz_common.h>
 #include <linux/etherdevice.h>
-#include <linux/ptp_classify.h>
 #include <linux/list.h>
+#include <linux/ptp_classify.h>
 #include <linux/slab.h>
 #include <linux/dsa/lan937x.h>
 #include <net/dsa.h>
@@ -307,16 +307,15 @@ static struct dsa_port *ksz_get_dsa_phy_port(struct net_device *dev,
 }
 
 
-ktime_t lan937x_tstamp_reconstruct(struct ksz_device_ptp_shared *ksz, u32 tstamp) 
+ktime_t ksz_tstamp_reconstruct(struct ksz_device_ptp_shared *ksz, ktime_t tstamp) 
 {
 	struct timespec64 ts = ktime_to_timespec64(tstamp);
 	struct timespec64 ptp_clock_time;
 	struct timespec64 diff;
-	unsigned long flags;
 
-	spin_lock_irqsave(&ksz->ptp_clock_lock, flags);
+	spin_lock_bh(&ksz->ptp_clock_lock);
 	ptp_clock_time = ksz->ptp_clock_time;
-	spin_unlock_irqrestore(&ksz->ptp_clock_lock, flags);
+	spin_unlock_bh(&ksz->ptp_clock_lock);
 
 	/* calculate full time from partial time stamp */
 	ts.tv_sec = (ptp_clock_time.tv_sec & ~3) | ts.tv_sec;
@@ -330,7 +329,7 @@ ktime_t lan937x_tstamp_reconstruct(struct ksz_device_ptp_shared *ksz, u32 tstamp
 
 	return timespec64_to_ktime(ts);
 }
-EXPORT_SYMBOL(lan937x_tstamp_reconstruct);
+EXPORT_SYMBOL(ksz_tstamp_reconstruct);
 
 
 static void lan937x_xmit_timestamp(struct sk_buff *skb) 
@@ -352,7 +351,7 @@ static struct sk_buff *lan937x_defer_xmit(struct dsa_port *dp,
 		return skb;  /* no deferred xmit for this packet */
 
 	/* Use cached PTP msg type from ksz9477_ptp_port_txtstamp().  */
-	ptp_msg_type = KSZ9477_SKB_CB(clone)->ptp_msg_type;
+	ptp_msg_type = KSZ_SKB_CB(clone)->ptp_msg_type;
 	if (ptp_msg_type == PTP_MSGTYPE_SYNC)
 	{
 		skb_queue_tail(&ptp_shared->xmit_sync_queue, skb_get(skb));
@@ -395,9 +394,9 @@ static void lan937x_rcv_timestamp(struct sk_buff *skb , u8 *tag ,
 	ktime_t tstamp;
  
 	/* convert time stamp and write to skb */
-	tstamp = ksz9477_decode_tstamp(get_unaligned_be32(tstamp_raw));
+	tstamp = ksz_decode_tstamp(get_unaligned_be32(tstamp_raw));
 	memset(hwtstamps, 0, sizeof(*hwtstamps));
-	hwtstamps->hwtstamp = lan937x_tstamp_reconstruct(ptp_shared->dev, tstamp);
+	hwtstamps->hwtstamp = ksz_tstamp_reconstruct(ptp_shared->dev, tstamp);
 }
 
 
