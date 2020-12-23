@@ -340,7 +340,7 @@ static void lan937x_xmit_timestamp(struct sk_buff *skb)
 	put_unaligned_be32(tstamp_raw, skb_put(skb, LAN937X_PTP_TAG_LEN));
 }
 
-static struct sk_buff *ksz9477_defer_xmit(struct dsa_port *dp,
+static struct sk_buff *lan937x_defer_xmit(struct dsa_port *dp,
 					  struct sk_buff *skb)
 {
 	struct lan937x_port_ext *kp = dp->priv;
@@ -353,21 +353,21 @@ static struct sk_buff *ksz9477_defer_xmit(struct dsa_port *dp,
 
 	/* Use cached PTP msg type from ksz9477_ptp_port_txtstamp().  */
 	ptp_msg_type = KSZ9477_SKB_CB(clone)->ptp_msg_type;
-	if (ptp_msg_type == 0x00)
+	if (ptp_msg_type == PTP_MSGTYPE_SYNC)
 	{
 		skb_queue_tail(&ptp_shared->xmit_sync_queue, skb_get(skb));
 		kthread_queue_work(ptp_shared->xmit_sync_worker, &ptp_shared->xmit_sync_work);
 
 		return NULL;
 	}
-        else if (ptp_msg_type == 0x02)
+        else if (ptp_msg_type == PTP_MSGTYPE_PDELAY_REQ)
 	{
 		skb_queue_tail(&ptp_shared->xmit_pdelayreq_queue, skb_get(skb));
 		kthread_queue_work(ptp_shared->xmit_pdelayreq_worker, &ptp_shared->xmit_pdelayreq_work);
 
 		return NULL;
 	}
-        else if (ptp_msg_type == 0x03)
+        else if (ptp_msg_type == PTP_MSGTYPE_PDELAY_RESP)
 	{
 		skb_queue_tail(&ptp_shared->xmit_pdelayrsp_queue, skb_get(skb));
 		kthread_queue_work(ptp_shared->xmit_pdelayrsp_worker, &ptp_shared->xmit_pdelayrsp_work);
@@ -376,8 +376,7 @@ static struct sk_buff *ksz9477_defer_xmit(struct dsa_port *dp,
 	}
 	else
 	{
-                //goto out_free_clone;
-                return skb;
+                goto out_free_clone;
 	}
 
 out_free_clone:
@@ -390,9 +389,9 @@ static void lan937x_rcv_timestamp(struct sk_buff *skb , u8 *tag ,
                                  struct dsa_port *dp)
 {
 	struct skb_shared_hwtstamps *hwtstamps = skb_hwtstamps(skb);
-	u8 *tstamp_raw = tag - KSZ9477_PTP_TAG_LEN;
 	struct lan937x_port_ext *kp = dp->priv;
 	struct lan937x_port_ptp_shared *ptp_shared = &kp->ptp_shared;
+	u8 *tstamp_raw = tag - KSZ9477_PTP_TAG_LEN;
 	ktime_t tstamp;
  
 	/* convert time stamp and write to skb */
@@ -437,8 +436,7 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 
 	*tag = cpu_to_be16(val);
 
-	return ksz9477_defer_xmit(dp, nskb);
-//	return nskb;
+	return lan937x_defer_xmit(dp, nskb);
 }
 
 static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev,
