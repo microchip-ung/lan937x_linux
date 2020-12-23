@@ -1089,9 +1089,11 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
                 struct sk_buff *clone, unsigned int type)
 {
         struct ksz_device *dev  = ds->priv;
-        struct ksz_port *prt = &dev->ports[port];
         struct ptp_header *hdr;
+        struct ksz_port *prt;
         u8 ptp_msg_type;
+
+        prt =  &dev->ports[port];
 
         if (!(skb_shinfo(clone)->tx_flags & SKBTX_HW_TSTAMP))
                 return false;
@@ -1107,11 +1109,7 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 
         switch (ptp_msg_type) {
                 case PTP_Event_Message_Pdelay_Req:
-                        break;
-
                 case PTP_Event_Message_Pdelay_Resp:
-                        break;
-
                 case PTP_Event_Message_Sync:
                         break;
 
@@ -1119,8 +1117,6 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
                         return false;  /* free cloned skb */
         }
 
-        prt->tx_tstamp_start = jiffies;
-        prt->tx_seq_id = be16_to_cpu(hdr->sequence_id);
 
         KSZ9477_SKB_CB(clone)->ptp_type = type;
 	KSZ9477_SKB_CB(clone)->ptp_msg_type = ptp_msg_type;
