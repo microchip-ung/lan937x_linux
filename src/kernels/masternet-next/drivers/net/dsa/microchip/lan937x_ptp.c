@@ -62,10 +62,11 @@ error_disable_mode:
         return ret;
 }
 
-/* The function is return back the capability of timestamping feature when requested
-   through ethtool -T <interface> utility
+/* The function is return back the capability of timestamping feature when 
+ * requested through ethtool -T <interface> utility
  */
-int lan937x_get_ts_info(struct dsa_switch *ds, int port, struct ethtool_ts_info *ts)
+int lan937x_get_ts_info(struct dsa_switch *ds, int port,
+                             struct ethtool_ts_info *ts)
 {
         struct ksz_device *dev  = ds->priv;
 
@@ -100,8 +101,8 @@ int lan937x_hwtstamp_get(struct dsa_switch *ds, int port, struct ifreq *ifr)
         else
                 config.rx_filter = HWTSTAMP_FILTER_NONE;
 
-        return copy_to_user(ifr->ifr_data, &config, sizeof(struct hwtstamp_config)) ?  
-                -EFAULT : 0;
+        return copy_to_user(ifr->ifr_data, &config,
+                        sizeof(struct hwtstamp_config)) ? -EFAULT : 0;
 }
 
 static int lan937x_set_hwtstamp_config(struct ksz_device *dev, int port,
@@ -181,9 +182,11 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
                 struct sk_buff *clone, unsigned int type)
 {
         struct ksz_device *dev  = ds->priv;
-        struct ksz_port *prt = &dev->ports[port];
         struct ptp_header *hdr;
+        struct ksz_port *prt;
         u8 ptp_msg_type;
+
+        prt =  &dev->ports[port];
 
         if (!(skb_shinfo(clone)->tx_flags & SKBTX_HW_TSTAMP))
                 return false;
@@ -199,11 +202,7 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 
         switch (ptp_msg_type) {
                 case PTP_Event_Message_Pdelay_Req:
-                        break;
-
                 case PTP_Event_Message_Pdelay_Resp:
-                        break;
-
                 case PTP_Event_Message_Sync:
                         break;
 
@@ -211,8 +210,6 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
                         return false;  /* free cloned skb */
         }
 
-        prt->tx_tstamp_start = jiffies;
-        prt->tx_seq_id = be16_to_cpu(hdr->sequence_id);
 
         KSZ9477_SKB_CB(clone)->ptp_type = type;
 	KSZ9477_SKB_CB(clone)->ptp_msg_type = ptp_msg_type;
