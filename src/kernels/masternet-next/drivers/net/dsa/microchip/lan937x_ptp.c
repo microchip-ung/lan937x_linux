@@ -201,8 +201,8 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
         }
 
 
-        KSZ9477_SKB_CB(clone)->ptp_type = type;
-	KSZ9477_SKB_CB(clone)->ptp_msg_type = ptp_msg_type;
+        KSZ_SKB_CB(clone)->ptp_type = type;
+	KSZ_SKB_CB(clone)->ptp_msg_type = ptp_msg_type;
 
         return true;
 }
@@ -1014,9 +1014,9 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
                 if (ret)
                         return IRQ_NONE;
 
-                tstamp = ksz9477_decode_tstamp(tstamp_raw);
+                tstamp = ksz_decode_tstamp(tstamp_raw);
 
-                prt_ext->tstamp_pdelayreq = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
+                prt_ext->tstamp_pdelayreq = ksz_tstamp_reconstruct(&dev->ptp_shared, tstamp);
                 complete(&prt_ext->tstamp_pdelayreq_comp);
         }
 
@@ -1028,9 +1028,9 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
                 if (ret)
                         return IRQ_NONE;
 
-                tstamp = ksz9477_decode_tstamp(tstamp_raw);
+                tstamp = ksz_decode_tstamp(tstamp_raw);
 
-                prt_ext->tstamp_pdelayrsp = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
+                prt_ext->tstamp_pdelayrsp = ksz_tstamp_reconstruct(&dev->ptp_shared, tstamp);
                 complete(&prt_ext->tstamp_pdelayrsp_comp);
         }
 
@@ -1042,9 +1042,9 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
                 if (ret)
                         return IRQ_NONE;
 
-                tstamp = ksz9477_decode_tstamp(tstamp_raw);
+                tstamp = ksz_decode_tstamp(tstamp_raw);
 
-                prt_ext->tstamp_sync = lan937x_tstamp_reconstruct(&dev->ptp_shared, tstamp);
+                prt_ext->tstamp_sync = ksz_tstamp_reconstruct(&dev->ptp_shared, tstamp);
                 complete(&prt_ext->tstamp_sync_comp);
         }
 
