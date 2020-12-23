@@ -45,12 +45,6 @@ struct ksz_device_ptp_shared {
 	unsigned long state;
 };
 
-struct ksz_port_ptp_shared {
-	struct ksz_device_ptp_shared *dev;
-	struct kthread_worker *xmit_worker;
-	struct kthread_work xmit_work;
-	struct sk_buff_head xmit_queue;
-};
 
 struct ksz_port {
 	u16 member;
@@ -71,9 +65,7 @@ struct ksz_port {
 	
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
 	/* Resources for transmit timestamping */
-	unsigned long tstamp_state;
 	bool hwts_tx_en;
-	struct ksz_port_ptp_shared ptp_shared;
 #endif
 };
 
@@ -126,15 +118,12 @@ struct ksz_device {
 	u16 host_mask;
 	u16 port_mask;
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
-	//struct lan937x_ptp_data  ptp_data;
 	struct hwtstamp_config tstamp_config;
 	struct ptp_clock_info ptp_caps;
 	struct ptp_clock *ptp_clock;
 	struct mutex ptp_mutex;  //to serialize the activity in the phc
 	
 	struct ksz_device_ptp_shared ptp_shared;
-	//spinlock_t ptp_clock_lock;
-	//struct timespec64 ptp_clock_time;
 #endif
 };
 
