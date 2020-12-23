@@ -59,7 +59,6 @@ struct ksz_port {
 	
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
 	/* Resources for transmit timestamping */
-	unsigned long tstamp_state;
 	bool hwts_tx_en;
 #endif
 };
