@@ -1108,9 +1108,9 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
         ptp_msg_type = ptp_get_msgtype(hdr, type);
 
         switch (ptp_msg_type) {
-                case PTP_Event_Message_Pdelay_Req:
-                case PTP_Event_Message_Pdelay_Resp:
-                case PTP_Event_Message_Sync:
+                case PTP_MSGTYPE_PDELAY_REQ:
+                case PTP_MSGTYPE_PDELAY_RESP:
+                case PTP_MSGTYPE_SYNC:
                         break;
 
                 default:
