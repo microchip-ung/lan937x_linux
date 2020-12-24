@@ -162,7 +162,6 @@ int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct ifreq *ifr)
                 return err;
 
         /* Save the chosen configuration to be returned later. */
-        memcpy(&dev->tstamp_config, &config, sizeof(config));
         bytes_copied = copy_to_user(ifr->ifr_data, &config, sizeof(config)); 
 
         mutex_unlock(&dev->ptp_mutex);
