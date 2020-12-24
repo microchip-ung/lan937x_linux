@@ -52,11 +52,6 @@ struct ksz_port {
 
 	struct ksz_port_mib mib;
 	phy_interface_t interface;
-	
-#if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
-	/* Resources for transmit timestamping */
-	bool hwts_tx_en;
-#endif
 };
 
 struct ksz_device {

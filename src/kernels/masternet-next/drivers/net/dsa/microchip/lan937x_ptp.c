@@ -84,7 +84,7 @@ int lan937x_hwtstamp_get(struct dsa_switch *ds, int port, struct ifreq *ifr)
         struct hwtstamp_config config;
 
         config.flags = 0;
-        if (dev->ports[port].hwts_tx_en)
+        if (dev->prts_ext[port].hwts_tx_en)
                 config.tx_type = HWTSTAMP_TX_ON;
         else
                 config.tx_type = HWTSTAMP_TX_OFF;
@@ -102,7 +102,7 @@ static int lan937x_set_hwtstamp_config(struct ksz_device *dev, int port,
                 struct hwtstamp_config *config)
 {
 	struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
-        struct ksz_port *prt = &dev->ports[port];
+        struct lan937x_port_ext *prt = &dev->prts_ext[port];
         bool rx_on;
 
         /* reserved for future extensions */
@@ -174,11 +174,11 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
                 struct sk_buff *clone, unsigned int type)
 {
         struct ksz_device *dev  = ds->priv;
+        struct lan937x_port_ext *prt;
         struct ptp_header *hdr;
-        struct ksz_port *prt;
         u8 ptp_msg_type;
 
-        prt =  &dev->ports[port];
+        prt =  &dev->prts_ext[port];
 
         if (!(skb_shinfo(clone)->tx_flags & SKBTX_HW_TSTAMP))
                 return false;

@@ -28,6 +28,7 @@ struct lan937x_port_ext {
 	u8 tx_phy_log_prt; /*tx phy port number in the device*/
 	struct dsa_port *dp;
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
+	bool hwts_tx_en;
         struct lan937x_port_ptp_shared ptp_shared;
         ktime_t tstamp_sync;
 	struct completion tstamp_sync_comp;	
