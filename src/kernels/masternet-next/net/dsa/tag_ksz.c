@@ -354,22 +354,22 @@ static struct sk_buff *lan937x_defer_xmit(struct dsa_port *dp,
 	ptp_msg_type = KSZ_SKB_CB(clone)->ptp_msg_type;
 	if (ptp_msg_type == PTP_MSGTYPE_SYNC)
 	{
-		skb_queue_tail(&ptp_shared->xmit_sync_queue, skb_get(skb));
-		kthread_queue_work(ptp_shared->xmit_sync_worker, &ptp_shared->xmit_sync_work);
+		skb_queue_tail(&ptp_shared->sync_queue, skb_get(skb));
+		kthread_queue_work(ptp_shared->sync_worker, &ptp_shared->sync_work);
 
 		return NULL;
 	}
         else if (ptp_msg_type == PTP_MSGTYPE_PDELAY_REQ)
 	{
-		skb_queue_tail(&ptp_shared->xmit_pdelayreq_queue, skb_get(skb));
-		kthread_queue_work(ptp_shared->xmit_pdelayreq_worker, &ptp_shared->xmit_pdelayreq_work);
+		skb_queue_tail(&ptp_shared->pdelayreq_queue, skb_get(skb));
+		kthread_queue_work(ptp_shared->pdelayreq_worker, &ptp_shared->pdelayreq_work);
 
 		return NULL;
 	}
         else if (ptp_msg_type == PTP_MSGTYPE_PDELAY_RESP)
 	{
-		skb_queue_tail(&ptp_shared->xmit_pdelayrsp_queue, skb_get(skb));
-		kthread_queue_work(ptp_shared->xmit_pdelayrsp_worker, &ptp_shared->xmit_pdelayrsp_work);
+		skb_queue_tail(&ptp_shared->pdelayrsp_queue, skb_get(skb));
+		kthread_queue_work(ptp_shared->pdelayrsp_worker, &ptp_shared->pdelayrsp_work);
 
 		return NULL;
 	}
