@@ -2082,10 +2082,10 @@ static void lan937x_port_init(struct ksz_device *dev)
 static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 {
 	struct ksz_device *dev = dev_id;
+	irqreturn_t result = IRQ_NONE;
 	u32 data;
 	int port;
 	int ret;
-	irqreturn_t result = IRQ_NONE;
 	
 
 	/* Read global interrupt status register */
@@ -2104,17 +2104,22 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 
 	for (port = 0; port < dev->port_cnt; port++) {
 		if (data & BIT(port)) {
+                        u32 prtaddr;
 			u8 data8;
-			u8 tempPort = (port + 1); //todo arun remove it.
+
+                        //Port + 1 because Bit 0 corresponds to Port1 and so on
+                        prtaddr = PORT_CTRL_ADDR((port + 1), REG_PORT_INT_STATUS);
 			
 			/* Read port interrupt status register */
-			ret = ksz_read8(dev, PORT_CTRL_ADDR(tempPort, REG_PORT_INT_STATUS),
-					&data8);
+			ret = ksz_read8(dev, prtaddr, &data8);
 			if (ret)
 				return result;
 
 			if (data8 & PORT_PTP_INT)
-				result |= lan937x_ptp_port_interrupt(dev, tempPort);
+			{
+				if(lan937x_ptp_port_interrupt(dev, (port + 1)) != IRQ_NONE)
+					result = IRQ_HANDLED;
+			}
 		}
 	}
 

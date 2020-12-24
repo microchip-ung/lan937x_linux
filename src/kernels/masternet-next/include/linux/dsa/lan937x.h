@@ -27,6 +27,7 @@ struct lan937x_port_ext {
 	u8 lp_num; /*logical port number*/
 	u8 tx_phy_log_prt; /*tx phy port number in the device*/
 	struct dsa_port *dp;
+#if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
         struct lan937x_port_ptp_shared ptp_shared;
         ktime_t tstamp_sync;
 	struct completion tstamp_sync_comp;	
@@ -34,6 +35,7 @@ struct lan937x_port_ext {
 	struct completion tstamp_pdelayreq_comp;	
         ktime_t tstamp_pdelayrsp;
 	struct completion tstamp_pdelayrsp_comp;	
+#endif
 };
 
 #endif/* _NET_DSA_LAN937X_H */
