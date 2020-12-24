@@ -644,11 +644,11 @@ static void lan937x_pdelayrsp_txtstamp_skb(struct ksz_device *dev,
 }
 
 #define work_to_port(work) \
-		container_of((work), struct lan937x_port_ptp_shared, xmit_sync_work)
+		container_of((work), struct lan937x_port_ptp_shared, sync_work)
 #define pdelayreq_to_port(work) \
-		container_of((work), struct lan937x_port_ptp_shared, xmit_pdelayreq_work)
+		container_of((work), struct lan937x_port_ptp_shared, pdelayreq_work)
 #define pdelayrsp_to_port(work) \
-		container_of((work), struct lan937x_port_ptp_shared, xmit_pdelayrsp_work)
+		container_of((work), struct lan937x_port_ptp_shared, pdelayrsp_work)
 #define ptp_shared_to_port_ext(t) \
 		container_of((t), struct lan937x_port_ext, ptp_shared)
 #define ptp_shared_to_ksz_device(t) \
@@ -666,7 +666,7 @@ static void lan937x_sync_deferred_xmit(struct kthread_work *work)
 	int port = prt_ext - dev->prts_ext;
 	struct sk_buff *skb;
 
-	while ((skb = skb_dequeue(&prt_ptp_shared->xmit_sync_queue)) != NULL) {
+	while ((skb = skb_dequeue(&prt_ptp_shared->sync_queue)) != NULL) {
 		struct sk_buff *clone = DSA_SKB_CB(skb)->clone;
 
 		reinit_completion(&prt_ext->tstamp_sync_comp);
@@ -688,7 +688,7 @@ static void lan937x_pdelayreq_deferred_xmit(struct kthread_work *work)
 	int port = prt_ext - dev->prts_ext;
 	struct sk_buff *skb;
 
-	while ((skb = skb_dequeue(&prt_ptp_shared->xmit_pdelayreq_queue)) != NULL) {
+	while ((skb = skb_dequeue(&prt_ptp_shared->pdelayreq_queue)) != NULL) {
 		struct sk_buff *clone = DSA_SKB_CB(skb)->clone;
 
 		reinit_completion(&prt_ext->tstamp_pdelayreq_comp);
@@ -709,7 +709,7 @@ static void lan937x_pdelayrsp_deferred_xmit(struct kthread_work *work)
 	int port = prt_ext - dev->prts_ext;
 	struct sk_buff *skb;
 
-	while ((skb = skb_dequeue(&prt_ptp_shared->xmit_pdelayrsp_queue)) != NULL) {
+	while ((skb = skb_dequeue(&prt_ptp_shared->pdelayrsp_queue)) != NULL) {
 		struct sk_buff *clone = DSA_SKB_CB(skb)->clone;
 
 		reinit_completion(&prt_ext->tstamp_pdelayrsp_comp);
@@ -762,29 +762,29 @@ static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
 	ptp_shared->dev = &dev->ptp_shared;
 
 	init_completion(&prt_ext->tstamp_sync_comp);
-	kthread_init_work(&ptp_shared->xmit_sync_work,
+	kthread_init_work(&ptp_shared->sync_work,
 			  lan937x_sync_deferred_xmit);
 
 	init_completion(&prt_ext->tstamp_pdelayreq_comp);
-	kthread_init_work(&ptp_shared->xmit_pdelayreq_work,
+	kthread_init_work(&ptp_shared->pdelayreq_work,
 			  lan937x_pdelayreq_deferred_xmit);
 
 	init_completion(&prt_ext->tstamp_pdelayrsp_comp);
-	kthread_init_work(&ptp_shared->xmit_pdelayrsp_work,
+	kthread_init_work(&ptp_shared->pdelayrsp_work,
 			  lan937x_pdelayrsp_deferred_xmit);
 
-	ptp_shared->xmit_sync_worker = kthread_create_worker(0, "%s_xmit",
+	ptp_shared->sync_worker = kthread_create_worker(0, "%s_xmit",
 							dp->slave->name);
-	ptp_shared->xmit_pdelayreq_worker = kthread_create_worker(0, "%s_req_xmit",
+	ptp_shared->pdelayreq_worker = kthread_create_worker(0, "%s_req_xmit",
 							dp->slave->name);
-	ptp_shared->xmit_pdelayrsp_worker = kthread_create_worker(0, "%s_rsp_xmit",
+	ptp_shared->pdelayrsp_worker = kthread_create_worker(0, "%s_rsp_xmit",
 							dp->slave->name);
-	if (IS_ERR(ptp_shared->xmit_sync_worker)) 
+	if (IS_ERR(ptp_shared->sync_worker)) 
 		goto error_disable_port_xdelayreq_interrupts;
 	
-	skb_queue_head_init(&ptp_shared->xmit_sync_queue);
-	skb_queue_head_init(&ptp_shared->xmit_pdelayreq_queue);
-	skb_queue_head_init(&ptp_shared->xmit_pdelayrsp_queue);
+	skb_queue_head_init(&ptp_shared->sync_queue);
+	skb_queue_head_init(&ptp_shared->pdelayreq_queue);
+	skb_queue_head_init(&ptp_shared->pdelayrsp_queue);
 
         return 0;
 
@@ -805,9 +805,9 @@ static void lan937x_ptp_port_deinit(struct ksz_device *dev, int port)
         if (port == dev->cpu_port) 
                 return;
 
-        kthread_destroy_worker(ptp_shared->xmit_sync_worker);
-        kthread_destroy_worker(ptp_shared->xmit_pdelayreq_worker);
-        kthread_destroy_worker(ptp_shared->xmit_pdelayrsp_worker);
+        kthread_destroy_worker(ptp_shared->sync_worker);
+        kthread_destroy_worker(ptp_shared->pdelayreq_worker);
+        kthread_destroy_worker(ptp_shared->pdelayrsp_worker);
 
         lan937x_ptp_enable_port_xdelayrsp_interrupts(dev, port, false);
         lan937x_ptp_enable_port_xdelayreq_interrupts(dev, port, false);
