@@ -497,7 +497,7 @@ static int lan937x_ptp_stop_clock(struct ksz_device *dev)
         return 0;
 }
 
-static int lan937x_ptp_enable_port_ptp_interrupts(struct ksz_device *dev,
+static int lan937x_ptp_enable_ptp_interrupts(struct ksz_device *dev,
                 int port, bool enable)
 {
         u32 addr = PORT_CTRL_ADDR(port, REG_PORT_INT_MASK);
@@ -517,7 +517,7 @@ static int lan937x_ptp_enable_port_ptp_interrupts(struct ksz_device *dev,
         return ksz_write8(dev, addr, data);
 }
 
-static int lan937x_ptp_enable_port_sync_interrupts(struct ksz_device *dev, 
+static int lan937x_ptp_enable_sync_interrupts(struct ksz_device *dev, 
                                                     int port, bool enable)
 {
         u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
@@ -537,7 +537,7 @@ static int lan937x_ptp_enable_port_sync_interrupts(struct ksz_device *dev,
         return ksz_write16(dev, addr, data);
 }
 
-static int lan937x_ptp_enable_port_xdelayreq_interrupts(struct ksz_device *dev,
+static int lan937x_ptp_enable_xdelayreq_interrupts(struct ksz_device *dev,
 						     int port, bool enable)
 {
 	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
@@ -557,7 +557,7 @@ static int lan937x_ptp_enable_port_xdelayreq_interrupts(struct ksz_device *dev,
 	return ksz_write16(dev, addr, data);
 }
 
-static int lan937x_ptp_enable_port_xdelayrsp_interrupts(struct ksz_device *dev,
+static int lan937x_ptp_enable_xdelayrsp_interrupts(struct ksz_device *dev,
                                                        int port, bool enable)
 {
         u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
@@ -740,21 +740,21 @@ static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
         if (ret)
                 return ret;
 
-        ret = lan937x_ptp_enable_port_ptp_interrupts(dev, port, true);
+        ret = lan937x_ptp_enable_ptp_interrupts(dev, port, true);
         if (ret)
                 return ret;
 
-        ret = lan937x_ptp_enable_port_sync_interrupts(dev, port, true);
+        ret = lan937x_ptp_enable_sync_interrupts(dev, port, true);
         if (ret)
-                goto error_disable_port_ptp_interrupts;
+                goto error_disable_ptp_interrupts;
 
-        ret = lan937x_ptp_enable_port_xdelayreq_interrupts(dev, port, true);
+        ret = lan937x_ptp_enable_xdelayreq_interrupts(dev, port, true);
         if (ret)
-                goto error_disable_port_sync_interrupts;
+                goto error_disable_sync_interrupts;
 
-        ret = lan937x_ptp_enable_port_xdelayrsp_interrupts(dev, port, true);
+        ret = lan937x_ptp_enable_xdelayrsp_interrupts(dev, port, true);
         if(ret)
-                goto error_disable_port_xdelayreq_interrupts;
+                goto error_disable_xdelayreq_interrupts;
 
 	/* ksz_port::ptp_shared is used in tagging driver */
 	ptp_shared->dev = &dev->ptp_shared;
@@ -778,7 +778,7 @@ static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
 	ptp_shared->pdelayrsp_worker = kthread_create_worker(0, "%s_rsp_xmit",
 							dp->slave->name);
 	if (IS_ERR(ptp_shared->sync_worker)) 
-		goto error_disable_port_xdelayreq_interrupts;
+		goto error_disable_xdelayreq_interrupts;
 	
 	skb_queue_head_init(&ptp_shared->sync_queue);
 	skb_queue_head_init(&ptp_shared->pdelayreq_queue);
@@ -786,12 +786,12 @@ static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
 
         return 0;
 
-error_disable_port_xdelayreq_interrupts:
-	lan937x_ptp_enable_port_xdelayreq_interrupts(dev, port, false);
-error_disable_port_sync_interrupts:
-        lan937x_ptp_enable_port_sync_interrupts(dev, port, false);
-error_disable_port_ptp_interrupts:
-        lan937x_ptp_enable_port_ptp_interrupts(dev, port, false);
+error_disable_xdelayreq_interrupts:
+	lan937x_ptp_enable_xdelayreq_interrupts(dev, port, false);
+error_disable_sync_interrupts:
+        lan937x_ptp_enable_sync_interrupts(dev, port, false);
+error_disable_ptp_interrupts:
+        lan937x_ptp_enable_ptp_interrupts(dev, port, false);
         return ret;
 }
 
@@ -807,10 +807,10 @@ static void lan937x_ptp_port_deinit(struct ksz_device *dev, int port)
         kthread_destroy_worker(ptp_shared->pdelayreq_worker);
         kthread_destroy_worker(ptp_shared->pdelayrsp_worker);
 
-        lan937x_ptp_enable_port_xdelayrsp_interrupts(dev, port, false);
-        lan937x_ptp_enable_port_xdelayreq_interrupts(dev, port, false);
-        lan937x_ptp_enable_port_sync_interrupts(dev, port, false);
-        lan937x_ptp_enable_port_ptp_interrupts(dev, port, false);
+        lan937x_ptp_enable_xdelayrsp_interrupts(dev, port, false);
+        lan937x_ptp_enable_xdelayreq_interrupts(dev, port, false);
+        lan937x_ptp_enable_sync_interrupts(dev, port, false);
+        lan937x_ptp_enable_ptp_interrupts(dev, port, false);
 }
 
 static int lan937x_ptp_ports_init(struct ksz_device *dev)
