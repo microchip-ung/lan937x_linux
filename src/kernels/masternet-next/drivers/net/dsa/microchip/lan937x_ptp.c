@@ -1089,11 +1089,11 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
                 struct sk_buff *clone, unsigned int type)
 {
         struct ksz_device *dev  = ds->priv;
+        struct lan937x_port_ext *prt;
         struct ptp_header *hdr;
-        struct ksz_port *prt;
         u8 ptp_msg_type;
 
-        prt =  &dev->ports[port];
+        prt =  &dev->prts_ext[port];
 
         if (!(skb_shinfo(clone)->tx_flags & SKBTX_HW_TSTAMP))
                 return false;
