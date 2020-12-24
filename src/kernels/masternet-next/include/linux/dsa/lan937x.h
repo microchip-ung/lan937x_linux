@@ -9,15 +9,15 @@
 
 struct lan937x_port_ptp_shared{
 	struct ksz_device_ptp_shared *dev;
-        struct kthread_worker *xmit_sync_worker;
-        struct kthread_worker *xmit_pdelayreq_worker;
-        struct kthread_worker *xmit_pdelayrsp_worker;
-	struct kthread_work xmit_sync_work;
-	struct sk_buff_head xmit_sync_queue;
-	struct kthread_work xmit_pdelayreq_work;
-	struct sk_buff_head xmit_pdelayreq_queue;
-	struct kthread_work xmit_pdelayrsp_work;
-	struct sk_buff_head xmit_pdelayrsp_queue;
+        struct kthread_worker *sync_worker;
+        struct kthread_worker *pdelayreq_worker;
+        struct kthread_worker *pdelayrsp_worker;
+	struct kthread_work sync_work;
+	struct sk_buff_head sync_queue;
+	struct kthread_work pdelayreq_work;
+	struct sk_buff_head pdelayreq_queue;
+	struct kthread_work pdelayrsp_work;
+	struct sk_buff_head pdelayrsp_queue;
 };
 
 /* Lan937x port extended information which is used to refer
