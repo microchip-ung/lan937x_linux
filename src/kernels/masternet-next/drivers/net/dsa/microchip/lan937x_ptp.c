@@ -71,7 +71,7 @@ int lan937x_get_ts_info(struct dsa_switch *ds, int port,
                 (1 << HWTSTAMP_TX_ON);
 
         ts->rx_filters = (1 << HWTSTAMP_FILTER_NONE)  |
-                (1 << HWTSTAMP_FILTER_PTP_V2_L2_EVENT);
+                (1 << HWTSTAMP_FILTER_ALL);
 
         ts->phc_index = ptp_clock_index(dev->ptp_clock);
 
