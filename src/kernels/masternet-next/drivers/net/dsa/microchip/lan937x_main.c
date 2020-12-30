@@ -792,7 +792,7 @@ static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 	bool gbit;
 	u8 data8;
 
-	if (port < dev->phy_port_cnt)
+	if (lan937x_is_internal_phy_port(dev,port))
 		return PHY_INTERFACE_MODE_NA;
 
 	/* read interface from REG_PORT_XMII_CTRL_1 register */
@@ -893,7 +893,7 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 		p->member = dev->port_mask;
 		lan937x_port_stp_state_set(ds, i, BR_STATE_DISABLED);
 		p->on = 1;
-		if (i < dev->phy_port_cnt)
+		if (lan937x_is_internal_phy_port(dev,i))
 			p->phy = 1;
 
 		if (dev->chip_id == 0x00937300 && i == 3) {
@@ -1012,7 +1012,7 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 	}
 	/* For T1 PHY */
 	if (!lan937x_is_internal_tx_phy_port(dev, port) &&
-	    port < dev->phy_port_cnt) {
+	    lan937x_is_internal_phy_port(dev,port)) {
 		phylink_set(mask, 100baseT_Full);
 		phylink_set_port_modes(mask);
 	}
