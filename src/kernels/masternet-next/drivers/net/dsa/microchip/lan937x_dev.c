@@ -391,7 +391,7 @@ u32 lan937x_get_port_addr(int port, int offset)
 
 bool lan937x_is_internal_tx_phy_port(struct ksz_device *dev, int port)
 {
-	if (lan937x_is_internal_phy_port(dev, port) && port == LAN937X_SGMII_PORT)
+	if (lan937x_is_internal_phy_port(dev, port) && port == LAN937X_TXPHY_PORT)
 		if ((GET_CHIP_ID_LSB(dev->chip_id) == CHIP_ID_71) ||
 		    (GET_CHIP_ID_LSB(dev->chip_id) == CHIP_ID_72))
 			return true;

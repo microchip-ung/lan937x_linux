@@ -1072,27 +1072,7 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 
 int lan937x_switch_register(struct ksz_device *dev)
 {
-	struct phy_device *phydev;
-	int ret, i;
-
-	ret = ksz_switch_register(dev, &lan937x_dev_ops);
-	if (ret)
-		return ret;
-
-	for (i = 0; i < dev->port_cnt; ++i) {
-		if (!dsa_is_user_port(dev->ds, i))
-			continue;
-
-		if (!lan937x_is_internal_phy_port(dev, i))
-			continue;
-
-		phydev = dsa_to_port(dev->ds, i)->slave->phydev;
-
-		/* The MAC actually cannot run in 1000 half-duplex mode. */
-		phy_remove_link_mode(phydev,
-				     ETHTOOL_LINK_MODE_1000baseT_Half_BIT);
-	}
-	return ret;
+	return ksz_switch_register(dev, &lan937x_dev_ops);
 }
 EXPORT_SYMBOL(lan937x_switch_register);
 
