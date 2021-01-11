@@ -29,13 +29,14 @@ int lan937x_t1_tx_phy_write(struct ksz_device *dev, int addr,
 int lan937x_t1_tx_phy_read(struct ksz_device *dev, int addr,
 			   int reg, u16 *val);
 bool lan937x_is_internal_tx_phy_port(struct ksz_device *dev, int port);
+bool lan937x_is_internal_t1_phy_port(struct ksz_device *dev, int port);
 bool lan937x_is_internal_phy_port(struct ksz_device *dev, int port);
 int lan937x_reset_switch(struct ksz_device *dev);
 void lan937x_cfg_port_member(struct ksz_device *dev, int port,
 			     u8 member);
 void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port);
 int lan937x_sw_register(struct ksz_device *dev);
-int lan937x_enable_spi_indirect_access(struct ksz_device *dev);
+void lan937x_enable_spi_indirect_access(struct ksz_device *dev);
 
 struct mib_names {
 	int index;
@@ -50,7 +51,6 @@ struct lan937x_chip_data {
 	int num_statics;
 	int cpu_ports;
 	int port_cnt;
-	int phy_port_cnt;
 };
 
 struct lan_alu_struct {

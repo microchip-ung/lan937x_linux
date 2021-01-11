@@ -113,13 +113,13 @@
 			};
 
 			macb0: ethernet@f0028000 {
-				phy-mode = "rmii";
+				phy-mode = "rgmii-tx";
 				#address-cells = <1>;
 				#size-cells = <0>;
 				status = "okay";
 
 				fixed-link {
-					speed = <100>;
+					speed = <1000>;
 					full-duplex;
 				};
 			};
@@ -168,7 +168,7 @@
 					compatible = "microchip,lan9374";
 					reg = <0>;
 					/*44 MHz did not work*/
-					spi-max-frequency = <6000000>;
+					spi-max-frequency = <44000000>;
 					spi-cpha;
 					spi-cpol;
 					interrupt-parent = <&pioB>;
@@ -203,20 +203,20 @@
 						};
 						port@6 {
 							reg = <4>;
-							phy-mode = "rmii";
+							phy-mode = "rgmii-tx";
 							label = "cpu";
 							ethernet = <&macb0>;
 							fixed-link {
-								speed = <100>;
+								speed = <1000>;
 								full-duplex;
 							};
 						};
 						port@7 {
 							reg = <5>;
-							phy-mode = "rmii";
+							phy-mode = "rgmii-tx";
 							label = "lan7";
 							fixed-link {
-								speed = <100>;
+								speed = <1000>;
 								full-duplex;
 							};
 						};

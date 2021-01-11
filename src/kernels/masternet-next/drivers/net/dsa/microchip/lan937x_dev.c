@@ -63,9 +63,8 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.num_statics = 256,
 		/* can be configured as cpu port */
 		.cpu_ports = 0x10,
-		/* total physical port count */
+		/* total port count */
 		.port_cnt = 5,
-		.phy_port_cnt = 4,
 	},
 	{
 		.chip_id = 0x00937100,
@@ -75,9 +74,8 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.num_statics = 256,
 		/* can be configured as cpu port */
 		.cpu_ports = 0x30,
-		/* total physical port count */
+		/* total port count */
 		.port_cnt = 6,
-		.phy_port_cnt = 4,
 	},
 	{
 		.chip_id = 0x00937200,
@@ -89,7 +87,6 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.cpu_ports = 0x30,
 		/* total port count */
 		.port_cnt = 8,
-		.phy_port_cnt = 6,
 	},
 	{
 		.chip_id = 0x00937300,
@@ -99,9 +96,8 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.num_statics = 256,
 		/* can be configured as cpu port */
 		.cpu_ports = 0x38,
-		/* total physical port count */
+		/* total port count */
 		.port_cnt = 5,
-		.phy_port_cnt = 3,
 	},
 	{
 		.chip_id = 0x00937400,
@@ -111,9 +107,8 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.num_statics = 256,
 		/* can be configured as cpu port */
 		.cpu_ports = 0x30,
-		/* total physical port count */
+		/* total port count */
 		.port_cnt = 8,
-		.phy_port_cnt = 6,
 	},
 
 };
@@ -334,49 +329,36 @@ static void lan937x_switch_exit(struct ksz_device *dev)
 	lan937x_reset_switch(dev);
 }
 
-int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
+void lan937x_enable_spi_indirect_access(struct ksz_device *dev)
 {
 	u16 data16;
 	u8 data8;
-	int ret;
 
-	ret = ksz_read8(dev, REG_GLOBAL_CTRL_0, &data8);
-
-	if (ret)
-		return ret;
+	ksz_read8(dev, REG_GLOBAL_CTRL_0, &data8);
 
 	/* Check if PHY register is blocked */
 	if (data8 & SW_PHY_REG_BLOCK) {
 		/* Enable Phy access through SPI*/
 		data8 &= ~SW_PHY_REG_BLOCK;
-		ret = ksz_write8(dev, REG_GLOBAL_CTRL_0, data8);
-
-		if (ret)
-			return ret;
+		ksz_write8(dev, REG_GLOBAL_CTRL_0, data8);
 	}
 
-	ret = ksz_read16(dev, REG_VPHY_SPECIAL_CTRL__2, &data16);
-
-	if (ret)
-		return ret;
+	ksz_read16(dev, REG_VPHY_SPECIAL_CTRL__2, &data16);
 
 	/* If already the access is not enabled go ahead and allow SPI access */
 	if (!(data16 & VPHY_SPI_INDIRECT_ENABLE)) {
 		data16 |= VPHY_SPI_INDIRECT_ENABLE;
-		ret = ksz_write16(dev, REG_VPHY_SPECIAL_CTRL__2, data16);
-
-		if (ret)
-			return ret;
+		ksz_write16(dev, REG_VPHY_SPECIAL_CTRL__2, data16);
 	}
-
-	return ret;
 }
 
 bool lan937x_is_internal_phy_port(struct ksz_device *dev, int port)
 {
+	/* Check if the port is RGMII */
 	if (port == LAN937X_RGMII_1_PORT || port == LAN937X_RGMII_2_PORT)
 		return false;
 
+	/* Check if the port is SGMII */
 	if (port == LAN937X_SGMII_PORT &&
 	    GET_CHIP_ID_LSB(dev->chip_id) == CHIP_ID_73)
 		return false;
@@ -391,10 +373,21 @@ u32 lan937x_get_port_addr(int port, int offset)
 
 bool lan937x_is_internal_tx_phy_port(struct ksz_device *dev, int port)
 {
+	/* Check if the port is internal tx phy port */
 	if (lan937x_is_internal_phy_port(dev, port) && port == LAN937X_TXPHY_PORT)
 		if ((GET_CHIP_ID_LSB(dev->chip_id) == CHIP_ID_71) ||
 		    (GET_CHIP_ID_LSB(dev->chip_id) == CHIP_ID_72))
 			return true;
+
+	return false;
+}
+
+bool lan937x_is_internal_t1_phy_port(struct ksz_device *dev, int port)
+{
+	/* Check if the port is internal t1 phy port */
+	if (lan937x_is_internal_phy_port(dev, port) &&
+	    !lan937x_is_internal_tx_phy_port(dev,port))
+		return true;
 
 	return false;
 }
@@ -406,14 +399,9 @@ int lan937x_t1_tx_phy_write(struct ksz_device *dev, int addr,
 	unsigned int value;
 	int ret;
 
-	/* Check for phy port */
+	/* Check for internal phy port */
 	if (!lan937x_is_internal_phy_port(dev, addr))
 		return 0;
-
-	if (ret) {
-		dev_dbg(dev->dev, "Failed to enable VPHY indirect access from SPI");
-		return ret;
-	}
 
 	if (lan937x_is_internal_tx_phy_port(dev, addr))
 		addr_base = REG_PORT_TX_PHY_CTRL_BASE;
@@ -451,47 +439,7 @@ int lan937x_t1_tx_phy_read(struct ksz_device *dev, int addr,
 	unsigned int value;
 	int ret;
 
-	/* No real PHY after this. Simulate the PHY.
-	 * A fixed PHY can be setup in the device tree, but this function is
-	 * still called for that port during initialization.
-	 * For RGMII PHY there is no way to access it so the fixed PHY should
-	 * be used.  For SGMII PHY the supporting code will be added later.
-	 */
-
-	if (!lan937x_is_internal_phy_port(dev, addr)) {
-		struct ksz_port *p = &dev->ports[addr];
-
-		switch (reg) {
-		case MII_BMCR:
-			*val = 0x1140;
-			break;
-		case MII_BMSR:
-			*val = 0x796d;
-			break;
-		case MII_PHYSID1:
-			*val = 0x0022;
-			break;
-		case MII_PHYSID2:
-			*val = 0x1631;
-			break;
-		case MII_ADVERTISE:
-			*val = 0x05e1;
-			break;
-		case MII_LPA:
-			*val = 0xc5e1;
-			break;
-		case MII_CTRL1000:
-			*val = 0x0700;
-			break;
-		case MII_STAT1000:
-			if (p->phydev.speed == SPEED_1000)
-				*val = 0x3800;
-			else
-				*val = 0;
-			break;
-		}
-	} else {
-
+	if (lan937x_is_internal_phy_port(dev, addr)) {
 		if (lan937x_is_internal_tx_phy_port(dev, addr))
 			addr_base = REG_PORT_TX_PHY_CTRL_BASE;
 		else
@@ -817,10 +765,11 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 		 */
 		lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_JUMBO_PACKET,
 				 true);
-		lan937x_pwrite16(dev, port, REG_PORT_MTU__2, 1540);
+		lan937x_pwrite16(dev, port, REG_PORT_MTU__2, FR_SIZE_CPU_PORT);
 	}
 
-	lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_FR_CHK_LENGTH, false);
+	lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_FR_CHK_LENGTH,
+			 false);
 
 	lan937x_port_cfg(dev, port, REG_PORT_CTRL_0, PORT_MAC_LOOPBACK, false);
 
@@ -842,6 +791,7 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 	/* enable 802.1p priority */
 	lan937x_port_cfg(dev, port, P_PRIO_CTRL, PORT_802_1P_PRIO_ENABLE, true);
 
+	/* phy init for internal ports */
 	if (lan937x_is_internal_phy_port(dev, port)) {
 		if (lan937x_is_internal_tx_phy_port(dev, port))
 			tx_phy_port_init(dev, port);
@@ -864,12 +814,10 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 		case PHY_INTERFACE_MODE_MII:
 			lan937x_set_gbit(dev, false, &data8);
 			data8 |= PORT_MII_SEL;
-			p->phydev.speed = SPEED_100;
 			break;
 		case PHY_INTERFACE_MODE_RMII:
 			lan937x_set_gbit(dev, false, &data8);
 			data8 |= PORT_RMII_SEL;;
-			p->phydev.speed = SPEED_100;
 			break;
 		default:
 			lan937x_set_gbit(dev, true, &data8);
@@ -885,11 +833,9 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 			if (p->interface == PHY_INTERFACE_MODE_RGMII_ID ||
 			    p->interface == PHY_INTERFACE_MODE_RGMII_TXID)
 				data8 |= PORT_RGMII_ID_EG_ENABLE;
-			p->phydev.speed = SPEED_1000;
 			break;
 		}
 		lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, data8);
-		p->phydev.duplex = 1;
 	}
 
 	if (cpu_port)
@@ -920,7 +866,6 @@ static int lan937x_switch_init(struct ksz_device *dev)
 			dev->num_statics = chip->num_statics;
 			dev->port_cnt = chip->port_cnt;
 			dev->cpu_ports = chip->cpu_ports;
-			dev->phy_port_cnt = chip->phy_port_cnt;
 			break;
 		}
 	}

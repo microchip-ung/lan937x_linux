@@ -911,7 +911,6 @@
 /* 148,800 frames * 67 ms / 100 */
 #define BROADCAST_STORM_VALUE		9969
 
-/*New Defines*/
 #define SW_CHECK_LENGTH			BIT(3)
 
 #define FR_MIN_SIZE		1522
@@ -920,6 +919,8 @@
 #define PORT_JUMBO_EN			BIT(0)
 #define PORT_FR_CHK_LENGTH		BIT(2)
 #define PORT_MAX_FR_SIZE		0x404
+
+#define FR_SIZE_CPU_PORT		1540
 
 #define REG_PORT_CTRL_0				0x0020
 #define PORT_MAC_LOOPBACK			BIT(7)

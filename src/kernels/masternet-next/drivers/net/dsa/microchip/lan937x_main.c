@@ -151,11 +151,14 @@ static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
 
 	lan937x_t1_tx_phy_read(dev, addr, reg, &val);
 
-	if (reg == MII_BMSR && !lan937x_is_internal_tx_phy_port(dev, addr)) {
-		/* 100 Base Full duplex is supported*/
+	if (reg == MII_BMSR && lan937x_is_internal_t1_phy_port(dev, addr)) {
+		/* T1 PHY supports only 100 Mb FD, report through BMSR_100FULL bit*/
 		val |= BMSR_100FULL;
 
-		/* Get the proper link status if phy is T1 phy*/
+		/* T1 Phy link is based on REG_PORT_T1_PHY_M_STATUS & REG_PORT_T1
+		 * _MODE_STAT registers for LAN937x, get the link status 
+		 * and report through BMSR_LSTATUS bit
+		 */
 		if (lan937x_get_link_status(dev, addr) == PHY_LINK_UP)
 			val |= BMSR_LSTATUS;
 		else
@@ -875,7 +878,6 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 			/* enable cpu port */
 			lan937x_port_setup(dev, i, true);
 			p->vid_member = dev->port_mask;
-			p->on = 1;
 		}
 	}
 
@@ -892,14 +894,6 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 		p->vid_member = (1 << i);
 		p->member = dev->port_mask;
 		lan937x_port_stp_state_set(ds, i, BR_STATE_DISABLED);
-		p->on = 1;
-		if (lan937x_is_internal_phy_port(dev,i))
-			p->phy = 1;
-
-		if (dev->chip_id == 0x00937300 && i == 3) {
-			/* SGMII PHY detection code is not implemented yet. */
-			p->phy = 0;
-		}
 	}
 }
 
@@ -1011,8 +1005,7 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 		phylink_set(mask, 1000baseT_Full);
 	}
 	/* For T1 PHY */
-	if (!lan937x_is_internal_tx_phy_port(dev, port) &&
-	    lan937x_is_internal_phy_port(dev,port)) {
+	if (lan937x_is_internal_t1_phy_port(dev, port)) {
 		phylink_set(mask, 100baseT_Full);
 		phylink_set_port_modes(mask);
 	}
