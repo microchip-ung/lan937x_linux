@@ -156,7 +156,7 @@ static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
 		val |= BMSR_100FULL;
 
 		/* T1 Phy link is based on REG_PORT_T1_PHY_M_STATUS & REG_PORT_T1
-		 * _MODE_STAT registers for LAN937x, get the link status 
+		 * _MODE_STAT registers for LAN937x, get the link status
 		 * and report through BMSR_LSTATUS bit
 		 */
 		if (lan937x_get_link_status(dev, addr) == PHY_LINK_UP)
@@ -795,7 +795,7 @@ static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 	bool gbit;
 	u8 data8;
 
-	if (lan937x_is_internal_phy_port(dev,port))
+	if (lan937x_is_internal_phy_port(dev, port))
 		return PHY_INTERFACE_MODE_NA;
 
 	/* read interface from REG_PORT_XMII_CTRL_1 register */

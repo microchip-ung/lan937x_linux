@@ -386,7 +386,7 @@ bool lan937x_is_internal_t1_phy_port(struct ksz_device *dev, int port)
 {
 	/* Check if the port is internal t1 phy port */
 	if (lan937x_is_internal_phy_port(dev, port) &&
-	    !lan937x_is_internal_tx_phy_port(dev,port))
+	    !lan937x_is_internal_tx_phy_port(dev, port))
 		return true;
 
 	return false;
@@ -805,8 +805,8 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 			     false);
 
 		lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
-		
-		/* clear MII selection & set it based on interface later */	
+
+		/* clear MII selection & set it based on interface later */
 		data8 &= ~PORT_MII_SEL_M;
 
 		/* configure MAC based on p->interface */
@@ -817,7 +817,7 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 			break;
 		case PHY_INTERFACE_MODE_RMII:
 			lan937x_set_gbit(dev, false, &data8);
-			data8 |= PORT_RMII_SEL;;
+			data8 |= PORT_RMII_SEL;
 			break;
 		default:
 			lan937x_set_gbit(dev, true, &data8);
@@ -880,8 +880,8 @@ static int lan937x_switch_init(struct ksz_device *dev)
 	dev->mib_cnt = ARRAY_SIZE(lan937x_mib_names);
 
 	dev->ports = devm_kzalloc(dev->dev,
-							 dev->port_cnt * sizeof(struct ksz_port),
-							 GFP_KERNEL);
+				  dev->port_cnt * sizeof(struct ksz_port),
+				  GFP_KERNEL);
 	if (!dev->ports)
 		return -ENOMEM;
 

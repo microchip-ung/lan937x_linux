@@ -4,7 +4,7 @@ config NET_DSA_MICROCHIP_KSZ_COMMON
 	tristate
 
 config NET_DSA_MICROCHIP_LAN937X
-	tristate "Microchip LAN937X series SPI connneted switch support"
+	tristate "Microchip LAN937X series SPI connected switch support"
 	depends on NET_DSA && SPI
 	select NET_DSA_MICROCHIP_KSZ_COMMON
 	select REGMAP_SPI
