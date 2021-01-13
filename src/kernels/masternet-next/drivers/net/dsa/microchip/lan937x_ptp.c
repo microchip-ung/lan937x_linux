@@ -1149,17 +1149,19 @@ static int _lan937x_ptp_gettime(struct ksz_device *dev, struct timespec64 *ts)
 
         data16 |= PTP_READ_TIME;
 
-        ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16)
-                if (ret)
-                        return ret;
+        ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
+        if (ret)
+                return ret;
 
         /* Read from shadow registers */
         ret = ksz_read8(dev, REG_PTP_RTC_SUB_NANOSEC__2, &phase);
         if (ret)
                 return ret;
+
         ret = ksz_read32(dev, REG_PTP_RTC_NANOSEC, &nanoseconds);
         if (ret)
                 return ret;
+
         ret = ksz_read32(dev, REG_PTP_RTC_SEC, &seconds);
         if (ret)
                 return ret;
@@ -1324,13 +1326,9 @@ static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 
         data16 |= PTP_STEP_ADJ;
         if (delta < 0)
-        {
                 data16 &= ~PTP_STEP_DIR;  /* 0: subtract */
-        }
         else
-        {
                 data16 |= PTP_STEP_DIR;   /* 1: add */
-        }
 
         ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
         if (ret)
@@ -1405,7 +1403,7 @@ static int lan937x_ptp_stop_clock(struct ksz_device *dev)
 }
 
 static int lan937x_ptp_enable_ptp_interrupts(struct ksz_device *dev,
-                int port, bool enable)
+                                             int port, bool enable)
 {
         u32 addr = PORT_CTRL_ADDR(port, REG_PORT_INT_MASK);
         u8 data;
@@ -1425,7 +1423,7 @@ static int lan937x_ptp_enable_ptp_interrupts(struct ksz_device *dev,
 }
 
 static int lan937x_ptp_enable_sync_interrupts(struct ksz_device *dev, 
-                                                    int port, bool enable)
+                                              int port, bool enable)
 {
         u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
         u16 data;
@@ -1465,7 +1463,7 @@ static int lan937x_ptp_enable_xdelayreq_interrupts(struct ksz_device *dev,
 }
 
 static int lan937x_ptp_enable_xdelayrsp_interrupts(struct ksz_device *dev,
-                                                       int port, bool enable)
+                                                   int port, bool enable)
 {
         u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
         u16 data;
@@ -1494,14 +1492,14 @@ static void lan937x_sync_txtstamp_skb(struct ksz_device *dev,
 	skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
 
 	/* timeout must include tstamp latency, IRQ latency and time for
-	 * reading the time stamp via I2C.
+	 * reading the time stamp.
 	 */
 	ret = wait_for_completion_timeout(&prt_ext->tstamp_sync_comp,
 					  msecs_to_jiffies(100));
 	if (!ret) {
-		dev_err(dev->dev, "timeout waiting for time stamp\n");
 		return;
 	}
+
 	hwtstamps.hwtstamp = prt_ext->tstamp_sync;
 	skb_complete_tx_timestamp(skb, &hwtstamps);
 }
@@ -1515,12 +1513,11 @@ static void lan937x_pdelayreq_txtstamp_skb(struct ksz_device *dev,
 	skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
 
 	/* timeout must include tstamp latency, IRQ latency and time for
-	 * reading the time stamp via I2C.
+	 * reading the time stamp.
 	 */
 	ret = wait_for_completion_timeout(&prt_ext->tstamp_pdelayreq_comp,
 					  msecs_to_jiffies(100));
 	if (!ret) {
-		dev_err(dev->dev, "timeout waiting for time stamp\n");
 		return;
 	}
 	hwtstamps.hwtstamp = prt_ext->tstamp_pdelayreq;
@@ -1536,19 +1533,18 @@ static void lan937x_pdelayrsp_txtstamp_skb(struct ksz_device *dev,
 	skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
 
 	/* timeout must include tstamp latency, IRQ latency and time for
-	 * reading the time stamp via I2C.
+	 * reading the time stamp.
 	 */
 	ret = wait_for_completion_timeout(&prt_ext->tstamp_pdelayrsp_comp,
 					  msecs_to_jiffies(100));
 	if (!ret) {
-		dev_err(dev->dev, "timeout waiting for time stamp\n");
 		return;
 	}
 	hwtstamps.hwtstamp = prt_ext->tstamp_pdelayrsp;
 	skb_complete_tx_timestamp(skb, &hwtstamps);
 }
 
-#define work_to_port(work) \
+#define sync_to_port(work) \
 		container_of((work), struct lan937x_port_ptp_shared, sync_work)
 #define pdelayreq_to_port(work) \
 		container_of((work), struct lan937x_port_ptp_shared, pdelayreq_work)
@@ -1564,7 +1560,7 @@ static void lan937x_pdelayrsp_txtstamp_skb(struct ksz_device *dev,
  */
 static void lan937x_sync_deferred_xmit(struct kthread_work *work)
 {
-	struct lan937x_port_ptp_shared *prt_ptp_shared = work_to_port(work);
+	struct lan937x_port_ptp_shared *prt_ptp_shared = sync_to_port(work);
 	struct lan937x_port_ext *prt_ext = ptp_shared_to_port_ext(prt_ptp_shared);
 	struct ksz_device_ptp_shared *ptp_shared = prt_ptp_shared->dev;
 	struct ksz_device *dev = ptp_shared_to_ksz_device(ptp_shared);
@@ -1753,7 +1749,7 @@ enum lan937x_ptp_tcmode {
 };
 
 static int lan937x_ptp_tcmode_set(struct ksz_device *dev,
-                enum lan937x_ptp_tcmode tcmode)
+                                 enum lan937x_ptp_tcmode tcmode)
 {
         u16 data;
         int ret;
@@ -1794,7 +1790,7 @@ static int lan937x_ptp_ocmode_set(struct ksz_device *dev,
 }
 
 static int lan937x_ptp_twostep_set(struct ksz_device *dev,
-                bool val)
+                                   bool val)
 {
         u16 data;
         int ret;
