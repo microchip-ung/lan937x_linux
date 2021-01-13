@@ -298,7 +298,7 @@ static void lan937x_rcv_timestamp(struct sk_buff *skb, u8 *tag,
 }
 
 /* Find appropriate slave based on the logical port.
- * Logical port number is stored for each slave of dsa_port priv data 
+ * Logical port number is stored for each slave of dsa_port priv data
  * during probe
  */
 static struct dsa_port *ksz_get_dsa_phy_port(struct net_device *dev,
@@ -321,8 +321,7 @@ static struct dsa_port *ksz_get_dsa_phy_port(struct net_device *dev,
 	return NULL;
 }
 
-
-ktime_t ksz_tstamp_reconstruct(struct ksz_device_ptp_shared *ksz, ktime_t tstamp) 
+ktime_t ksz_tstamp_reconstruct(struct ksz_device_ptp_shared *ksz, ktime_t tstamp)
 {
 	struct timespec64 ts = ktime_to_timespec64(tstamp);
 	struct timespec64 ptp_clock_time;
@@ -346,9 +345,8 @@ ktime_t ksz_tstamp_reconstruct(struct ksz_device_ptp_shared *ksz, ktime_t tstamp
 }
 EXPORT_SYMBOL(ksz_tstamp_reconstruct);
 
-
-static void lan937x_xmit_timestamp(struct sk_buff *skb __maybe_unused) 
-{ 
+static void lan937x_xmit_timestamp(struct sk_buff *skb)
+{
 	u32 tstamp_raw = 0;
 
 	put_unaligned_be32(tstamp_raw, skb_put(skb, LAN937X_PTP_TAG_LEN));
@@ -367,30 +365,21 @@ static struct sk_buff *lan937x_defer_xmit(struct dsa_port *dp,
 
 	/* Use cached PTP msg type from ksz9477_ptp_port_txtstamp().  */
 	ptp_msg_type = KSZ_SKB_CB(clone)->ptp_msg_type;
-	if (ptp_msg_type == PTP_MSGTYPE_SYNC)
-	{
+	if (ptp_msg_type == PTP_MSGTYPE_SYNC) {
 		skb_queue_tail(&ptp_shared->sync_queue, skb_get(skb));
 		kthread_queue_work(ptp_shared->sync_worker, &ptp_shared->sync_work);
 
 		return NULL;
-	}
-        else if (ptp_msg_type == PTP_MSGTYPE_PDELAY_REQ)
-	{
+	} else if (ptp_msg_type == PTP_MSGTYPE_PDELAY_REQ) {
 		skb_queue_tail(&ptp_shared->pdelayreq_queue, skb_get(skb));
 		kthread_queue_work(ptp_shared->pdelayreq_worker, &ptp_shared->pdelayreq_work);
 
 		return NULL;
-	}
-        else if (ptp_msg_type == PTP_MSGTYPE_PDELAY_RESP)
-	{
+	} else if (ptp_msg_type == PTP_MSGTYPE_PDELAY_RESP) {
 		skb_queue_tail(&ptp_shared->pdelayrsp_queue, skb_get(skb));
 		kthread_queue_work(ptp_shared->pdelayrsp_worker, &ptp_shared->pdelayrsp_work);
 
 		return NULL;
-	}
-	else
-	{
-                goto out_free_clone;
 	}
 
 out_free_clone:
@@ -399,22 +388,20 @@ out_free_clone:
 	return skb;
 }
 
-static void lan937x_rcv_timestamp(struct sk_buff *skb , u8 *tag ,
-                                 struct net_device *dev, unsigned int port )
+static void lan937x_rcv_timestamp(struct sk_buff *skb, u8 *tag,
+				  struct dsa_port *dp)
 {
 	struct skb_shared_hwtstamps *hwtstamps = skb_hwtstamps(skb);
 	struct lan937x_port_ext *kp = dp->priv;
 	struct lan937x_port_ptp_shared *ptp_shared = &kp->ptp_shared;
 	u8 *tstamp_raw = tag - KSZ9477_PTP_TAG_LEN;
 	ktime_t tstamp;
-	u8 data;
 
 	/* convert time stamp and write to skb */
 	tstamp = ksz_decode_tstamp(get_unaligned_be32(tstamp_raw));
 	memset(hwtstamps, 0, sizeof(*hwtstamps));
 	hwtstamps->hwtstamp = ksz_tstamp_reconstruct(ptp_shared->dev, tstamp);
 }
-
 
 static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 				    struct net_device *dev)
@@ -427,7 +414,6 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	__be16 *tag;
 	u8 *addr;
 	u16 val;
-
 
 	nskb = ksz_common_xmit(skb, dev, LAN937X_INGRESS_TAG_LEN);
 	if (!nskb)
