@@ -529,19 +529,12 @@ static void at803x_remove(struct phy_device *phydev)
 static int at803x_clk_out_config(struct phy_device *phydev)
 {
 	struct at803x_priv *priv = phydev->priv;
-	int val;
 
 	if (!priv->clk_25m_mask)
 		return 0;
 
-	val = phy_read_mmd(phydev, MDIO_MMD_AN, AT803X_MMD7_CLK25M);
-	if (val < 0)
-		return val;
-
-	val &= ~priv->clk_25m_mask;
-	val |= priv->clk_25m_reg;
-
-	return phy_write_mmd(phydev, MDIO_MMD_AN, AT803X_MMD7_CLK25M, val);
+	return phy_modify_mmd(phydev, MDIO_MMD_AN, AT803X_MMD7_CLK25M,
+			      priv->clk_25m_mask, priv->clk_25m_reg);
 }
 
 static int at8031_pll_config(struct phy_device *phydev)
@@ -594,7 +587,13 @@ static int at803x_config_init(struct phy_device *phydev)
 			return ret;
 	}
 
-	return 0;
+	/* Ar803x extended next page bit is enabled by default. Cisco
+	 * multigig switches read this bit and attempt to negotiate 10Gbps
+	 * rates even if the next page bit is disabled. This is incorrect
+	 * behaviour but we still need to accommodate it. XNP is only needed
+	 * for 10Gbps support, so disable XNP.
+	 */
+	return phy_modify(phydev, MII_ADVERTISE, MDIO_AN_CTRL1_XNP, 0);
 }
 
 static int at803x_ack_interrupt(struct phy_device *phydev)

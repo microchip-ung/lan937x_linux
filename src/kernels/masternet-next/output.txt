@@ -2,37 +2,43 @@ WARNING: added, moved or deleted file(s), does MAINTAINERS need updating?
 #2: 
 new file mode 100644
 
+ERROR: trailing whitespace
+#74: FILE: Documentation/devicetree/bindings/net/dsa/microchip,lan937x.yaml:68:
++      $
+
 WARNING: DT binding docs and includes should be a separate patch. See: Documentation/devicetree/bindings/submitting-patches.rst
 
 WARNING: please write a paragraph that describes the config symbol fully
-#350: FILE: drivers/net/dsa/microchip/Kconfig:6:
+#150: FILE: drivers/net/dsa/microchip/Kconfig:6:
 +config NET_DSA_MICROCHIP_LAN937X
 
 CHECK: Avoid CamelCase: <baseT_Half>
-#2512: FILE: drivers/net/dsa/microchip/lan937x_main.c:1024:
+#2193: FILE: drivers/net/dsa/microchip/lan937x_main.c:992:
 +		phylink_set(mask, 10baseT_Half);
 
 CHECK: Avoid CamelCase: <baseT_Full>
-#2513: FILE: drivers/net/dsa/microchip/lan937x_main.c:1025:
+#2194: FILE: drivers/net/dsa/microchip/lan937x_main.c:993:
 +		phylink_set(mask, 10baseT_Full);
 
 CHECK: Avoid CamelCase: <Autoneg>
-#2516: FILE: drivers/net/dsa/microchip/lan937x_main.c:1028:
+#2197: FILE: drivers/net/dsa/microchip/lan937x_main.c:996:
 +		phylink_set(mask, Autoneg);
 
 CHECK: Avoid CamelCase: <Pause>
-#2518: FILE: drivers/net/dsa/microchip/lan937x_main.c:1030:
+#2199: FILE: drivers/net/dsa/microchip/lan937x_main.c:998:
 +		phylink_set(mask, Pause);
 
 CHECK: Avoid CamelCase: <Asym_Pause>
-#2519: FILE: drivers/net/dsa/microchip/lan937x_main.c:1031:
+#2200: FILE: drivers/net/dsa/microchip/lan937x_main.c:999:
 +		phylink_set(mask, Asym_Pause);
 
-CHECK: Avoid CamelCase: <ETHTOOL_LINK_MODE_1000baseT_Half_BIT>
-#2607: FILE: drivers/net/dsa/microchip/lan937x_main.c:1119:
-+				     ETHTOOL_LINK_MODE_1000baseT_Half_BIT);
+total: 1 errors, 3 warnings, 5 checks, 3396 lines checked
 
-total: 0 errors, 3 warnings, 6 checks, 3738 lines checked
+NOTE: For some of the reported defects, checkpatch may be able to
+      mechanically convert to the typical style using --fix or --fix-inplace.
+
+NOTE: Whitespace errors detected.
+      You may wish to use scripts/cleanpatch or scripts/cleanfile
 
 my_file.patch has style problems, please review.
 

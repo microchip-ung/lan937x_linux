@@ -4,6 +4,7 @@ drivers/net/dsa/microchip/
 net/dsa/Kconfig
 drivers/net/ethernet/cadence/macb_main.c
 drivers/base/regmap/regmap-debugfs.c
+Documentation/devicetree/bindings/net/dsa/microchip,lan937x.yaml
 MAINTAINERS
 
 
