@@ -134,6 +134,7 @@ static enum dsa_tag_protocol lan937x_get_tag_protocol(struct dsa_switch *ds,
 static int lan937x_get_link_status(struct ksz_device *dev, int port)
 {
 	u16 val1, val2;
+        u16 val3;
 
 	lan937x_t1_tx_phy_read(dev, port, REG_PORT_T1_PHY_M_STATUS,
 			       &val1);
@@ -1098,6 +1099,10 @@ static void t1_phy_port_init(struct ksz_device *dev, int port)
 	/* Set HW_INIT */
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_POWER_DOWN_CTRL,
 				   T1_HW_INIT_SEQ_ENABLE, true);
+
+        /*t1 master*/
+        if((port == 0) || (port == 2))
+	        lan937x_t1_tx_phy_write(dev, port, REG_PORT_T1_PHY_INITIATOR_CTRL, 0x1800);
 
 	/* Power up the PHY. */
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_BASIC_CTRL,
