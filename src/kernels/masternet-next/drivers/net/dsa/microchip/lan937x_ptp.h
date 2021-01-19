@@ -16,8 +16,8 @@ int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct ifreq *ifr);
 bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 			     struct sk_buff *clone, unsigned int type);
 irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port);
-int lan937x_ptp_init(struct dsa_switch *ds);
-void lan937x_ptp_deinit(struct dsa_switch *ds);
+int lan937x_ptp_init(struct ksz_device *dev);
+void lan937x_ptp_deinit(struct ksz_device *dev);
 
 #else
 
@@ -28,12 +28,12 @@ struct lan937x_ptp_data
 static inline irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 { return IRQ_NONE; }
 
-static inline int lan937x_ptp_init(struct dsa_switch *ds)
+static inline int lan937x_ptp_init(struct ksz_device *dev)
 {
 	return 0;
 }
 
-static inline void lan937x_ptp_deinit(struct dsa_switch *ds){}
+static inline void lan937x_ptp_deinit(struct ksz_device *dev){}
 
 static inline int lan937x_get_ts_info(struct dsa_switch *ds, int port, struct ethtool_ts_info *ts)
 {

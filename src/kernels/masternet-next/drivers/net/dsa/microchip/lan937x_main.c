@@ -942,12 +942,9 @@ static int lan937x_setup(struct dsa_switch *ds)
 	/* enable Indirect Access from SPI to the VPHY registers */
 	lan937x_enable_spi_indirect_access(dev);
 
-	ret = lan937x_ptp_init(ds);
-        
-	if (ret < 0) {
-		dev_err(ds->dev, "Failed to register PTP clock: %d\n", ret);
-		return ret;
-	}
+	ret = lan937x_ptp_init(dev);
+        if(ret)
+                goto error_ptp_deinit;
 
 	/* start switch */
 	lan937x_cfg(dev, REG_SW_OPERATION, SW_START, true);
@@ -955,6 +952,10 @@ static int lan937x_setup(struct dsa_switch *ds)
 	ksz_init_mib_timer(dev);
 
 	return 0;
+
+error_ptp_deinit:
+        lan937x_ptp_deinit(dev);
+        return ret;
 }
 
 static int lan937x_change_mtu(struct dsa_switch *ds, int port, int mtu)
