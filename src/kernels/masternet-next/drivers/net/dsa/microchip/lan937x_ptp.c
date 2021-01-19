@@ -982,7 +982,6 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 {
 	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_STATUS__2);
         struct ksz_port *prt = &dev->ports[port];
-	//struct lan937x_port_ext *prt_ext = &dev->prts_ext[port - 1];
 	u32 tstamp_raw;
 	ktime_t tstamp;
 	u32 regaddr;

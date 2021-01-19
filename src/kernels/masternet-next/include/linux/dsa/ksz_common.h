@@ -44,13 +44,6 @@ struct lan937x_port_ptp_shared{
 	struct sk_buff_head pdelayrsp_queue;
 };
 
-struct ksz_port_ptp_shared {
-	struct ksz_device_ptp_shared *dev;
-	struct kthread_worker *xmit_worker;
-	struct kthread_work xmit_work;
-	struct sk_buff_head xmit_queue;
-};
-
 /* net/dsa/tag_ksz.c */
 static inline ktime_t ksz_decode_tstamp(u32 tstamp)
 {
