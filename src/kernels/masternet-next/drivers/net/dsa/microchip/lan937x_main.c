@@ -1073,7 +1073,6 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.get_ts_info            = lan937x_get_ts_info
 };
 
-
 int lan937x_switch_register(struct ksz_device *dev)
 {
 	return ksz_switch_register(dev, &lan937x_dev_ops);

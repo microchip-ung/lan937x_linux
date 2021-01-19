@@ -841,7 +841,6 @@ static void lan937x_ptp_port_deinit(struct ksz_device *dev, int port)
 	lan937x_ptp_enable_ptp_int(dev, port, false);
 }
 
-
 static int lan937x_ptp_ports_init(struct ksz_device *dev)
 {
 	int port;
