@@ -553,8 +553,8 @@ static int lan937x_ptp_enable_ptp_int(struct ksz_device *dev,
 	return ksz_write8(dev, addr, data);
 }
 
-static int lan937x_ptp_enable_sync_int(struct ksz_device *dev,
-				       int port, bool enable)
+static int lan937x_ptp_enable_msg_int(struct ksz_device *dev,
+			              int port, u16 mask, bool enable)
 {
 	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
 	u16 data;
@@ -564,51 +564,11 @@ static int lan937x_ptp_enable_sync_int(struct ksz_device *dev,
 	if (ret)
 		return ret;
 
-	/* Enable port sync timestamp interrupt (1 means enabled) */
+	/* PTP msg interrupts are active high (1 means enabled)*/
 	if (enable)
-		data |= PTP_PORT_SYNC_INT;
+		data |= mask;
 	else
-		data &= ~PTP_PORT_SYNC_INT;
-
-	return ksz_write16(dev, addr, data);
-}
-
-static int lan937x_ptp_enable_xdelayreq_int(struct ksz_device *dev,
-						   int port, bool enable)
-{
-	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
-	u16 data;
-	int ret;
-
-	ret = ksz_read16(dev, addr, &data);
-	if (ret)
-		return ret;
-
-	/* PTP_PORT_XDELAY_REQ_INT is active high  */
-	if (enable)
-		data |= PTP_PORT_XDELAY_REQ_INT;
-	else
-		data &= ~PTP_PORT_XDELAY_REQ_INT;
-
-	return ksz_write16(dev, addr, data);
-}
-
-static int lan937x_ptp_enable_pdelayrsp_int(struct ksz_device *dev,
-					    int port, bool enable)
-{
-	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
-	u16 data;
-	int ret;
-
-	ret = ksz_read16(dev, addr, &data);
-	if (ret)
-		return ret;
-
-	/* PTP_PORT_PDELAY_RESP_INT is active high */
-	if (enable)
-		data |= PTP_PORT_PDELAY_RESP_INT;
-	else
-		data &= ~PTP_PORT_PDELAY_RESP_INT;
+		data &= ~mask;
 
 	return ksz_write16(dev, addr, data);
 }
@@ -785,15 +745,15 @@ static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
 	if (ret)
 		return ret;
 
-	ret = lan937x_ptp_enable_sync_int(dev, port, true);
+	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_SYNC_INT,	true);
 	if (ret)
 		goto error_disable_ptp_int;
 
-	ret = lan937x_ptp_enable_xdelayreq_int(dev, port, true);
+	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_XDELAY_REQ_INT, true);
 	if (ret)
 		goto error_disable_sync_int;
 
-	ret = lan937x_ptp_enable_pdelayrsp_int(dev, port, true);
+	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_PDELAY_RESP_INT, true);
 	if (ret)
 		goto error_disable_xdelayreq_int;
 
@@ -828,9 +788,9 @@ static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
 	return 0;
 
 error_disable_xdelayreq_int:
-	lan937x_ptp_enable_xdelayreq_int(dev, port, false);
+	lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_XDELAY_REQ_INT, false);
 error_disable_sync_int:
-	lan937x_ptp_enable_sync_int(dev, port, false);
+	lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_SYNC_INT, false);
 error_disable_ptp_int:
 	lan937x_ptp_enable_ptp_int(dev, port, false);
 	return ret;
@@ -848,9 +808,9 @@ static void lan937x_ptp_port_deinit(struct ksz_device *dev, int port)
 	kthread_destroy_worker(ptp_shared->pdelayreq_worker);
 	kthread_destroy_worker(ptp_shared->pdelayrsp_worker);
 
-	lan937x_ptp_enable_pdelayrsp_int(dev, port, false);
-	lan937x_ptp_enable_xdelayreq_int(dev, port, false);
-	lan937x_ptp_enable_sync_int(dev, port, false);
+	lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_PDELAY_RESP_INT, false);
+	lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_XDELAY_REQ_INT, false);
+	lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_SYNC_INT, false);
 	lan937x_ptp_enable_ptp_int(dev, port, false);
 }
 
