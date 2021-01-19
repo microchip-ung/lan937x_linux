@@ -488,6 +488,25 @@ static int lan937x_ptp_stop_clock(struct ksz_device *dev)
 	return 0;
 }
 
+static int lan937x_ptp_8021as(struct ksz_device *dev,
+				  bool enable)
+{
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
+	if (ret)
+		return ret;
+
+	if (enable)
+		data |= PTP_802_1AS;
+	else
+		data &= ~PTP_802_1AS;
+
+	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
+}
+
+/* Function to enable/disable Port PTP interrupt */
 static int lan937x_ptp_enable_ptp_int(struct ksz_device *dev,
 					     int port, bool enable)
 {
@@ -508,6 +527,7 @@ static int lan937x_ptp_enable_ptp_int(struct ksz_device *dev,
 	return ksz_write8(dev, addr, data);
 }
 
+/* Function to enable/disable Individual message interrupt */
 static int lan937x_ptp_enable_msg_int(struct ksz_device *dev,
 			              int port, u16 mask, bool enable)
 {
@@ -529,8 +549,7 @@ static int lan937x_ptp_enable_msg_int(struct ksz_device *dev,
 }
 
 static void lan937x_sync_txtstamp_skb(struct ksz_device *dev,
-				      struct ksz_port *prt,
-				      struct sk_buff *skb)
+				      struct ksz_port *prt, struct sk_buff *skb)
 {
 	struct skb_shared_hwtstamps hwtstamps = {};
 	int ret;
@@ -592,7 +611,7 @@ static void lan937x_pdelayrsp_txtstamp_skb(struct ksz_device *dev,
 }
 
 
-/* Deferred work is necessary for time stamped PDelay_Req messages. This cannot
+/* Deferred work is necessary for time stamped messages. This cannot
  * be done from atomic context as we have to wait for the hardware interrupt.
  */
 static void lan937x_sync_deferred_xmit(struct kthread_work *work)
@@ -658,31 +677,112 @@ static void lan937x_pdelayrsp_deferred_xmit(struct kthread_work *work)
 	}
 }
 
-static int lan937x_ptp_8021as(struct ksz_device *dev,
-				  bool enable)
-{
-	u16 data;
-	int ret;
 
-	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
-	if (ret)
-		return ret;
-
-	if (enable)
-		data |= PTP_802_1AS;
-	else
-		data &= ~PTP_802_1AS;
-
-	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
-}
-
-static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
+/* Function is to  enable the Message Interrupt and intialize the worker queue
+ * for processing the Interrupt routine
+ */
+static int lan937x_ptp_sync_msg_en(struct ksz_device *dev, int port)
 {
 	struct ksz_port *prt = &dev->ports[port];
 	struct lan937x_port_ptp_shared *ptp_shared = &prt->ptp_shared;
 	struct dsa_port *dp = dsa_to_port(dev->ds, port);
+        int ret;
+        
+	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_SYNC_INT,	true);
+	if (ret)
+		return ret;
+
+	init_completion(&prt->tstamp_sync_comp);
+	skb_queue_head_init(&ptp_shared->sync_queue);
+	kthread_init_work(&ptp_shared->sync_work,
+			  lan937x_sync_deferred_xmit);
+	ptp_shared->sync_worker = kthread_create_worker(0, "%s_sync",
+							dp->slave->name);
+       
+       if (IS_ERR(ptp_shared->sync_worker)) {
+		ret = PTR_ERR(ptp_shared->sync_worker);
+		goto error_disable_interrupt;
+	} 
+
+        return 0;
+
+error_disable_interrupt:
+        lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_SYNC_INT, false);
+        return ret;
+}
+
+static int lan937x_ptp_xdelayreq_msg_en(struct ksz_device *dev, int port)
+{
+	struct ksz_port *prt = &dev->ports[port];
+	struct lan937x_port_ptp_shared *ptp_shared = &prt->ptp_shared;
+	struct dsa_port *dp = dsa_to_port(dev->ds, port);
+        int ret;
+        
+	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_XDELAY_REQ_INT, true);
+	if (ret)
+		return ret;
+
+
+	init_completion(&prt->tstamp_pdelayreq_comp);
+	skb_queue_head_init(&ptp_shared->pdelayreq_queue);
+	kthread_init_work(&ptp_shared->pdelayreq_work,
+			  lan937x_pdelayreq_deferred_xmit);
+
+	ptp_shared->pdelayreq_worker = kthread_create_worker(0, "%s_req_xmit",
+							     dp->slave->name);
+
+       if (IS_ERR(ptp_shared->pdelayreq_worker)) {
+		ret = PTR_ERR(ptp_shared->pdelayreq_worker);
+		goto error_disable_interrupt;
+	} 
+
+        return 0;
+
+error_disable_interrupt:
+        lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_XDELAY_REQ_INT, false);
+        return ret;
+}
+
+static int lan937x_ptp_pdelayresp_msg_en(struct ksz_device *dev, int port)
+{
+	struct ksz_port *prt = &dev->ports[port];
+	struct lan937x_port_ptp_shared *ptp_shared = &prt->ptp_shared;
+	struct dsa_port *dp = dsa_to_port(dev->ds, port);
+        int ret;
+
+	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_PDELAY_RESP_INT, true);
+	if (ret)
+	        return ret;
+
+	init_completion(&prt->tstamp_pdelayrsp_comp);
+	skb_queue_head_init(&ptp_shared->pdelayrsp_queue);
+	kthread_init_work(&ptp_shared->pdelayrsp_work,
+			  lan937x_pdelayrsp_deferred_xmit);
+
+	ptp_shared->pdelayrsp_worker = kthread_create_worker(0, "%s_rsp_xmit",
+							     dp->slave->name);
+
+       if (IS_ERR(ptp_shared->pdelayrsp_worker)) {
+		ret = PTR_ERR(ptp_shared->pdelayrsp_worker);
+		goto error_disable_interrupt;
+	} 
+
+        return 0;
+
+error_disable_interrupt:
+        lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_PDELAY_RESP_INT, false);
+        return ret;
+}
+
+static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
+{
+	struct dsa_port *dp = dsa_to_port(dev->ds, port);
+	struct lan937x_port_ptp_shared *ptp_shared;
+	struct ksz_port *prt = &dev->ports[port];
 	int ret;
 
+        ptp_shared = &prt->ptp_shared;
+        
 	if (port == dev->cpu_port)
 		return 0;
 
@@ -701,53 +801,24 @@ static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
 	if (ret)
 		return ret;
 
-	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_SYNC_INT,	true);
-	if (ret)
-		goto error_disable_ptp_int;
-
-	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_XDELAY_REQ_INT, true);
-	if (ret)
-		goto error_disable_sync_int;
-
-	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_PDELAY_RESP_INT, true);
-	if (ret)
-		goto error_disable_xdelayreq_int;
-
 	/* ksz_port::ptp_shared is used in tagging driver */
 	ptp_shared->dev = &dev->ptp_shared;
         dp->priv = ptp_shared;
 
-	init_completion(&prt->tstamp_sync_comp);
-	kthread_init_work(&ptp_shared->sync_work,
-			  lan937x_sync_deferred_xmit);
+        ret = lan937x_ptp_sync_msg_en(dev, port);
+        if(ret)
+                goto error_disable_ptp_int;
 
-	init_completion(&prt->tstamp_pdelayreq_comp);
-	kthread_init_work(&ptp_shared->pdelayreq_work,
-			  lan937x_pdelayreq_deferred_xmit);
+        ret = lan937x_ptp_xdelayreq_msg_en(dev, port);
+        if(ret)
+                goto error_disable_ptp_int;
 
-	init_completion(&prt->tstamp_pdelayrsp_comp);
-	kthread_init_work(&ptp_shared->pdelayrsp_work,
-			  lan937x_pdelayrsp_deferred_xmit);
-
-	ptp_shared->sync_worker = kthread_create_worker(0, "%s_xmit",
-							dp->slave->name);
-	ptp_shared->pdelayreq_worker = kthread_create_worker(0, "%s_req_xmit",
-							     dp->slave->name);
-	ptp_shared->pdelayrsp_worker = kthread_create_worker(0, "%s_rsp_xmit",
-							     dp->slave->name);
-	if (IS_ERR(ptp_shared->sync_worker))
-		goto error_disable_xdelayreq_int;
-
-	skb_queue_head_init(&ptp_shared->sync_queue);
-	skb_queue_head_init(&ptp_shared->pdelayreq_queue);
-	skb_queue_head_init(&ptp_shared->pdelayrsp_queue);
+        ret = lan937x_ptp_pdelayresp_msg_en(dev, port);
+        if(ret)
+                goto error_disable_ptp_int;
 
 	return 0;
 
-error_disable_xdelayreq_int:
-	lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_XDELAY_REQ_INT, false);
-error_disable_sync_int:
-	lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_SYNC_INT, false);
 error_disable_ptp_int:
 	lan937x_ptp_enable_ptp_int(dev, port, false);
 	return ret;
