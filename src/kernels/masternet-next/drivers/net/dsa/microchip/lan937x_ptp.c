@@ -946,9 +946,8 @@ static int lan937x_ptp_8021as_set(struct ksz_device *dev,
 	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
 }
 
-int lan937x_ptp_init(struct dsa_switch *ds)
+int lan937x_ptp_init(struct ksz_device *dev)
 {
-	struct ksz_device *dev	= ds->priv;
 	int ret;
 
 	mutex_init(&dev->ptp_mutex);
@@ -976,7 +975,7 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 		return ret;
 
         /* Register the PTP Clock */
-	dev->ptp_clock = ptp_clock_register(&dev->ptp_caps, ds->dev);
+	dev->ptp_clock = ptp_clock_register(&dev->ptp_caps, dev->dev);
 	if (IS_ERR_OR_NULL(dev->ptp_clock)) {
 		ret = PTR_ERR(dev->ptp_clock);
 		goto error_stop_clock;
@@ -1003,20 +1002,18 @@ error_stop_clock:
 	return ret;
 }
 
-void lan937x_ptp_deinit(struct dsa_switch *ds)
+void lan937x_ptp_deinit(struct ksz_device *dev)
 {
-	struct ksz_device *dev	= ds->priv;
-
-	if (IS_ERR_OR_NULL(dev->ptp_clock))
-		return;
-
-	dev->ptp_clock = NULL;
 	lan937x_ptp_ports_deinit(dev);
 	lan937x_ptp_enable_mode(dev, false);
 	ptp_clock_unregister(dev->ptp_clock);
 	lan937x_ptp_stop_clock(dev);
 }
 
+/* Interrupt Service Routine for PTP
+ * It reads the 32 bit timestamp value from the register and reconstruct it to 
+ * timestamp and post the complete signal 
+ */  
 irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 {
 	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_STATUS__2);
