@@ -14,6 +14,7 @@
 #include "lan937x_reg.h"
 #include "ksz_common.h"
 #include "lan937x_dev.h"
+#include "lan937x_ptp.h"
 
 const struct mib_names lan937x_mib_names[] = {
 	{ 0x00, "rx_hi" },
@@ -324,10 +325,6 @@ static int lan937x_switch_detect(struct ksz_device *dev)
 	return ret;
 }
 
-static void lan937x_switch_exit(struct ksz_device *dev)
-{
-	lan937x_reset_switch(dev);
-}
 
 void lan937x_enable_spi_indirect_access(struct ksz_device *dev)
 {
@@ -737,9 +734,13 @@ static void t1_phy_port_init(struct ksz_device *dev, int port)
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_POWER_DOWN_CTRL,
 				   T1_HW_INIT_SEQ_ENABLE, true);
 
+	//Arun changes
+	lan937x_t1_tx_phy_write(dev, port, REG_PORT_T1_PHY_M_CTRL, 0x1800);	
+
 	/* Power up the PHY. */
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_BASIC_CTRL,
 				   PORT_T1_POWER_DOWN, false);
+
 }
 
 static void lan937x_set_gbit(struct ksz_device *dev, bool gbit, u8 *data)
@@ -850,11 +851,104 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 		lan937x_pread16(dev, port, REG_PORT_PHY_INT_ENABLE, &data16);
 }
 
+
+static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
+{
+	struct ksz_device *dev = dev_id;
+	irqreturn_t result = IRQ_NONE;
+	u32 data;
+	int port;
+	int ret;
+	
+
+	/* Read global interrupt status register */
+	ret = ksz_read32(dev, REG_SW_INT_STATUS__4, &data);
+	if (ret)
+		return result;
+
+	if(data & 0x2000000)
+	{
+		ksz_write32(dev, REG_SW_INT_STATUS__4, 0x2000000);
+	}
+
+	ret = ksz_read32(dev, REG_SW_PORT_INT_STATUS__4, &data);
+	if (ret)
+		return result;
+
+	for (port = 0; port < dev->port_cnt; port++) {
+		if (data & BIT(port)) {
+                        u32 prtaddr;
+			u8 data8;
+
+                        //Port + 1 because Bit 0 corresponds to Port1 and so on
+                        //prtaddr = PORT_CTRL_ADDR((port + 1), REG_PORT_INT_STATUS);
+                        prtaddr = PORT_CTRL_ADDR(port, REG_PORT_INT_STATUS);
+			
+			/* Read port interrupt status register */
+			ret = ksz_read8(dev, prtaddr, &data8);
+			if (ret)
+				return result;
+
+
+			if (data8 & PORT_PTP_INT)
+			{
+				//if(lan937x_ptp_port_interrupt(dev, (port + 1)) != IRQ_NONE)
+				if(lan937x_ptp_port_interrupt(dev, (port )) != IRQ_NONE)
+					result = IRQ_HANDLED;
+			}
+		}
+	}
+
+	return result;
+}
+
+static int lan937x_enable_port_interrupts(struct ksz_device *dev)
+{
+	u32 data;
+	int ret;
+
+	ret = ksz_read32(dev, REG_SW_PORT_INT_MASK__4, &data);
+	if (ret)
+		return ret;
+
+	/* Enable port interrupts (0 means enabled) */
+	data &= ~((1 << dev->port_cnt) - 1);
+	ret = ksz_write32(dev, REG_SW_PORT_INT_MASK__4, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int lan937x_disable_port_interrupts(struct ksz_device *dev)
+{
+	u32 data;
+	int ret;
+
+	ret = ksz_read32(dev, REG_SW_PORT_INT_MASK__4, &data);
+	if (ret)
+		return ret;
+
+	/* Disable port interrupts (1 means disabled) */
+	data |= ((1 << dev->port_cnt) - 1);
+	ret = ksz_write32(dev, REG_SW_PORT_INT_MASK__4, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 static int lan937x_switch_init(struct ksz_device *dev)
 {
-	int i;
+	int i, ret;
 
 	dev->ds->ops = &lan937x_switch_ops;
+
+	ret = lan937x_reset_switch(dev);
+	if (ret) {
+		dev_err(dev->dev, "failed to reset switch\n");
+		return ret;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(lan937x_switch_chips); i++) {
 		const struct lan937x_chip_data *chip = &lan937x_switch_chips[i];
@@ -898,7 +992,34 @@ static int lan937x_switch_init(struct ksz_device *dev)
 
 	/* set the real number of ports */
 	dev->ds->num_ports = dev->port_cnt;
+
+	if (dev->irq > 0) {
+		unsigned long irqflags = irqd_get_trigger_type(irq_get_irq_data(dev->irq));
+
+		irqflags |= IRQF_ONESHOT;
+		ret = devm_request_threaded_irq(dev->dev, dev->irq, NULL,
+						lan937x_switch_irq_thread,
+						irqflags,
+						dev_name(dev->dev),
+						dev);
+		if (ret) {
+			dev_err(dev->dev, "failed to request IRQ.\n");
+			return ret;
+		}
+
+		ret = lan937x_enable_port_interrupts(dev);
+		if (ret)
+			return ret;
+	}
+
 	return 0;
+}
+
+static void lan937x_switch_exit(struct ksz_device *dev)
+{
+	if (dev->irq > 0)
+		lan937x_disable_port_interrupts(dev);
+	lan937x_reset_switch(dev);
 }
 
 const struct ksz_dev_ops lan937x_dev_ops = {
