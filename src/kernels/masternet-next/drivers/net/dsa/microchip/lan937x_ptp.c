@@ -12,6 +12,16 @@
 
 #define ptp_clock_info_to_dev(d) \
 	container_of((d), struct ksz_device, ptp_caps)
+#define sync_to_port(work) \
+		container_of((work), struct lan937x_port_ptp_shared, sync_work)
+#define pdelayreq_to_port(work) \
+	   container_of((work), struct lan937x_port_ptp_shared, pdelayreq_work)
+#define pdelayrsp_to_port(work) \
+	   container_of((work), struct lan937x_port_ptp_shared, pdelayrsp_work)
+#define ptp_shared_to_ksz_port(t) \
+		container_of((t), struct ksz_port, ptp_shared)
+#define ptp_shared_to_ksz_device(t) \
+		container_of((t), struct ksz_device, ptp_shared)
 
 #define MAX_DRIFT_CORR 6250000
 
@@ -666,17 +676,6 @@ static void lan937x_pdelayrsp_txtstamp_skb(struct ksz_device *dev,
 	skb_complete_tx_timestamp(skb, &hwtstamps);
 }
 
-#define sync_to_port(work) \
-		container_of((work), struct lan937x_port_ptp_shared, sync_work)
-#define pdelayreq_to_port(work) \
-	   container_of((work), struct lan937x_port_ptp_shared, pdelayreq_work)
-#define pdelayrsp_to_port(work) \
-	   container_of((work), struct lan937x_port_ptp_shared, pdelayrsp_work)
-#define ptp_shared_to_port_ext(t) \
-		container_of((t), struct lan937x_port_ext, ptp_shared)
-#define ptp_shared_to_ksz_device(t) \
-		container_of((t), struct ksz_device, ptp_shared)
-
 /* Deferred work is necessary for time stamped PDelay_Req messages. This cannot
  * be done from atomic context as we have to wait for the hardware interrupt.
  */
@@ -741,6 +740,24 @@ static void lan937x_pdelayrsp_deferred_xmit(struct kthread_work *work)
 
 		lan937x_pdelayrsp_txtstamp_skb(dev, prt_ext, clone);
 	}
+}
+
+static int lan937x_ptp_8021as(struct ksz_device *dev,
+				  bool enable)
+{
+	u16 data;
+	int ret;
+
+	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
+	if (ret)
+		return ret;
+
+	if (enable)
+		data |= PTP_802_1AS;
+	else
+		data &= ~PTP_802_1AS;
+
+	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
 }
 
 static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
@@ -837,6 +854,7 @@ static void lan937x_ptp_port_deinit(struct ksz_device *dev, int port)
 	lan937x_ptp_enable_ptp_int(dev, port, false);
 }
 
+
 static int lan937x_ptp_ports_init(struct ksz_device *dev)
 {
 	int port;
@@ -862,88 +880,6 @@ static void lan937x_ptp_ports_deinit(struct ksz_device *dev)
 
 	for (port = 0; port < dev->port_cnt; port++)
 		lan937x_ptp_port_deinit(dev, port);
-}
-
-enum lan937x_ptp_tcmode {
-	LAN937x_PTP_TCMODE_E2E,
-	LAN937x_PTP_TCMODE_P2P,
-};
-
-static int lan937x_ptp_tcmode_set(struct ksz_device *dev,
-				  enum lan937x_ptp_tcmode tcmode)
-{
-	u16 data;
-	int ret;
-
-	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
-	if (ret)
-		return ret;
-
-	if (tcmode == LAN937x_PTP_TCMODE_P2P)
-		data |= PTP_TC_P2P;
-	else
-		data &= ~PTP_TC_P2P;
-
-	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
-}
-
-enum lan937x_ptp_ocmode {
-	LAN937x_PTP_OCMODE_SLAVE,
-	LAN937x_PTP_OCMODE_MASTER,
-};
-
-static int lan937x_ptp_ocmode_set(struct ksz_device *dev,
-				  enum lan937x_ptp_ocmode ocmode)
-{
-	u16 data;
-	int ret;
-
-	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
-	if (ret)
-		return ret;
-
-	if (ocmode == LAN937x_PTP_OCMODE_MASTER)
-		data |= PTP_INITIATOR;
-	else
-		data &= ~PTP_INITIATOR;
-
-	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
-}
-
-static int lan937x_ptp_twostep_set(struct ksz_device *dev,
-				   bool val)
-{
-	u16 data;
-	int ret;
-
-	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
-	if (ret)
-		return ret;
-
-	if (val == 1)
-		data &= ~PTP_1STEP;
-	else
-		data |= PTP_1STEP;
-
-	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
-}
-
-static int lan937x_ptp_8021as_set(struct ksz_device *dev,
-				  bool val)
-{
-	u16 data;
-	int ret;
-
-	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
-	if (ret)
-		return ret;
-
-	if (enable)
-		data |= PTP_802_1AS;
-	else
-		data &= ~PTP_802_1AS;
-
-	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
 }
 
 int lan937x_ptp_init(struct ksz_device *dev)
