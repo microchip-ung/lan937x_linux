@@ -880,8 +880,6 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
                         u32 prtaddr;
 			u8 data8;
 
-                        //Port + 1 because Bit 0 corresponds to Port1 and so on
-                        //prtaddr = PORT_CTRL_ADDR((port + 1), REG_PORT_INT_STATUS);
                         prtaddr = PORT_CTRL_ADDR(port, REG_PORT_INT_STATUS);
 			
 			/* Read port interrupt status register */
@@ -892,7 +890,6 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 
 			if (data8 & PORT_PTP_INT)
 			{
-				//if(lan937x_ptp_port_interrupt(dev, (port + 1)) != IRQ_NONE)
 				if(lan937x_ptp_port_interrupt(dev, (port )) != IRQ_NONE)
 					result = IRQ_HANDLED;
 			}
