@@ -956,18 +956,18 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 
 	dev->ptp_caps = (struct ptp_clock_info) {
 		.owner		= THIS_MODULE,
-			.name		= "Microchip Clock",
-			.max_adj	= MAX_DRIFT_CORR,
-			.enable		= lan937x_ptp_enable,
-			.gettime64	= lan937x_ptp_gettime,
-			.settime64	= lan937x_ptp_settime,
-			.adjfine	= lan937x_ptp_adjfine,
-			.adjtime	= lan937x_ptp_adjtime,
-			.do_aux_work	= lan937x_ptp_do_aux_work,
-			.n_alarm	= 0,
-			.n_ext_ts	= 0,  /* currently not implemented */
-			.n_per_out	= 0,
-			.pps		= 0
+		.name		= "Microchip Clock",
+		.max_adj	= MAX_DRIFT_CORR,
+		.enable		= lan937x_ptp_enable,
+		.gettime64	= lan937x_ptp_gettime,
+		.settime64	= lan937x_ptp_settime,
+		.adjfine	= lan937x_ptp_adjfine,
+		.adjtime	= lan937x_ptp_adjtime,
+		.do_aux_work	= lan937x_ptp_do_aux_work,
+		.n_alarm	= 0,
+		.n_ext_ts	= 0,  /* currently not implemented */
+		.n_per_out	= 0,
+		.pps		= 0
 	};
 
 	/* Start hardware counter (will overflow after 136 years) */
@@ -975,6 +975,7 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 	if (ret)
 		return ret;
 
+        /* Register the PTP Clock */
 	dev->ptp_clock = ptp_clock_register(&dev->ptp_caps, ds->dev);
 	if (IS_ERR_OR_NULL(dev->ptp_clock)) {
 		ret = PTR_ERR(dev->ptp_clock);
@@ -987,10 +988,14 @@ int lan937x_ptp_init(struct dsa_switch *ds)
 		goto error_unregister_clock;
 
         /*Enable 802.1as mode */
-	lan937x_ptp_8021as(dev, true);
+	ret = lan937x_ptp_8021as(dev, true);
+        if(ret)
+                goto error_ports_deinit;
 
 	return 0;
 
+error_ports_deinit:
+	lan937x_ptp_ports_deinit(dev);
 error_unregister_clock:
 	ptp_clock_unregister(dev->ptp_clock);
 error_stop_clock:
