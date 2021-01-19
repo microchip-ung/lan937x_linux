@@ -35,16 +35,6 @@ struct ksz_port_mib {
 	u64 *counters;
 };
 
-struct ksz_device_ptp_shared {
-	/* protects ptp_clock_time (user space (various syscalls)
-	 * vs. softirq in ksz9477_rcv_timestamp()).
-	 */
-	spinlock_t ptp_clock_lock;
-	/* approximated current time, read once per second from hardware */
-	struct timespec64 ptp_clock_time;
-	unsigned long state;
-};
-
 struct ksz_port {
 	u16 member;
 	u16 vid_member;
@@ -61,6 +51,16 @@ struct ksz_port {
 
 	struct ksz_port_mib mib;
 	phy_interface_t interface;
+#if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
+	bool hwts_tx_en;
+        struct lan937x_port_ptp_shared ptp_shared;
+        ktime_t tstamp_sync;
+	struct completion tstamp_sync_comp;	
+        ktime_t tstamp_pdelayreq;
+	struct completion tstamp_pdelayreq_comp;	
+        ktime_t tstamp_pdelayrsp;
+	struct completion tstamp_pdelayrsp_comp;	
+#endif
 };
 
 struct ksz_device {

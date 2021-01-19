@@ -31,6 +31,19 @@ struct ksz_device_ptp_shared {
 	unsigned long state;
 };
 
+struct lan937x_port_ptp_shared{
+	struct ksz_device_ptp_shared *dev;
+        struct kthread_worker *sync_worker;
+        struct kthread_worker *pdelayreq_worker;
+        struct kthread_worker *pdelayrsp_worker;
+	struct kthread_work sync_work;
+	struct sk_buff_head sync_queue;
+	struct kthread_work pdelayreq_work;
+	struct sk_buff_head pdelayreq_queue;
+	struct kthread_work pdelayrsp_work;
+	struct sk_buff_head pdelayrsp_queue;
+};
+
 struct ksz_port_ptp_shared {
 	struct ksz_device_ptp_shared *dev;
 	struct kthread_worker *xmit_worker;
