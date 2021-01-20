@@ -7,11 +7,8 @@
 #include <linux/iopoll.h>
 #include <linux/phy.h>
 #include <linux/if_bridge.h>
-#include <linux/interrupt.h>
-#include <linux/irq.h>
 #include <net/dsa.h>
 #include <net/switchdev.h>
-
 #include "lan937x_reg.h"
 #include "lan937x_ptp.h"
 #include "ksz_common.h"
