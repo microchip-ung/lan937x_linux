@@ -538,7 +538,7 @@ static void tx_phy_setup(struct ksz_device *dev, int port)
 
 	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_SPECIAL_MODES, data_lo);
 
-    /* Need to toggle test_mode bit to enable DSP access. */
+	/* Need to toggle test_mode bit to enable DSP access. */
 	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_IND_CTRL, TX_TEST_MODE);
 	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_IND_CTRL, 0);
 
@@ -647,7 +647,7 @@ static void t1_phy_port_init(struct ksz_device *dev, int port)
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_POWER_DOWN_CTRL,
 				   T1_HW_INIT_SEQ_ENABLE, false);
 
-	/* Configure master/slave. true=master, false=slave */
+	/* Configure T1 phy role */
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_M_CTRL,
 				   PORT_T1_M_CFG, true);
 

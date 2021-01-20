@@ -22,21 +22,15 @@ properties:
       - microchip,lan9373
       - microchip,lan9374
 
-  ethernet-ports:
-    type: object
-    properties:
-      '#address-cells':
-        const: 1
-      '#size-cells':
-        const: 0
-
   reg:
     maxItems: 1
 
-  spi-max-frequency: true
+  spi-max-frequency:
+    maximum: 50000000
 
   reset-gpios:
-    description: should be a gpio specifier for a reset line
+    description: Optional gpio specifier for a reset line
+    maxItems: 1
 
 required:
   - compatible
@@ -54,7 +48,7 @@ examples:
       #size-cells = <0>;
 
       fixed-link {
-        speed = <100>;
+        speed = <1000>;
         full-duplex;
       };
     };
@@ -103,18 +97,16 @@ examples:
             reg = <4>;
             label = "cpu";
             ethernet = <&eth1>;
-            phy-mode = "rmii";
             fixed-link {
-              speed = <100>;
+              speed = <1000>;
               full-duplex;
             };
           };
           port@7 {
             reg = <5>;
-            phy-mode = "rmii";
             label = "lan7";
             fixed-link {
-              speed = <100>;
+              speed = <1000>;
               full-duplex;
             };
           };

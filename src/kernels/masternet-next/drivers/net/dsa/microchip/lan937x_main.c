@@ -34,10 +34,8 @@ static int lan937x_get_vlan_table(struct ksz_device *dev, u16 vid,
 
 	/* wait to be cleared */
 	ret = lan937x_wait_vlan_ctrl_ready(dev);
-	if (ret) {
-		dev_dbg(dev->dev, "Failed to read vlan table\n");
+	if (ret)
 		goto exit;
-	}
 
 	ksz_read32(dev, REG_SW_VLAN_ENTRY__4, &vlan_table[0]);
 	ksz_read32(dev, REG_SW_VLAN_ENTRY_UNTAG__4, &vlan_table[1]);
@@ -67,10 +65,8 @@ static int lan937x_set_vlan_table(struct ksz_device *dev, u16 vid,
 
 	/* wait to be cleared */
 	ret = lan937x_wait_vlan_ctrl_ready(dev);
-	if (ret) {
-		dev_dbg(dev->dev, "Failed to write vlan table\n");
+	if (ret)
 		goto exit;
-	}
 
 	ksz_write8(dev, REG_SW_VLAN_CTRL, 0);
 
@@ -297,7 +293,7 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 
 	err = lan937x_get_vlan_table(dev, vlan->vid, vlan_table);
 	if (err) {
-		dev_dbg(dev->dev, "Failed to get vlan table\n");
+		dev_err(dev->dev, "Failed to get vlan table\n");
 		return err;
 	}
 
@@ -317,7 +313,7 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 
 	err = lan937x_set_vlan_table(dev, vlan->vid, vlan_table);
 	if (err) {
-		dev_dbg(dev->dev, "Failed to set vlan table\n");
+		dev_err(dev->dev, "Failed to set vlan table\n");
 		return err;
 	}
 
@@ -340,7 +336,7 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 	pvid = pvid & 0xFFF;
 
 	if (lan937x_get_vlan_table(dev, vlan->vid, vlan_table)) {
-		dev_dbg(dev->dev, "Failed to get vlan table\n");
+		dev_err(dev->dev, "Failed to get vlan table\n");
 		return -ETIMEDOUT;
 	}
 	/* clear switch port number */
@@ -353,7 +349,7 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 		vlan_table[1] &= ~BIT(port);
 
 	if (lan937x_set_vlan_table(dev, vlan->vid, vlan_table)) {
-		dev_dbg(dev->dev, "Failed to set vlan table\n");
+		dev_err(dev->dev, "Failed to set vlan table\n");
 		return -ETIMEDOUT;
 	}
 
@@ -364,14 +360,10 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 
 static u8 lan937x_get_fid(u16 vid)
 {
-	u8 fid;
-
 	if (vid > ALU_FID_SIZE)
-		fid = (vid % ALU_FID_SIZE) + 1;
+		return LAN937X_GET_FID(vid);
 	else
-		fid = vid;
-
-	return fid;
+		return vid;
 }
 
 static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
@@ -402,7 +394,7 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 		/* wait to be finished */
 		ret = lan937x_wait_alu_ready(i, dev);
 		if (ret) {
-			dev_dbg(dev->dev, "Failed to read ALU\n");
+			dev_err(dev->dev, "Failed to read ALU\n");
 			goto exit;
 		}
 
@@ -430,13 +422,13 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 		ret = lan937x_wait_alu_ready(i, dev);
 
 		if (ret)
-			dev_dbg(dev->dev, "Failed to write ALU\n");
+			dev_err(dev->dev, "Failed to write ALU\n");
 
 		ksz_read8(dev, REG_SW_LUE_INT_STATUS__1, &val);
 
 		/* ALU write failed */
 		if (val & WRITE_FAIL_INT && i == 1)
-			dev_dbg(dev->dev, "Failed to write ALU\n");
+			dev_err(dev->dev, "Failed to write ALU\n");
 
 		/* ALU1 write failed and attempt to write ALU2, otherwise exit*/
 		if (val & WRITE_FAIL_INT)
@@ -478,7 +470,7 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 		/* wait to be finished */
 		ret = lan937x_wait_alu_ready(i, dev);
 		if (ret) {
-			dev_dbg(dev->dev, "Failed to read ALU\n");
+			dev_err(dev->dev, "Failed to read ALU\n");
 			goto exit;
 		}
 
@@ -512,7 +504,7 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 		/* wait to be finished */
 		ret = lan937x_wait_alu_ready(i, dev);
 		if (ret)
-			dev_dbg(dev->dev, "Failed to write ALU\n");
+			dev_err(dev->dev, "Failed to write ALU\n");
 	}
 
 exit:
@@ -570,7 +562,7 @@ static int lan937x_port_fdb_dump(struct dsa_switch *ds, int port,
 			} while (timeout-- > 0);
 
 			if (!timeout) {
-				dev_dbg(dev->dev, "Failed to search ALU\n");
+				dev_err(dev->dev, "Failed to search ALU\n");
 				ret = -ETIMEDOUT;
 				goto exit;
 			}
@@ -623,7 +615,7 @@ static int lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 		/* wait to be finished */
 		err = lan937x_wait_alu_sta_ready(dev);
 		if (err) {
-			dev_dbg(dev->dev, "Failed to read ALU STATIC\n");
+			dev_err(dev->dev, "Failed to read ALU STATIC\n");
 			goto exit;
 		}
 
@@ -667,7 +659,7 @@ static int lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 
 	/* wait to be finished */
 	if (lan937x_wait_alu_sta_ready(dev))
-		dev_dbg(dev->dev, "Failed to read ALU STATIC\n");
+		dev_err(dev->dev, "Failed to read ALU STATIC\n");
 
 exit:
 	mutex_unlock(&dev->alu_mutex);
@@ -699,7 +691,7 @@ static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
 		/* wait to be finished */
 		ret = lan937x_wait_alu_sta_ready(dev);
 		if (ret) {
-			dev_dbg(dev->dev, "Failed to read ALU STATIC\n");
+			dev_err(dev->dev, "Failed to read ALU STATIC\n");
 			goto exit;
 		}
 
@@ -741,7 +733,7 @@ static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
 	/* wait to be finished */
 	ret = lan937x_wait_alu_sta_ready(dev);
 	if (ret)
-		dev_dbg(dev->dev, "Failed to read ALU STATIC\n");
+		dev_err(dev->dev, "Failed to read ALU STATIC\n");
 
 exit:
 	mutex_unlock(&dev->alu_mutex);
@@ -919,14 +911,9 @@ static int lan937x_setup(struct dsa_switch *ds)
 
 	lan937x_config_cpu_port(ds);
 
-	ds->mtu_enforcement_ingress = true;
 	ds->configure_vlan_while_not_filtering = true;
 
-	/* Enable aggressive back off algorithm in half duplex mode.
-	 * If no excessive collision drop is enabled the default backoff algorithm
-	 * may cause both linked device to stop passing traffic completely.
-	 * Recommended to turn on UNH mode to pass UNH tests.
-	 */
+	/* Enable aggressive back off & UNH */
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_0, SW_PAUSE_UNH_MODE | SW_NEW_BACKOFF |
 						SW_AGGR_BACKOFF, true);
 
@@ -973,7 +960,7 @@ static int lan937x_get_max_mtu(struct dsa_switch *ds, int port)
 {
 	/* Frame size is 9000 (= 0x2328) if
 	 * jumbo frame support is enabled, PORT_JUMBO_EN bit will be enabled
-	 * in lan937x_change_mtu() API based on mtu
+	 * based on mtu in lan937x_change_mtu() API
 	 */
 	return FR_MAX_SIZE;
 }
@@ -987,7 +974,8 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 
 	if (phy_interface_mode_is_rgmii(state->interface) ||
 	    state->interface == PHY_INTERFACE_MODE_SGMII ||
-		state->interface == PHY_INTERFACE_MODE_RMII	||
+		state->interface == PHY_INTERFACE_MODE_RMII ||
+		state->interface == PHY_INTERFACE_MODE_MII ||
 		lan937x_is_internal_tx_phy_port(dev, port)) {
 		phylink_set(mask, 10baseT_Half);
 		phylink_set(mask, 10baseT_Full);
@@ -1001,7 +989,6 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 	/*  For RGMII & SGMII interfaces */
 	if (phy_interface_mode_is_rgmii(state->interface) ||
 	    state->interface == PHY_INTERFACE_MODE_SGMII) {
-		phylink_set(mask, 1000baseT_Half);
 		phylink_set(mask, 1000baseT_Full);
 	}
 	/* For T1 PHY */
@@ -1014,21 +1001,6 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 		   __ETHTOOL_LINK_MODE_MASK_NBITS);
 	bitmap_and(state->advertising, state->advertising, mask,
 		   __ETHTOOL_LINK_MODE_MASK_NBITS);
-}
-
-static void lan937x_phylink_mac_an_restart(struct dsa_switch *ds, int port)
-{
-	struct ksz_device *dev = ds->priv;
-	u16 regval;
-
-	/* Auto negotiation is not supported for T1 & MII ports */
-	if (!lan937x_is_internal_tx_phy_port(dev, port))
-		return;
-
-	if (!lan937x_t1_tx_phy_read(dev, port, MII_BMCR, &regval)) {
-		regval |= BMCR_ANRESTART;
-		lan937x_t1_tx_phy_write(dev, port, MII_BMCR, regval);
-	}
 }
 
 const struct dsa_switch_ops lan937x_switch_ops = {
@@ -1057,7 +1029,6 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.port_max_mtu		= lan937x_get_max_mtu,
 	.port_change_mtu	= lan937x_change_mtu,
 	.phylink_validate	= lan937x_phylink_validate,
-	.phylink_mac_an_restart	= lan937x_phylink_mac_an_restart,
 	.phylink_mac_link_down	= ksz_mac_link_down,
 };
 
@@ -1067,6 +1038,7 @@ int lan937x_switch_register(struct ksz_device *dev)
 }
 EXPORT_SYMBOL(lan937x_switch_register);
 
-MODULE_AUTHOR("Prasanna Vengateshan Varadharajan<Prasanna.Vengateshan@microchip.com>");
+MODULE_AUTHOR("Prasanna Vengateshan Varadharajan " \
+			  "Prasanna.Vengateshan@microchip.com>");
 MODULE_DESCRIPTION("Microchip LAN937x Series Switch DSA Driver");
 MODULE_LICENSE("GPL");

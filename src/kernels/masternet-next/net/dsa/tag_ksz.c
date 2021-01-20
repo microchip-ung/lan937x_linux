@@ -194,21 +194,22 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
  * ---------------------------------------------------------------------------
  * DA(6bytes)|SA(6bytes)|....|Data(nbytes)|tag0(1byte)|tag1(1byte)|FCS(4bytes)
  * ---------------------------------------------------------------------------
- * tag0 : Prioritization (not used now)
- * tag1 : each bit represents port (eg, 0x01=port1, 0x02=port2, 0x10=port5)
+ * tag0 : represents tag override, lookup and valid
+ * tag1 : each bit represents port (eg, 0x01=port1, 0x02=port2, 0x80=port8)
  *
  * For Egress (LAN937x -> Host), 1 byte is added before FCS.
  * ---------------------------------------------------------------------------
  * DA(6bytes)|SA(6bytes)|....|Data(nbytes)|tag0(1byte)|FCS(4bytes)
  * ---------------------------------------------------------------------------
  * tag0 : zero-based value represents port
- *	  (eg, 0x00=port1, 0x02=port3, 0x06=port7)
+ *	  (eg, 0x00=port1, 0x02=port3, 0x07=port8)
  */
 #define LAN937X_INGRESS_TAG_LEN		2
 
 #define LAN937X_TAIL_TAG_OVERRIDE	BIT(11)
 #define LAN937X_TAIL_TAG_LOOKUP		BIT(12)
 #define LAN937X_TAIL_TAG_VALID		BIT(13)
+#define LAN937X_TAIL_TAG_PORT_MASK	7
 
 static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 				    struct net_device *dev)
@@ -240,8 +241,8 @@ static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev,
 {
 	/* Tag decoding */
 	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
+	unsigned int port = tag[0] & LAN937X_TAIL_TAG_PORT_MASK;
 	unsigned int len = KSZ_EGRESS_TAG_LEN;
-	unsigned int port = tag[0] & 7;
 
 	/* Extra 4-bytes PTP timestamp */
 	if (tag[0] & KSZ9477_PTP_TAG_INDICATION)

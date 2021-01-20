@@ -929,6 +929,9 @@
 
 #define PORT_QUEUE_SPLIT_ENABLE		0x3
 
+/* Get fid from vid, fid 0 is not used if vid is greater than 127 */
+#define LAN937X_GET_FID(vid)	(((vid) % ALU_FID_SIZE) + 1)
+
 /* Driver set switch broadcast storm protection at 10% rate. */
 #define BROADCAST_STORM_PROT_RATE	10
 
