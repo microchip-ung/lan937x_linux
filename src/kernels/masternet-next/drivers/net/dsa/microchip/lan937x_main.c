@@ -137,7 +137,7 @@ static int lan937x_get_link_status(struct ksz_device *dev, int port)
 	    val2 & (T1_PORT_DSCR_LOCK_STATUS_MSK | T1_PORT_LINK_UP_MSK))
 		return PHY_LINK_UP;
 
-	return PHY_LINK_DOWN;  
+	return PHY_LINK_DOWN;
 }
 
 static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
