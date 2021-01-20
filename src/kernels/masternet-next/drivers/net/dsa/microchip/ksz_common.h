@@ -8,8 +8,6 @@
 #define __KSZ_COMMON_H
 
 #include <linux/dsa/ksz_common.h>
-#include <linux/bitfield.h>
-#include <linux/bits.h>
 #include <linux/ptp_clock_kernel.h>
 #include <linux/etherdevice.h>
 #include <linux/kernel.h>
@@ -17,18 +15,6 @@
 #include <linux/phy.h>
 #include <linux/regmap.h>
 #include <net/dsa.h>
-
-/* All time stamps from the KSZ consist of 2 bits for seconds and 30 bits for
- * nanoseconds. This is NOT the same as 32 bits for nanoseconds.
- */
-#define KSZ_TSTAMP_SEC_MASK  GENMASK(31, 30)
-#define KSZ_TSTAMP_NSEC_MASK GENMASK(29, 0)
-
-/* All time stamps from the KSZ consist of 2 bits for seconds and 30 bits for
- * nanoseconds. This is NOT the same as 32 bits for nanoseconds.
- */
-#define KSZ_TSTAMP_SEC_MASK  GENMASK(31, 30)
-#define KSZ_TSTAMP_NSEC_MASK GENMASK(29, 0)
 
 struct vlan_table {
 	u32 table[3];
@@ -170,7 +156,6 @@ struct ksz_dev_ops {
 	int (*init)(struct ksz_device *dev);
 	void (*exit)(struct ksz_device *dev);
 };
-
 
 struct ksz_device *ksz_switch_alloc(struct device *base, void *priv);
 int ksz_switch_register(struct ksz_device *dev,
