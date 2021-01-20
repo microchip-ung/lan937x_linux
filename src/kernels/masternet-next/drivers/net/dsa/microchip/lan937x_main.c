@@ -134,7 +134,6 @@ static enum dsa_tag_protocol lan937x_get_tag_protocol(struct dsa_switch *ds,
 static int lan937x_get_link_status(struct ksz_device *dev, int port)
 {
 	u16 val1, val2;
-        u16 val3;
 
 	lan937x_t1_tx_phy_read(dev, port, REG_PORT_T1_PHY_M_STATUS,
 			       &val1);

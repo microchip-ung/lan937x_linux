@@ -734,9 +734,6 @@ static void t1_phy_port_init(struct ksz_device *dev, int port)
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_POWER_DOWN_CTRL,
 				   T1_HW_INIT_SEQ_ENABLE, true);
 
-	//Arun changes
-	lan937x_t1_tx_phy_write(dev, port, REG_PORT_T1_PHY_M_CTRL, 0x1800);	
-
 	/* Power up the PHY. */
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_BASIC_CTRL,
 				   PORT_T1_POWER_DOWN, false);
