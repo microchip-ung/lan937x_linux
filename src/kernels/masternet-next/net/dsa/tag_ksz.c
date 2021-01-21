@@ -284,6 +284,25 @@ static struct sk_buff *lan937x_defer_xmit(struct dsa_port *dp,
 	return NULL;
 }
 
+static void lan937x_rcv_timestamp(struct sk_buff *skb, u8 *tag,
+                                  struct net_device *dev, unsigned int port)
+{
+	struct skb_shared_hwtstamps *hwtstamps = skb_hwtstamps(skb);
+	struct dsa_switch *ds = dev->dsa_ptr->ds;
+	struct lan937x_port_ptp_shared *port_ptp_shared;
+	u8 *tstamp_raw = tag - KSZ9477_PTP_TAG_LEN;
+	ktime_t tstamp;
+
+	port_ptp_shared = dsa_to_port(ds, port)->priv;
+	if (!port_ptp_shared)
+		return;
+
+	/* convert time stamp and write to skb */
+	tstamp = ksz_decode_tstamp(get_unaligned_be32(tstamp_raw));
+	memset(hwtstamps, 0, sizeof(*hwtstamps));
+	hwtstamps->hwtstamp = ksz_tstamp_reconstruct(port_ptp_shared->dev, tstamp);
+}
+
 static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 				    struct net_device *dev)
 {
@@ -314,23 +333,19 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	return lan937x_defer_xmit(dp, skb);
 }
 
-static void lan937x_rcv_timestamp(struct sk_buff *skb, u8 *tag,
-                                  struct net_device *dev, unsigned int port)
+static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev,
+				   struct packet_type *pt)
 {
-	struct skb_shared_hwtstamps *hwtstamps = skb_hwtstamps(skb);
-	struct dsa_switch *ds = dev->dsa_ptr->ds;
-	struct lan937x_port_ptp_shared *port_ptp_shared;
-	u8 *tstamp_raw = tag - KSZ9477_PTP_TAG_LEN;
-	ktime_t tstamp;
+	/* Tag decoding */
+	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
+	unsigned int port = tag[0] & LAN937X_TAIL_TAG_PORT_MASK;
+	unsigned int len = KSZ_EGRESS_TAG_LEN;
 
-	port_ptp_shared = dsa_to_port(ds, port)->priv;
-	if (!port_ptp_shared)
-		return;
+	/* Extra 4-bytes PTP timestamp */
+	if (tag[0] & KSZ9477_PTP_TAG_INDICATION)
+		len += KSZ9477_PTP_TAG_LEN;
 
-	/* convert time stamp and write to skb */
-	tstamp = ksz_decode_tstamp(get_unaligned_be32(tstamp_raw));
-	memset(hwtstamps, 0, sizeof(*hwtstamps));
-	hwtstamps->hwtstamp = ksz_tstamp_reconstruct(port_ptp_shared->dev, tstamp);
+	return ksz_common_rcv(skb, dev, port, len);
 }
 
 static const struct dsa_device_ops lan937x_netdev_ops = {
