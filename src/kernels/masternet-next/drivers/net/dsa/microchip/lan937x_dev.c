@@ -212,14 +212,12 @@ static void lan937x_flush_dyn_mac_table(struct ksz_device *dev, int port)
 static void lan937x_r_mib_cnt(struct ksz_device *dev, int port, u16 addr,
 			      u64 *cnt)
 {
-	struct ksz_port *p = &dev->ports[port];
 	unsigned int val;
 	u32 data;
 	int ret;
 
-	/* retain the flush/freeze bit */
-	data = p->freeze ? MIB_COUNTER_FLUSH_FREEZE : 0;
-	data |= MIB_COUNTER_READ;
+	/* Enable MIB Counter read*/
+	data = MIB_COUNTER_READ;
 	data |= (addr << MIB_COUNTER_INDEX_S);
 	lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4, data);
 
@@ -229,7 +227,7 @@ static void lan937x_r_mib_cnt(struct ksz_device *dev, int port, u16 addr,
 					   val, !(val & MIB_COUNTER_READ), 10, 1000);
 	/* failed to read MIB. get out of loop */
 	if (ret) {
-		dev_dbg(dev->dev, "Failed to get MIB\n");
+		dev_err(dev->dev, "Failed to get MIB\n");
 		return;
 	}
 
@@ -243,20 +241,6 @@ static void lan937x_r_mib_pkt(struct ksz_device *dev, int port, u16 addr,
 {
 	addr = lan937x_mib_names[addr].index;
 	lan937x_r_mib_cnt(dev, port, addr, cnt);
-}
-
-static void lan937x_freeze_mib(struct ksz_device *dev, int port, bool freeze)
-{
-	u32 val = freeze ? MIB_COUNTER_FLUSH_FREEZE : 0;
-	struct ksz_port *p = &dev->ports[port];
-
-	/* enable/disable the port for flush/freeze function */
-	mutex_lock(&p->mib.cnt_mutex);
-	lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4, val);
-
-	/* used by MIB counter reading code to know freeze is enabled */
-	p->freeze = freeze;
-	mutex_unlock(&p->mib.cnt_mutex);
 }
 
 static void lan937x_port_init_cnt(struct ksz_device *dev, int port)
@@ -425,7 +409,7 @@ int lan937x_t1_tx_phy_write(struct ksz_device *dev, int addr,
 
 	/* failed to write phy register. get out of loop */
 	if (ret) {
-		dev_dbg(dev->dev, "Failed to write phy register\n");
+		dev_err(dev->dev, "Failed to write phy register\n");
 		return ret;
 	}
 
@@ -458,7 +442,7 @@ int lan937x_t1_tx_phy_read(struct ksz_device *dev, int addr,
 
 		/*  failed to read phy register. get out of loop */
 		if (ret) {
-			dev_dbg(dev->dev, "Failed to read phy register\n");
+			dev_err(dev->dev, "Failed to read phy register\n");
 			return ret;
 		}
 		/* Read the VPHY register which has the PHY data*/
@@ -903,7 +887,6 @@ const struct ksz_dev_ops lan937x_dev_ops = {
 	.port_setup = lan937x_port_setup,
 	.r_mib_cnt = lan937x_r_mib_cnt,
 	.r_mib_pkt = lan937x_r_mib_pkt,
-	.freeze_mib = lan937x_freeze_mib,
 	.port_init_cnt = lan937x_port_init_cnt,
 	.shutdown = lan937x_reset_switch,
 	.detect = lan937x_switch_detect,
