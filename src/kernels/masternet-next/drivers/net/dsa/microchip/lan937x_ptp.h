@@ -9,11 +9,6 @@
 
 #include <linux/ptp_clock_kernel.h>
 
-#if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
-
-#include <linux/ptp_clock_kernel.h>
-
-
 int lan937x_get_ts_info(struct dsa_switch *ds, int port, struct ethtool_ts_info *ts);
 int lan937x_hwtstamp_get(struct dsa_switch *ds, int port, struct ifreq *ifr);
 int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct ifreq *ifr);

@@ -932,6 +932,10 @@ static int lan937x_setup(struct dsa_switch *ds)
         if(ret)
                 goto error_ptp_deinit;
 
+	ret = lan937x_ptp_init(dev);
+        if(ret)
+                goto error_ptp_deinit;
+
 	/* start switch */
 	lan937x_cfg(dev, REG_SW_OPERATION, SW_START, true);
 
