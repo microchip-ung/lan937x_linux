@@ -737,7 +737,6 @@ static void t1_phy_port_init(struct ksz_device *dev, int port)
 	/* Power up the PHY. */
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_BASIC_CTRL,
 				   PORT_T1_POWER_DOWN, false);
-
 }
 
 static void lan937x_set_gbit(struct ksz_device *dev, bool gbit, u8 *data)
