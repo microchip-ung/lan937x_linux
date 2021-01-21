@@ -366,7 +366,7 @@ bool lan937x_is_internal_phy_port(struct ksz_device *dev, int port)
 	return true;
 }
 
-u32 lan937x_get_port_addr(int port, int offset)
+static u32 lan937x_get_port_addr(int port, int offset)
 {
 	return PORT_CTRL_ADDR(port, offset);
 }
@@ -468,7 +468,7 @@ int lan937x_t1_tx_phy_read(struct ksz_device *dev, int addr,
 	return 0;
 }
 
-void lan937x_t1_tx_phy_mod_bits(struct ksz_device *dev, int port,
+static void lan937x_t1_tx_phy_mod_bits(struct ksz_device *dev, int port,
 				int reg, u16 val, bool set)
 {
 	u16 data;
@@ -754,7 +754,6 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 {
 	struct ksz_port *p = &dev->ports[port];
 	u8 data8, member;
-	u16 data16;
 
 	/* enable tag tail for host port */
 	if (cpu_port) {
@@ -844,10 +843,6 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 		member = dev->host_mask | p->vid_member;
 
 	lan937x_cfg_port_member(dev, port, member);
-
-	/* clear pending interrupts */
-	if (lan937x_is_internal_phy_port(dev, port))
-		lan937x_pread16(dev, port, REG_PORT_PHY_INT_ENABLE, &data16);
 }
 
 static int lan937x_switch_init(struct ksz_device *dev)

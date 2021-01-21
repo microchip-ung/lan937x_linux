@@ -784,7 +784,6 @@ static void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
 static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 {
 	phy_interface_t interface;
-	bool gbit;
 	u8 data8;
 
 	if (lan937x_is_internal_phy_port(dev, port))
@@ -792,9 +791,6 @@ static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 
 	/* read interface from REG_PORT_XMII_CTRL_1 register */
 	lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
-
-	/* get interface speed */
-	gbit = !(data8 & PORT_MII_NOT_1GBIT);
 
 	switch (data8 & PORT_MII_SEL_M) {
 	case PORT_RMII_SEL:
