@@ -284,6 +284,36 @@ static struct sk_buff *lan937x_defer_xmit(struct dsa_port *dp,
 	return NULL;
 }
 
+static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
+				    struct net_device *dev)
+{
+	struct dsa_port *dp = dsa_slave_to_port(dev);
+	struct lan937x_port_ptp_shared *port_ptp_shared = dp->priv;
+	struct ksz_device_ptp_shared *ptp_shared = port_ptp_shared->dev;
+	__be16 *tag;
+	u8 *addr;
+	u16 val;
+
+	/* Tag encoding */
+	if (test_bit(LAN937X_HWTS_EN, &ptp_shared->state))
+		lan937x_xmit_timestamp(skb);
+
+	tag = skb_put(skb, LAN937X_INGRESS_TAG_LEN);
+	addr = skb_mac_header(skb);
+
+	val = BIT(dp->index);
+
+	if (is_link_local_ether_addr(addr))
+		val |= LAN937X_TAIL_TAG_OVERRIDE;
+
+	/* Tail tag valid bit - This bit should always be set by the CPU*/
+	val |= LAN937X_TAIL_TAG_VALID;
+
+	*tag = cpu_to_be16(val);
+
+	return lan937x_defer_xmit(dp, skb);
+}
+
 static void lan937x_rcv_timestamp(struct sk_buff *skb, u8 *tag,
                                   struct net_device *dev, unsigned int port)
 {
