@@ -9,7 +9,9 @@ config NET_DSA_MICROCHIP_LAN937X
 	select NET_DSA_MICROCHIP_KSZ_COMMON
 	select REGMAP_SPI
 	help
-	  This driver adds support for Microchip LAN937X switch chips.
+	  This driver adds support for Microchip LAN937X series
+	  switch chips.
+
 	  Select to enable support for registering switches configured
 	  through SPI.
 

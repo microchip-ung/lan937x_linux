@@ -99,7 +99,6 @@ module_spi_driver(lan937x_spi_driver);
 
 MODULE_ALIAS("spi:lan937x");
 
-MODULE_AUTHOR("Prasanna Vengateshan Varadharajan " \
-			  "Prasanna.Vengateshan@microchip.com>");
+MODULE_AUTHOR("Prasanna Vengateshan Varadharajan <Prasanna.Vengateshan@microchip.com>");
 MODULE_DESCRIPTION("Microchip LAN937x Series Switch SPI access Driver");
 MODULE_LICENSE("GPL");

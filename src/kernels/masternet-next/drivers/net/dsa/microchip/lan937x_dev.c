@@ -453,7 +453,7 @@ int lan937x_t1_tx_phy_read(struct ksz_device *dev, int addr,
 }
 
 static void lan937x_t1_tx_phy_mod_bits(struct ksz_device *dev, int port,
-				int reg, u16 val, bool set)
+				       int reg, u16 val, bool set)
 {
 	u16 data;
 

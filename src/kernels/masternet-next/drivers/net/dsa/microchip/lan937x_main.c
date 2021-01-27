@@ -284,7 +284,7 @@ static int lan937x_port_vlan_filtering(struct dsa_switch *ds, int port,
 }
 
 static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
-				  const struct switchdev_obj_port_vlan *vlan)
+				 const struct switchdev_obj_port_vlan *vlan)
 {
 	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
 	struct ksz_device *dev = ds->priv;
@@ -299,9 +299,7 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 
 	vlan_table[0] = VLAN_VALID | (vlan->vid & VLAN_FID_M);
 
-	/* set/clear switch port when updating vlan table
-	* registers
-	*/
+	/* set/clear switch port when updating vlan table registers */
 	if (untagged)
 		vlan_table[1] |= BIT(port);
 	else
@@ -320,7 +318,7 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 	/* change PVID */
 	if (vlan->flags & BRIDGE_VLAN_INFO_PVID)
 		lan937x_pwrite16(dev, port, REG_PORT_DEFAULT_VID, vlan->vid);
-	
+
 	return 0;
 }
 
@@ -590,7 +588,7 @@ exit:
 }
 
 static int lan937x_port_mdb_add(struct dsa_switch *ds, int port,
-				 const struct switchdev_obj_port_mdb *mdb)
+				const struct switchdev_obj_port_mdb *mdb)
 {
 	struct ksz_device *dev = ds->priv;
 	u8 fid = lan937x_get_fid(mdb->vid);
@@ -1034,7 +1032,6 @@ int lan937x_switch_register(struct ksz_device *dev)
 }
 EXPORT_SYMBOL(lan937x_switch_register);
 
-MODULE_AUTHOR("Prasanna Vengateshan Varadharajan " \
-			  "Prasanna.Vengateshan@microchip.com>");
+MODULE_AUTHOR("Prasanna Vengateshan Varadharajan <Prasanna.Vengateshan@microchip.com>");
 MODULE_DESCRIPTION("Microchip LAN937x Series Switch DSA Driver");
 MODULE_LICENSE("GPL");
