@@ -1,5 +1,0 @@
-sending incremental file list
-outputmerge.txt
-
-sent 1,857,014 bytes  received 5,221 bytes  1,241,490.00 bytes/sec
-total size is 2,906,998,653  speedup is 1,561.03

@@ -2875,7 +2875,6 @@ static int mv88e6xxx_setup(struct dsa_switch *ds)
 
 	chip->ds = ds;
 	ds->slave_mii_bus = mv88e6xxx_default_mdio_bus(chip);
-	ds->configure_vlan_while_not_filtering = true;
 
 	mv88e6xxx_reg_lock(chip);
 
@@ -4050,8 +4049,8 @@ static const struct mv88e6xxx_ops mv88e6250_ops = {
 	.mgmt_rsvd2cpu = mv88e6352_g2_mgmt_rsvd2cpu,
 	.pot_clear = mv88e6xxx_g2_pot_clear,
 	.reset = mv88e6250_g1_reset,
-	.vtu_getnext = mv88e6250_g1_vtu_getnext,
-	.vtu_loadpurge = mv88e6250_g1_vtu_loadpurge,
+	.vtu_getnext = mv88e6185_g1_vtu_getnext,
+	.vtu_loadpurge = mv88e6185_g1_vtu_loadpurge,
 	.avb_ops = &mv88e6352_avb_ops,
 	.ptp_ops = &mv88e6250_ptp_ops,
 	.phylink_validate = mv88e6065_phylink_validate,
@@ -5228,10 +5227,6 @@ static int mv88e6xxx_detect(struct mv88e6xxx_chip *chip)
 	/* Update the compatible info with the probed one */
 	chip->info = info;
 
-	err = mv88e6xxx_g2_require(chip);
-	if (err)
-		return err;
-
 	dev_info(chip->dev, "switch 0x%x detected: %s, revision %u\n",
 		 chip->info->prod_num, chip->info->name, rev);
 
@@ -5385,8 +5380,12 @@ static bool mv88e6xxx_lag_can_offload(struct dsa_switch *ds,
 				      struct net_device *lag,
 				      struct netdev_lag_upper_info *info)
 {
+	struct mv88e6xxx_chip *chip = ds->priv;
 	struct dsa_port *dp;
 	int id, members = 0;
+
+	if (!mv88e6xxx_has_lag(chip))
+		return false;
 
 	id = dsa_lag_id(ds->dst, lag);
 	if (id < 0 || id >= ds->num_lag_ids)
@@ -5727,7 +5726,7 @@ static int mv88e6xxx_register_switch(struct mv88e6xxx_chip *chip)
 	 * 5-bit port mode, which we do not support. 640k^W16 ought to
 	 * be enough for anyone.
 	 */
-	ds->num_lag_ids = 16;
+	ds->num_lag_ids = mv88e6xxx_has_lag(chip) ? 16 : 0;
 
 	dev_set_drvdata(dev, ds);
 

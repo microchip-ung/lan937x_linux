@@ -1,9 +1,9 @@
 diff --git a/Documentation/devicetree/bindings/net/dsa/microchip,lan937x.yaml b/Documentation/devicetree/bindings/net/dsa/microchip,lan937x.yaml
 new file mode 100644
-index 000000000000..02ac279aab65
+index 000000000000..8531ca603f13
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/net/dsa/microchip,lan937x.yaml
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,115 @@
 +# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 +%YAML 1.2
 +---
@@ -28,21 +28,15 @@ index 000000000000..02ac279aab65
 +      - microchip,lan9373
 +      - microchip,lan9374
 +
-+  ethernet-ports:
-+    type: object
-+    properties:
-+      '#address-cells':
-+        const: 1
-+      '#size-cells':
-+        const: 0
-+
 +  reg:
 +    maxItems: 1
 +
-+  spi-max-frequency: true
++  spi-max-frequency:
++    maximum: 50000000
 +
 +  reset-gpios:
-+    description: should be a gpio specifier for a reset line
++    description: Optional gpio specifier for a reset line
++    maxItems: 1
 +
 +required:
 +  - compatible
@@ -60,7 +54,7 @@ index 000000000000..02ac279aab65
 +      #size-cells = <0>;
 +
 +      fixed-link {
-+        speed = <100>;
++        speed = <1000>;
 +        full-duplex;
 +      };
 +    };
@@ -109,18 +103,16 @@ index 000000000000..02ac279aab65
 +            reg = <4>;
 +            label = "cpu";
 +            ethernet = <&eth1>;
-+            phy-mode = "rmii";
 +            fixed-link {
-+              speed = <100>;
++              speed = <1000>;
 +              full-duplex;
 +            };
 +          };
 +          port@7 {
 +            reg = <5>;
-+            phy-mode = "rmii";
 +            label = "lan7";
 +            fixed-link {
-+              speed = <100>;
++              speed = <1000>;
 +              full-duplex;
 +            };
 +          };
@@ -128,10 +120,116 @@ index 000000000000..02ac279aab65
 +      };
 +    };
 diff --git a/MAINTAINERS b/MAINTAINERS
-index c2cb79198288..4a84402697ee 100644
+index 096b584e7fed..4a84402697ee 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -11683,6 +11683,7 @@ M:	UNGLinuxDriver@microchip.com
+@@ -820,6 +820,7 @@ M:	Netanel Belgazal <netanel@amazon.com>
+ M:	Arthur Kiyanovski <akiyano@amazon.com>
+ R:	Guy Tzalik <gtzalik@amazon.com>
+ R:	Saeed Bishara <saeedb@amazon.com>
++R:	Zorik Machulsky <zorik@amazon.com>
+ L:	netdev@vger.kernel.org
+ S:	Supported
+ F:	Documentation/networking/device_drivers/ethernet/amazon/ena.rst
+@@ -2941,6 +2942,7 @@ S:	Maintained
+ F:	drivers/hwmon/asus_atk0110.c
+ 
+ ATLX ETHERNET DRIVERS
++M:	Jay Cliburn <jcliburn@gmail.com>
+ M:	Chris Snook <chris.snook@gmail.com>
+ L:	netdev@vger.kernel.org
+ S:	Maintained
+@@ -3893,7 +3895,7 @@ F:	drivers/mtd/nand/raw/cadence-nand-controller.c
+ CADENCE USB3 DRD IP DRIVER
+ M:	Peter Chen <peter.chen@nxp.com>
+ M:	Pawel Laszczak <pawell@cadence.com>
+-R:	Roger Quadros <rogerq@kernel.org>
++M:	Roger Quadros <rogerq@ti.com>
+ R:	Aswath Govindraju <a-govindraju@ti.com>
+ L:	linux-usb@vger.kernel.org
+ S:	Maintained
+@@ -3941,10 +3943,8 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/mkl/linux-can.git
+ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/mkl/linux-can-next.git
+ F:	Documentation/devicetree/bindings/net/can/
+ F:	drivers/net/can/
+-F:	include/linux/can/bittiming.h
+ F:	include/linux/can/dev.h
+ F:	include/linux/can/led.h
+-F:	include/linux/can/length.h
+ F:	include/linux/can/platform/
+ F:	include/linux/can/rx-offload.h
+ F:	include/uapi/linux/can/error.h
+@@ -3960,7 +3960,6 @@ W:	https://github.com/linux-can
+ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/mkl/linux-can.git
+ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/mkl/linux-can-next.git
+ F:	Documentation/networking/can.rst
+-F:	include/linux/can/can-ml.h
+ F:	include/linux/can/core.h
+ F:	include/linux/can/skb.h
+ F:	include/net/netns/can.h
+@@ -4935,8 +4934,9 @@ F:	Documentation/scsi/dc395x.rst
+ F:	drivers/scsi/dc395x.*
+ 
+ DCCP PROTOCOL
++M:	Gerrit Renker <gerrit@erg.abdn.ac.uk>
+ L:	dccp@vger.kernel.org
+-S:	Orphan
++S:	Maintained
+ W:	http://www.linuxfoundation.org/collaborate/workgroups/networking/dccp
+ F:	include/linux/dccp.h
+ F:	include/linux/tfrc.h
+@@ -7375,6 +7375,7 @@ L:	linux-hardening@vger.kernel.org
+ S:	Maintained
+ F:	Documentation/kbuild/gcc-plugins.rst
+ F:	scripts/Makefile.gcc-plugins
++F:	scripts/gcc-plugin.sh
+ F:	scripts/gcc-plugins/
+ 
+ GCOV BASED KERNEL PROFILING
+@@ -9251,7 +9252,7 @@ F:	tools/testing/selftests/sgx/*
+ K:	\bSGX_
+ 
+ INTERCONNECT API
+-M:	Georgi Djakov <djakov@kernel.org>
++M:	Georgi Djakov <georgi.djakov@linaro.org>
+ L:	linux-pm@vger.kernel.org
+ S:	Maintained
+ F:	Documentation/devicetree/bindings/interconnect/
+@@ -9284,7 +9285,7 @@ F:	drivers/net/ethernet/sgi/ioc3-eth.c
+ 
+ IOMAP FILESYSTEM LIBRARY
+ M:	Christoph Hellwig <hch@infradead.org>
+-M:	Darrick J. Wong <djwong@kernel.org>
++M:	Darrick J. Wong <darrick.wong@oracle.com>
+ M:	linux-xfs@vger.kernel.org
+ M:	linux-fsdevel@vger.kernel.org
+ L:	linux-xfs@vger.kernel.org
+@@ -9338,6 +9339,7 @@ W:	http://www.adaptec.com/
+ F:	drivers/scsi/ips*
+ 
+ IPVS
++M:	Wensong Zhang <wensong@linux-vs.org>
+ M:	Simon Horman <horms@verge.net.au>
+ M:	Julian Anastasov <ja@ssi.bg>
+ L:	netdev@vger.kernel.org
+@@ -9786,7 +9788,7 @@ F:	tools/testing/selftests/kvm/s390x/
+ 
+ KERNEL VIRTUAL MACHINE FOR X86 (KVM/x86)
+ M:	Paolo Bonzini <pbonzini@redhat.com>
+-R:	Sean Christopherson <seanjc@google.com>
++R:	Sean Christopherson <sean.j.christopherson@intel.com>
+ R:	Vitaly Kuznetsov <vkuznets@redhat.com>
+ R:	Wanpeng Li <wanpengli@tencent.com>
+ R:	Jim Mattson <jmattson@google.com>
+@@ -10270,6 +10272,7 @@ S:	Supported
+ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/paulmck/linux-rcu.git dev
+ F:	Documentation/atomic_bitops.txt
+ F:	Documentation/atomic_t.txt
++F:	Documentation/core-api/atomic_ops.rst
+ F:	Documentation/core-api/refcount-vs-atomic.rst
+ F:	Documentation/litmus-tests/
+ F:	Documentation/memory-barriers.txt
+@@ -11680,6 +11683,7 @@ M:	UNGLinuxDriver@microchip.com
  L:	netdev@vger.kernel.org
  S:	Maintained
  F:	Documentation/devicetree/bindings/net/dsa/microchip,ksz.yaml
@@ -139,11 +237,109 @@ index c2cb79198288..4a84402697ee 100644
  F:	drivers/net/dsa/microchip/*
  F:	include/linux/platform_data/microchip-ksz.h
  F:	net/dsa/tag_ksz.c
+@@ -12427,6 +12431,7 @@ F:	tools/testing/selftests/net/ipsec.c
+ 
+ NETWORKING [IPv4/IPv6]
+ M:	"David S. Miller" <davem@davemloft.net>
++M:	Alexey Kuznetsov <kuznet@ms2.inr.ac.ru>
+ M:	Hideaki YOSHIFUJI <yoshfuji@linux-ipv6.org>
+ L:	netdev@vger.kernel.org
+ S:	Maintained
+@@ -12483,6 +12488,7 @@ F:	net/ipv6/tcp*.c
+ 
+ NETWORKING [TLS]
+ M:	Boris Pismenny <borisp@nvidia.com>
++M:	Aviad Yehezkel <aviadye@nvidia.com>
+ M:	John Fastabend <john.fastabend@gmail.com>
+ M:	Daniel Borkmann <daniel@iogearbox.net>
+ M:	Jakub Kicinski <kuba@kernel.org>
+@@ -12857,7 +12863,7 @@ F:	include/misc/ocxl*
+ F:	include/uapi/misc/ocxl.h
+ 
+ OMAP AUDIO SUPPORT
+-M:	Peter Ujfalusi <peter.ujfalusi@gmail.com>
++M:	Peter Ujfalusi <peter.ujfalusi@ti.com>
+ M:	Jarkko Nikula <jarkko.nikula@bitmer.com>
+ L:	alsa-devel@alsa-project.org (moderated for non-subscribers)
+ L:	linux-omap@vger.kernel.org
+@@ -16717,8 +16723,6 @@ M:	Samuel Thibault <samuel.thibault@ens-lyon.org>
+ L:	speakup@linux-speakup.org
+ S:	Odd Fixes
+ W:	http://www.linux-speakup.org/
+-W:	https://github.com/linux-speakup/speakup
+-B:	https://github.com/linux-speakup/speakup/issues
+ F:	drivers/accessibility/speakup/
+ 
+ SPEAR CLOCK FRAMEWORK SUPPORT
+@@ -17550,7 +17554,7 @@ F:	arch/xtensa/
+ F:	drivers/irqchip/irq-xtensa-*
+ 
+ TEXAS INSTRUMENTS ASoC DRIVERS
+-M:	Peter Ujfalusi <peter.ujfalusi@gmail.com>
++M:	Peter Ujfalusi <peter.ujfalusi@ti.com>
+ L:	alsa-devel@alsa-project.org (moderated for non-subscribers)
+ S:	Maintained
+ F:	sound/soc/ti/
+@@ -17562,19 +17566,6 @@ S:	Supported
+ F:	Documentation/devicetree/bindings/iio/dac/ti,dac7612.txt
+ F:	drivers/iio/dac/ti-dac7612.c
+ 
+-TEXAS INSTRUMENTS DMA DRIVERS
+-M:	Peter Ujfalusi <peter.ujfalusi@gmail.com>
+-L:	dmaengine@vger.kernel.org
+-S:	Maintained
+-F:	Documentation/devicetree/bindings/dma/ti-dma-crossbar.txt
+-F:	Documentation/devicetree/bindings/dma/ti-edma.txt
+-F:	Documentation/devicetree/bindings/dma/ti/
+-F:	drivers/dma/ti/
+-X:	drivers/dma/ti/cppi41.c
+-F:	include/linux/dma/k3-udma-glue.h
+-F:	include/linux/dma/ti-cppi5.h
+-F:	include/linux/dma/k3-psil.h
+-
+ TEXAS INSTRUMENTS' SYSTEM CONTROL INTERFACE (TISCI) PROTOCOL DRIVER
+ M:	Nishanth Menon <nm@ti.com>
+ M:	Tero Kristo <t-kristo@ti.com>
+@@ -17849,7 +17840,7 @@ M:	Dan Murphy <dmurphy@ti.com>
+ L:	linux-can@vger.kernel.org
+ S:	Maintained
+ F:	Documentation/devicetree/bindings/net/can/tcan4x5x.txt
+-F:	drivers/net/can/m_can/tcan4x5x*
++F:	drivers/net/can/m_can/tcan4x5x.c
+ 
+ TI TRF7970A NFC DRIVER
+ M:	Mark Greer <mgreer@animalcreek.com>
+@@ -17860,7 +17851,7 @@ F:	Documentation/devicetree/bindings/net/nfc/trf7970a.txt
+ F:	drivers/nfc/trf7970a.c
+ 
+ TI TWL4030 SERIES SOC CODEC DRIVER
+-M:	Peter Ujfalusi <peter.ujfalusi@gmail.com>
++M:	Peter Ujfalusi <peter.ujfalusi@ti.com>
+ L:	alsa-devel@alsa-project.org (moderated for non-subscribers)
+ S:	Maintained
+ F:	sound/soc/codecs/twl4030*
+@@ -19080,6 +19071,7 @@ K:	regulator_get_optional
+ 
+ VRF
+ M:	David Ahern <dsahern@kernel.org>
++M:	Shrijeet Mukherjee <shrijeet@gmail.com>
+ L:	netdev@vger.kernel.org
+ S:	Maintained
+ F:	Documentation/networking/vrf.rst
+@@ -19526,7 +19518,7 @@ F:	arch/x86/xen/*swiotlb*
+ F:	drivers/xen/*swiotlb*
+ 
+ XFS FILESYSTEM
+-M:	Darrick J. Wong <djwong@kernel.org>
++M:	Darrick J. Wong <darrick.wong@oracle.com>
+ M:	linux-xfs@vger.kernel.org
+ L:	linux-xfs@vger.kernel.org
+ S:	Supported
 diff --git a/drivers/net/dsa/microchip/Kconfig b/drivers/net/dsa/microchip/Kconfig
-index 4ec6a47b7f72..cca6bb69ecdb 100644
+index 4ec6a47b7f72..426de7c61a72 100644
 --- a/drivers/net/dsa/microchip/Kconfig
 +++ b/drivers/net/dsa/microchip/Kconfig
-@@ -3,6 +3,16 @@ config NET_DSA_MICROCHIP_KSZ_COMMON
+@@ -3,6 +3,17 @@ config NET_DSA_MICROCHIP_KSZ_COMMON
  	select NET_DSA_TAG_KSZ
  	tristate
  
@@ -154,6 +350,7 @@ index 4ec6a47b7f72..cca6bb69ecdb 100644
 +	select REGMAP_SPI
 +	help
 +	  This driver adds support for Microchip LAN937X switch chips.
++
 +	  Select to enable support for registering switches configured
 +	  through SPI.
 +
@@ -174,7 +371,7 @@ index 929caa81e782..13f38efdadf0 100644
 +lan937x-objs += lan937x_main.o
 +lan937x-objs += lan937x_spi.o
 diff --git a/drivers/net/dsa/microchip/ksz_common.h b/drivers/net/dsa/microchip/ksz_common.h
-index 720f22275c84..b69b5290435c 100644
+index f212775372ce..7cc14b72ad39 100644
 --- a/drivers/net/dsa/microchip/ksz_common.h
 +++ b/drivers/net/dsa/microchip/ksz_common.h
 @@ -144,6 +144,7 @@ void ksz_switch_remove(struct ksz_device *dev);
@@ -187,10 +384,10 @@ index 720f22275c84..b69b5290435c 100644
  void ksz_init_mib_timer(struct ksz_device *dev);
 diff --git a/drivers/net/dsa/microchip/lan937x_dev.c b/drivers/net/dsa/microchip/lan937x_dev.c
 new file mode 100644
-index 000000000000..15062d56e811
+index 000000000000..f7a0cadbfebe
 --- /dev/null
 +++ b/drivers/net/dsa/microchip/lan937x_dev.c
-@@ -0,0 +1,917 @@
+@@ -0,0 +1,895 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/* Microchip lan937x dev ops functions
 + * Copyright (C) 2019-2020 Microchip Technology Inc.
@@ -405,14 +602,12 @@ index 000000000000..15062d56e811
 +static void lan937x_r_mib_cnt(struct ksz_device *dev, int port, u16 addr,
 +			      u64 *cnt)
 +{
-+	struct ksz_port *p = &dev->ports[port];
 +	unsigned int val;
 +	u32 data;
 +	int ret;
 +
-+	/* retain the flush/freeze bit */
-+	data = p->freeze ? MIB_COUNTER_FLUSH_FREEZE : 0;
-+	data |= MIB_COUNTER_READ;
++	/* Enable MIB Counter read*/
++	data = MIB_COUNTER_READ;
 +	data |= (addr << MIB_COUNTER_INDEX_S);
 +	lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4, data);
 +
@@ -422,7 +617,7 @@ index 000000000000..15062d56e811
 +					   val, !(val & MIB_COUNTER_READ), 10, 1000);
 +	/* failed to read MIB. get out of loop */
 +	if (ret) {
-+		dev_dbg(dev->dev, "Failed to get MIB\n");
++		dev_err(dev->dev, "Failed to get MIB\n");
 +		return;
 +	}
 +
@@ -436,20 +631,6 @@ index 000000000000..15062d56e811
 +{
 +	addr = lan937x_mib_names[addr].index;
 +	lan937x_r_mib_cnt(dev, port, addr, cnt);
-+}
-+
-+static void lan937x_freeze_mib(struct ksz_device *dev, int port, bool freeze)
-+{
-+	u32 val = freeze ? MIB_COUNTER_FLUSH_FREEZE : 0;
-+	struct ksz_port *p = &dev->ports[port];
-+
-+	/* enable/disable the port for flush/freeze function */
-+	mutex_lock(&p->mib.cnt_mutex);
-+	lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4, val);
-+
-+	/* used by MIB counter reading code to know freeze is enabled */
-+	p->freeze = freeze;
-+	mutex_unlock(&p->mib.cnt_mutex);
 +}
 +
 +static void lan937x_port_init_cnt(struct ksz_device *dev, int port)
@@ -559,7 +740,7 @@ index 000000000000..15062d56e811
 +	return true;
 +}
 +
-+u32 lan937x_get_port_addr(int port, int offset)
++static u32 lan937x_get_port_addr(int port, int offset)
 +{
 +	return PORT_CTRL_ADDR(port, offset);
 +}
@@ -618,7 +799,7 @@ index 000000000000..15062d56e811
 +
 +	/* failed to write phy register. get out of loop */
 +	if (ret) {
-+		dev_dbg(dev->dev, "Failed to write phy register\n");
++		dev_err(dev->dev, "Failed to write phy register\n");
 +		return ret;
 +	}
 +
@@ -651,7 +832,7 @@ index 000000000000..15062d56e811
 +
 +		/*  failed to read phy register. get out of loop */
 +		if (ret) {
-+			dev_dbg(dev->dev, "Failed to read phy register\n");
++			dev_err(dev->dev, "Failed to read phy register\n");
 +			return ret;
 +		}
 +		/* Read the VPHY register which has the PHY data*/
@@ -661,8 +842,8 @@ index 000000000000..15062d56e811
 +	return 0;
 +}
 +
-+void lan937x_t1_tx_phy_mod_bits(struct ksz_device *dev, int port,
-+				int reg, u16 val, bool set)
++static void lan937x_t1_tx_phy_mod_bits(struct ksz_device *dev, int port,
++				       int reg, u16 val, bool set)
 +{
 +	u16 data;
 +
@@ -731,7 +912,7 @@ index 000000000000..15062d56e811
 +
 +	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_SPECIAL_MODES, data_lo);
 +
-+    /* Need to toggle test_mode bit to enable DSP access. */
++	/* Need to toggle test_mode bit to enable DSP access. */
 +	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_IND_CTRL, TX_TEST_MODE);
 +	lan937x_t1_tx_phy_write(dev, port, REG_PORT_TX_IND_CTRL, 0);
 +
@@ -840,7 +1021,7 @@ index 000000000000..15062d56e811
 +	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_POWER_DOWN_CTRL,
 +				   T1_HW_INIT_SEQ_ENABLE, false);
 +
-+	/* Configure master/slave. true=master, false=slave */
++	/* Configure T1 phy role */
 +	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_M_CTRL,
 +				   PORT_T1_M_CFG, true);
 +
@@ -947,7 +1128,6 @@ index 000000000000..15062d56e811
 +{
 +	struct ksz_port *p = &dev->ports[port];
 +	u8 data8, member;
-+	u16 data16;
 +
 +	/* enable tag tail for host port */
 +	if (cpu_port) {
@@ -1037,10 +1217,6 @@ index 000000000000..15062d56e811
 +		member = dev->host_mask | p->vid_member;
 +
 +	lan937x_cfg_port_member(dev, port, member);
-+
-+	/* clear pending interrupts */
-+	if (lan937x_is_internal_phy_port(dev, port))
-+		lan937x_pread16(dev, port, REG_PORT_PHY_INT_ENABLE, &data16);
 +}
 +
 +static int lan937x_switch_init(struct ksz_device *dev)
@@ -1074,7 +1250,7 @@ index 000000000000..15062d56e811
 +
 +	dev->ports = devm_kzalloc(dev->dev,
 +				  dev->port_cnt * sizeof(struct ksz_port),
-+				 GFP_KERNEL);
++				  GFP_KERNEL);
 +	if (!dev->ports)
 +		return -ENOMEM;
 +
@@ -1101,7 +1277,6 @@ index 000000000000..15062d56e811
 +	.port_setup = lan937x_port_setup,
 +	.r_mib_cnt = lan937x_r_mib_cnt,
 +	.r_mib_pkt = lan937x_r_mib_pkt,
-+	.freeze_mib = lan937x_freeze_mib,
 +	.port_init_cnt = lan937x_port_init_cnt,
 +	.shutdown = lan937x_reset_switch,
 +	.detect = lan937x_switch_detect,
@@ -1195,10 +1370,10 @@ index 000000000000..e78483793642
 +#endif
 diff --git a/drivers/net/dsa/microchip/lan937x_main.c b/drivers/net/dsa/microchip/lan937x_main.c
 new file mode 100644
-index 000000000000..02a1c39914ac
+index 000000000000..b39d0152847c
 --- /dev/null
 +++ b/drivers/net/dsa/microchip/lan937x_main.c
-@@ -0,0 +1,1074 @@
+@@ -0,0 +0,1037 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/* Microchip LAN937X switch driver main logic
 + * Copyright (C) 2019-2020 Microchip Technology Inc.
@@ -1235,10 +1410,8 @@ index 000000000000..02a1c39914ac
 +
 +	/* wait to be cleared */
 +	ret = lan937x_wait_vlan_ctrl_ready(dev);
-+	if (ret) {
-+		dev_dbg(dev->dev, "Failed to read vlan table\n");
++	if (ret)
 +		goto exit;
-+	}
 +
 +	ksz_read32(dev, REG_SW_VLAN_ENTRY__4, &vlan_table[0]);
 +	ksz_read32(dev, REG_SW_VLAN_ENTRY_UNTAG__4, &vlan_table[1]);
@@ -1268,10 +1441,8 @@ index 000000000000..02a1c39914ac
 +
 +	/* wait to be cleared */
 +	ret = lan937x_wait_vlan_ctrl_ready(dev);
-+	if (ret) {
-+		dev_dbg(dev->dev, "Failed to write vlan table\n");
++	if (ret)
 +		goto exit;
-+	}
 +
 +	ksz_write8(dev, REG_SW_VLAN_CTRL, 0);
 +
@@ -1471,13 +1642,9 @@ index 000000000000..02a1c39914ac
 +}
 +
 +static int lan937x_port_vlan_filtering(struct dsa_switch *ds, int port,
-+				       bool flag,
-+				       struct switchdev_trans *trans)
++				       bool flag)
 +{
 +	struct ksz_device *dev = ds->priv;
-+
-+	if (switchdev_trans_ph_prepare(trans))
-+		return 0;
 +
 +	if (flag) {
 +		lan937x_port_cfg(dev, port, REG_PORT_LUE_CTRL,
@@ -1492,43 +1659,43 @@ index 000000000000..02a1c39914ac
 +	return 0;
 +}
 +
-+static void lan937x_port_vlan_add(struct dsa_switch *ds, int port,
-+				  const struct switchdev_obj_port_vlan *vlan)
++static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
++				 const struct switchdev_obj_port_vlan *vlan)
 +{
 +	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
 +	struct ksz_device *dev = ds->priv;
 +	u32 vlan_table[3];
-+	u16 vid;
++	int err;
 +
-+	for (vid = vlan->vid_begin; vid <= vlan->vid_end; vid++) {
-+		if (lan937x_get_vlan_table(dev, vid, vlan_table)) {
-+			dev_dbg(dev->dev, "Failed to get vlan table\n");
-+			return;
-+		}
-+
-+		vlan_table[0] = VLAN_VALID | (vid & VLAN_FID_M);
-+
-+		/* set/clear switch port when updating vlan table
-+		 * registers
-+		 */
-+		if (untagged)
-+			vlan_table[1] |= BIT(port);
-+		else
-+			vlan_table[1] &= ~BIT(port);
-+		vlan_table[1] &= ~(BIT(dev->cpu_port));
-+
-+		vlan_table[2] |= BIT(port) |
-+						BIT(dev->cpu_port);
-+
-+		if (lan937x_set_vlan_table(dev, vid, vlan_table)) {
-+			dev_dbg(dev->dev, "Failed to set vlan table\n");
-+			return;
-+		}
-+
-+		/* change PVID */
-+		if (vlan->flags & BRIDGE_VLAN_INFO_PVID)
-+			lan937x_pwrite16(dev, port, REG_PORT_DEFAULT_VID, vid);
++	err = lan937x_get_vlan_table(dev, vlan->vid, vlan_table);
++	if (err) {
++		dev_err(dev->dev, "Failed to get vlan table\n");
++		return err;
 +	}
++
++	vlan_table[0] = VLAN_VALID | (vlan->vid & VLAN_FID_M);
++
++	/* set/clear switch port when updating vlan table registers */
++	if (untagged)
++		vlan_table[1] |= BIT(port);
++	else
++		vlan_table[1] &= ~BIT(port);
++	vlan_table[1] &= ~(BIT(dev->cpu_port));
++
++	vlan_table[2] |= BIT(port) |
++					BIT(dev->cpu_port);
++
++	err = lan937x_set_vlan_table(dev, vlan->vid, vlan_table);
++	if (err) {
++		dev_err(dev->dev, "Failed to set vlan table\n");
++		return err;
++	}
++
++	/* change PVID */
++	if (vlan->flags & BRIDGE_VLAN_INFO_PVID)
++		lan937x_pwrite16(dev, port, REG_PORT_DEFAULT_VID, vlan->vid);
++
++	return 0;
 +}
 +
 +static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
@@ -1537,30 +1704,27 @@ index 000000000000..02a1c39914ac
 +	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
 +	struct ksz_device *dev = ds->priv;
 +	u32 vlan_table[3];
-+	u16 vid;
 +	u16 pvid;
 +
 +	lan937x_pread16(dev, port, REG_PORT_DEFAULT_VID, &pvid);
 +	pvid = pvid & 0xFFF;
 +
-+	for (vid = vlan->vid_begin; vid <= vlan->vid_end; vid++) {
-+		if (lan937x_get_vlan_table(dev, vid, vlan_table)) {
-+			dev_dbg(dev->dev, "Failed to get vlan table\n");
-+			return -ETIMEDOUT;
-+		}
-+		/* clear switch port number */
-+		vlan_table[2] &= ~BIT(port);
++	if (lan937x_get_vlan_table(dev, vlan->vid, vlan_table)) {
++		dev_err(dev->dev, "Failed to get vlan table\n");
++		return -ETIMEDOUT;
++	}
++	/* clear switch port number */
++	vlan_table[2] &= ~BIT(port);
 +
-+		if (pvid == vid)
-+			pvid = 1;
++	if (pvid == vlan->vid)
++		pvid = 1;
 +
-+		if (untagged)
-+			vlan_table[1] &= ~BIT(port);
++	if (untagged)
++		vlan_table[1] &= ~BIT(port);
 +
-+		if (lan937x_set_vlan_table(dev, vid, vlan_table)) {
-+			dev_dbg(dev->dev, "Failed to set vlan table\n");
-+			return -ETIMEDOUT;
-+		}
++	if (lan937x_set_vlan_table(dev, vlan->vid, vlan_table)) {
++		dev_err(dev->dev, "Failed to set vlan table\n");
++		return -ETIMEDOUT;
 +	}
 +
 +	lan937x_pwrite16(dev, port, REG_PORT_DEFAULT_VID, pvid);
@@ -1570,14 +1734,10 @@ index 000000000000..02a1c39914ac
 +
 +static u8 lan937x_get_fid(u16 vid)
 +{
-+	u8 fid;
-+
 +	if (vid > ALU_FID_SIZE)
-+		fid = (vid % ALU_FID_SIZE) + 1;
++		return LAN937X_GET_FID(vid);
 +	else
-+		fid = vid;
-+
-+	return fid;
++		return vid;
 +}
 +
 +static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
@@ -1608,7 +1768,7 @@ index 000000000000..02a1c39914ac
 +		/* wait to be finished */
 +		ret = lan937x_wait_alu_ready(i, dev);
 +		if (ret) {
-+			dev_dbg(dev->dev, "Failed to read ALU\n");
++			dev_err(dev->dev, "Failed to read ALU\n");
 +			goto exit;
 +		}
 +
@@ -1636,13 +1796,13 @@ index 000000000000..02a1c39914ac
 +		ret = lan937x_wait_alu_ready(i, dev);
 +
 +		if (ret)
-+			dev_dbg(dev->dev, "Failed to write ALU\n");
++			dev_err(dev->dev, "Failed to write ALU\n");
 +
 +		ksz_read8(dev, REG_SW_LUE_INT_STATUS__1, &val);
 +
 +		/* ALU write failed */
 +		if (val & WRITE_FAIL_INT && i == 1)
-+			dev_dbg(dev->dev, "Failed to write ALU\n");
++			dev_err(dev->dev, "Failed to write ALU\n");
 +
 +		/* ALU1 write failed and attempt to write ALU2, otherwise exit*/
 +		if (val & WRITE_FAIL_INT)
@@ -1684,7 +1844,7 @@ index 000000000000..02a1c39914ac
 +		/* wait to be finished */
 +		ret = lan937x_wait_alu_ready(i, dev);
 +		if (ret) {
-+			dev_dbg(dev->dev, "Failed to read ALU\n");
++			dev_err(dev->dev, "Failed to read ALU\n");
 +			goto exit;
 +		}
 +
@@ -1718,7 +1878,7 @@ index 000000000000..02a1c39914ac
 +		/* wait to be finished */
 +		ret = lan937x_wait_alu_ready(i, dev);
 +		if (ret)
-+			dev_dbg(dev->dev, "Failed to write ALU\n");
++			dev_err(dev->dev, "Failed to write ALU\n");
 +	}
 +
 +exit:
@@ -1776,7 +1936,7 @@ index 000000000000..02a1c39914ac
 +			} while (timeout-- > 0);
 +
 +			if (!timeout) {
-+				dev_dbg(dev->dev, "Failed to search ALU\n");
++				dev_err(dev->dev, "Failed to search ALU\n");
 +				ret = -ETIMEDOUT;
 +				goto exit;
 +			}
@@ -1803,13 +1963,14 @@ index 000000000000..02a1c39914ac
 +	return ret;
 +}
 +
-+static void lan937x_port_mdb_add(struct dsa_switch *ds, int port,
-+				 const struct switchdev_obj_port_mdb *mdb)
++static int lan937x_port_mdb_add(struct dsa_switch *ds, int port,
++				const struct switchdev_obj_port_mdb *mdb)
 +{
 +	struct ksz_device *dev = ds->priv;
 +	u8 fid = lan937x_get_fid(mdb->vid);
 +	u32 static_table[4];
 +	u32 mac_hi, mac_lo;
++	int err = 0;
 +	int index;
 +	u32 data;
 +
@@ -1826,8 +1987,9 @@ index 000000000000..02a1c39914ac
 +		ksz_write32(dev, REG_SW_ALU_STAT_CTRL__4, data);
 +
 +		/* wait to be finished */
-+		if (lan937x_wait_alu_sta_ready(dev)) {
-+			dev_dbg(dev->dev, "Failed to read ALU STATIC\n");
++		err = lan937x_wait_alu_sta_ready(dev);
++		if (err) {
++			dev_err(dev->dev, "Failed to read ALU STATIC\n");
 +			goto exit;
 +		}
 +
@@ -1849,8 +2011,10 @@ index 000000000000..02a1c39914ac
 +	}
 +
 +	/* no available entry */
-+	if (index == dev->num_statics)
++	if (index == dev->num_statics) {
++		err = -ENOSPC;
 +		goto exit;
++	}
 +
 +	/* add entry */
 +	static_table[0] = ALU_V_STATIC_VALID;
@@ -1869,10 +2033,11 @@ index 000000000000..02a1c39914ac
 +
 +	/* wait to be finished */
 +	if (lan937x_wait_alu_sta_ready(dev))
-+		dev_dbg(dev->dev, "Failed to read ALU STATIC\n");
++		dev_err(dev->dev, "Failed to read ALU STATIC\n");
 +
 +exit:
 +	mutex_unlock(&dev->alu_mutex);
++	return err;
 +}
 +
 +static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
@@ -1900,7 +2065,7 @@ index 000000000000..02a1c39914ac
 +		/* wait to be finished */
 +		ret = lan937x_wait_alu_sta_ready(dev);
 +		if (ret) {
-+			dev_dbg(dev->dev, "Failed to read ALU STATIC\n");
++			dev_err(dev->dev, "Failed to read ALU STATIC\n");
 +			goto exit;
 +		}
 +
@@ -1942,7 +2107,7 @@ index 000000000000..02a1c39914ac
 +	/* wait to be finished */
 +	ret = lan937x_wait_alu_sta_ready(dev);
 +	if (ret)
-+		dev_dbg(dev->dev, "Failed to read ALU STATIC\n");
++		dev_err(dev->dev, "Failed to read ALU STATIC\n");
 +
 +exit:
 +	mutex_unlock(&dev->alu_mutex);
@@ -1993,7 +2158,6 @@ index 000000000000..02a1c39914ac
 +static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 +{
 +	phy_interface_t interface;
-+	bool gbit;
 +	u8 data8;
 +
 +	if (lan937x_is_internal_phy_port(dev, port))
@@ -2001,9 +2165,6 @@ index 000000000000..02a1c39914ac
 +
 +	/* read interface from REG_PORT_XMII_CTRL_1 register */
 +	lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
-+
-+	/* get interface speed */
-+	gbit = !(data8 & PORT_MII_NOT_1GBIT);
 +
 +	switch (data8 & PORT_MII_SEL_M) {
 +	case PORT_RMII_SEL:
@@ -2120,14 +2281,9 @@ index 000000000000..02a1c39914ac
 +
 +	lan937x_config_cpu_port(ds);
 +
-+	ds->mtu_enforcement_ingress = true;
 +	ds->configure_vlan_while_not_filtering = true;
 +
-+	/* Enable aggressive back off algorithm in half duplex mode.
-+	 * If no excessive collision drop is enabled the default backoff algorithm
-+	 * may cause both linked device to stop passing traffic completely.
-+	 * Recommended to turn on UNH mode to pass UNH tests.
-+	 */
++	/* Enable aggressive back off & UNH */
 +	lan937x_cfg(dev, REG_SW_MAC_CTRL_0, SW_PAUSE_UNH_MODE | SW_NEW_BACKOFF |
 +						SW_AGGR_BACKOFF, true);
 +
@@ -2174,7 +2330,7 @@ index 000000000000..02a1c39914ac
 +{
 +	/* Frame size is 9000 (= 0x2328) if
 +	 * jumbo frame support is enabled, PORT_JUMBO_EN bit will be enabled
-+	 * in lan937x_change_mtu() API based on mtu
++	 * based on mtu in lan937x_change_mtu() API
 +	 */
 +	return FR_MAX_SIZE;
 +}
@@ -2188,7 +2344,8 @@ index 000000000000..02a1c39914ac
 +
 +	if (phy_interface_mode_is_rgmii(state->interface) ||
 +	    state->interface == PHY_INTERFACE_MODE_SGMII ||
-+		state->interface == PHY_INTERFACE_MODE_RMII	||
++		state->interface == PHY_INTERFACE_MODE_RMII ||
++		state->interface == PHY_INTERFACE_MODE_MII ||
 +		lan937x_is_internal_tx_phy_port(dev, port)) {
 +		phylink_set(mask, 10baseT_Half);
 +		phylink_set(mask, 10baseT_Full);
@@ -2202,7 +2359,6 @@ index 000000000000..02a1c39914ac
 +	/*  For RGMII & SGMII interfaces */
 +	if (phy_interface_mode_is_rgmii(state->interface) ||
 +	    state->interface == PHY_INTERFACE_MODE_SGMII) {
-+		phylink_set(mask, 1000baseT_Half);
 +		phylink_set(mask, 1000baseT_Full);
 +	}
 +	/* For T1 PHY */
@@ -2215,21 +2371,6 @@ index 000000000000..02a1c39914ac
 +		   __ETHTOOL_LINK_MODE_MASK_NBITS);
 +	bitmap_and(state->advertising, state->advertising, mask,
 +		   __ETHTOOL_LINK_MODE_MASK_NBITS);
-+}
-+
-+static void lan937x_phylink_mac_an_restart(struct dsa_switch *ds, int port)
-+{
-+	struct ksz_device *dev = ds->priv;
-+	u16 regval;
-+
-+	/* Auto negotiation is not supported for T1 & MII ports */
-+	if (!lan937x_is_internal_tx_phy_port(dev, port))
-+		return;
-+
-+	if (!lan937x_t1_tx_phy_read(dev, port, MII_BMCR, &regval)) {
-+		regval |= BMCR_ANRESTART;
-+		lan937x_t1_tx_phy_write(dev, port, MII_BMCR, regval);
-+	}
 +}
 +
 +const struct dsa_switch_ops lan937x_switch_ops = {
@@ -2246,13 +2387,11 @@ index 000000000000..02a1c39914ac
 +	.port_stp_state_set	= lan937x_port_stp_state_set,
 +	.port_fast_age		= ksz_port_fast_age,
 +	.port_vlan_filtering	= lan937x_port_vlan_filtering,
-+	.port_vlan_prepare	= ksz_port_vlan_prepare,
 +	.port_vlan_add		= lan937x_port_vlan_add,
 +	.port_vlan_del		= lan937x_port_vlan_del,
 +	.port_fdb_dump		= lan937x_port_fdb_dump,
 +	.port_fdb_add		= lan937x_port_fdb_add,
 +	.port_fdb_del		= lan937x_port_fdb_del,
-+	.port_mdb_prepare       = ksz_port_mdb_prepare,
 +	.port_mdb_add           = lan937x_port_mdb_add,
 +	.port_mdb_del           = lan937x_port_mdb_del,
 +	.port_mirror_add	= lan937x_port_mirror_add,
@@ -2260,7 +2399,6 @@ index 000000000000..02a1c39914ac
 +	.port_max_mtu		= lan937x_get_max_mtu,
 +	.port_change_mtu	= lan937x_change_mtu,
 +	.phylink_validate	= lan937x_phylink_validate,
-+	.phylink_mac_an_restart	= lan937x_phylink_mac_an_restart,
 +	.phylink_mac_link_down	= ksz_mac_link_down,
 +};
 +
@@ -2270,15 +2408,15 @@ index 000000000000..02a1c39914ac
 +}
 +EXPORT_SYMBOL(lan937x_switch_register);
 +
-+MODULE_AUTHOR("Prasanna Vengateshan Varadharajan<Prasanna.Vengateshan@microchip.com>");
++MODULE_AUTHOR("Prasanna Vengateshan Varadharajan Prasanna.Vengateshan@microchip.com>");
 +MODULE_DESCRIPTION("Microchip LAN937x Series Switch DSA Driver");
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/net/dsa/microchip/lan937x_reg.h b/drivers/net/dsa/microchip/lan937x_reg.h
 new file mode 100644
-index 000000000000..0039a03869f3
+index 000000000000..d899a43f4d8e
 --- /dev/null
 +++ b/drivers/net/dsa/microchip/lan937x_reg.h
-@@ -0,0 +1,952 @@
+@@ -0,0 +1,955 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/* Microchip LAN937X switch register definitions
 + * Copyright (C) 2019-2020 Microchip Technology Inc.
@@ -3210,6 +3348,9 @@ index 000000000000..0039a03869f3
 +
 +#define PORT_QUEUE_SPLIT_ENABLE		0x3
 +
++/* Get fid from vid, fid 0 is not used if vid is greater than 127 */
++#define LAN937X_GET_FID(vid)	(((vid) % ALU_FID_SIZE) + 1)
++
 +/* Driver set switch broadcast storm protection at 10% rate. */
 +#define BROADCAST_STORM_PROT_RATE	10
 +
@@ -3233,10 +3374,10 @@ index 000000000000..0039a03869f3
 +#endif
 diff --git a/drivers/net/dsa/microchip/lan937x_spi.c b/drivers/net/dsa/microchip/lan937x_spi.c
 new file mode 100644
-index 000000000000..d804579e70c7
+index 000000000000..517c7afde89e
 --- /dev/null
 +++ b/drivers/net/dsa/microchip/lan937x_spi.c
-@@ -0,0 +1,104 @@
+@@ -0,0 +0,104 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/* Microchip LAN937X switch driver register access through SPI
 + * Copyright (C) 2019-2020 Microchip Technology Inc.
@@ -3338,11 +3479,11 @@ index 000000000000..d804579e70c7
 +
 +MODULE_ALIAS("spi:lan937x");
 +
-+MODULE_AUTHOR("Ganesh Kumar Gurumurthy <GaneshKumar.Gurumurthy@microchip.com>");
++MODULE_AUTHOR("Prasanna Vengateshan Varadharajan Prasanna.Vengateshan@microchip.com>");
 +MODULE_DESCRIPTION("Microchip LAN937x Series Switch SPI access Driver");
 +MODULE_LICENSE("GPL");
 diff --git a/include/net/dsa.h b/include/net/dsa.h
-index 9a0cab5fb7c4..6d0ab9366b88 100644
+index 06e3784ec55c..5603b49ae4e2 100644
 --- a/include/net/dsa.h
 +++ b/include/net/dsa.h
 @@ -46,6 +46,7 @@ struct phylink_link_state;
@@ -3379,10 +3520,10 @@ index dfecd7b22fd7..033b85504235 100644
  config NET_DSA_TAG_RTL4_A
  	tristate "Tag driver for Realtek 4 byte protocol A tags"
 diff --git a/net/dsa/tag_ksz.c b/net/dsa/tag_ksz.c
-index 4820dbcedfa2..78c22c329bb5 100644
+index 4820dbcedfa2..6fac39c2b7d5 100644
 --- a/net/dsa/tag_ksz.c
 +++ b/net/dsa/tag_ksz.c
-@@ -190,10 +190,83 @@ static const struct dsa_device_ops ksz9893_netdev_ops = {
+@@ -190,10 +190,84 @@ static const struct dsa_device_ops ksz9893_netdev_ops = {
  DSA_TAG_DRIVER(ksz9893_netdev_ops);
  MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
  
@@ -3390,21 +3531,22 @@ index 4820dbcedfa2..78c22c329bb5 100644
 + * ---------------------------------------------------------------------------
 + * DA(6bytes)|SA(6bytes)|....|Data(nbytes)|tag0(1byte)|tag1(1byte)|FCS(4bytes)
 + * ---------------------------------------------------------------------------
-+ * tag0 : Prioritization (not used now)
-+ * tag1 : each bit represents port (eg, 0x01=port1, 0x02=port2, 0x10=port5)
++ * tag0 : represents tag override, lookup and valid
++ * tag1 : each bit represents port (eg, 0x01=port1, 0x02=port2, 0x80=port8)
 + *
 + * For Egress (LAN937x -> Host), 1 byte is added before FCS.
 + * ---------------------------------------------------------------------------
 + * DA(6bytes)|SA(6bytes)|....|Data(nbytes)|tag0(1byte)|FCS(4bytes)
 + * ---------------------------------------------------------------------------
 + * tag0 : zero-based value represents port
-+ *	  (eg, 0x00=port1, 0x02=port3, 0x06=port7)
++ *	  (eg, 0x00=port1, 0x02=port3, 0x07=port8)
 + */
 +#define LAN937X_INGRESS_TAG_LEN		2
 +
 +#define LAN937X_TAIL_TAG_OVERRIDE	BIT(11)
 +#define LAN937X_TAIL_TAG_LOOKUP		BIT(12)
 +#define LAN937X_TAIL_TAG_VALID		BIT(13)
++#define LAN937X_TAIL_TAG_PORT_MASK	7
 +
 +static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 +				    struct net_device *dev)
@@ -3436,8 +3578,8 @@ index 4820dbcedfa2..78c22c329bb5 100644
 +{
 +	/* Tag decoding */
 +	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
++	unsigned int port = tag[0] & LAN937X_TAIL_TAG_PORT_MASK;
 +	unsigned int len = KSZ_EGRESS_TAG_LEN;
-+	unsigned int port = tag[0] & 7;
 +
 +	/* Extra 4-bytes PTP timestamp */
 +	if (tag[0] & KSZ9477_PTP_TAG_INDICATION)

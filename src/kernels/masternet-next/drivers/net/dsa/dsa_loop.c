@@ -207,7 +207,7 @@ static int dsa_loop_port_vlan_add(struct dsa_switch *ds, int port,
 	struct mii_bus *bus = ps->bus;
 	struct dsa_loop_vlan *vl;
 
-	if (vlan->vid > ARRAY_SIZE(ps->vlans))
+	if (vlan->vid >= ARRAY_SIZE(ps->vlans))
 		return -ERANGE;
 
 	/* Just do a sleeping operation to make lockdep checks effective */
@@ -323,7 +323,6 @@ static int dsa_loop_drv_probe(struct mdio_device *mdiodev)
 	ds->dev = &mdiodev->dev;
 	ds->ops = &dsa_loop_driver;
 	ds->priv = ps;
-	ds->configure_vlan_while_not_filtering = true;
 	ps->bus = mdiodev->bus;
 
 	dev_set_drvdata(&mdiodev->dev, ds);
