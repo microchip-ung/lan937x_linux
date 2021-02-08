@@ -29,7 +29,7 @@ static inline irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int
 
 static inline int lan937x_ptp_init(struct ksz_device *dev)
 {
-	return 0;
+	return -EOPNOTSUPP;
 }
 
 static inline void lan937x_ptp_deinit(struct ksz_device *dev){}
