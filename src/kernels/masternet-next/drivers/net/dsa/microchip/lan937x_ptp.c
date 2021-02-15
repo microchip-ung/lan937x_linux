@@ -27,6 +27,210 @@
 #define KSZ_PTP_INC_NS 40  /* HW clock is incremented every 40 ns (by 40) */
 #define KSZ_PTP_SUBNS_BITS 32  /* Number of bits in sub-nanoseconds counter */
 
+static int _lan937x_ptp_gettime(struct ksz_device *dev, struct timespec64 *ts);
+
+/* PPS Support */
+#define LAN937x_PPS_TOU 2   /* currently fixed to trigger output unit 2 */
+
+static int lan937x_ptp_tou_index(struct ksz_device *dev, u8 index)
+{
+        u32 data;
+        int ret;
+
+	ret = ksz_read32(dev, REG_PTP_UNIT_INDEX__4, &data);
+	if (ret)
+		return ret;
+
+	data |= (index << PTP_TOU_INDEX_S);
+
+	ret = ksz_write32(dev,REG_PTP_UNIT_INDEX__4, data);
+	if (ret)
+		return ret;
+
+
+        return ret; 
+}
+ 
+static int lan937x_ptp_tou_reset(struct ksz_device *dev)
+{
+        u32 ctrl_stat;
+	int ret;
+
+	/* Reset trigger unit */
+	ret = ksz_read32(dev, REG_PTP_CTRL_STAT__4, &ctrl_stat);
+	if (ret)
+		return ret;
+
+	ctrl_stat |= TRIG_RESET;
+
+	ret = ksz_write32(dev, REG_PTP_CTRL_STAT__4, ctrl_stat);
+	if (ret)
+		return ret;
+
+        /* Clear reset */
+	ctrl_stat &= ~TRIG_ENABLE;  /* clear cached bit :-) */
+	ctrl_stat &= ~TRIG_RESET;
+
+	ret = ksz_write32(dev, REG_PTP_CTRL_STAT__4, ctrl_stat);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int lan937x_ptp_tou_cycle_count_set(struct ksz_device *dev, u16 count)
+{
+	u32 data;
+	int ret;
+
+	ret = ksz_read32(dev, REG_TRIG_CYCLE_CNT, &data);
+	if (ret)
+		return ret;
+
+	data &= ~(TRIG_CYCLE_CNT_M << TRIG_CYCLE_CNT_S);
+	data |= (count & TRIG_CYCLE_CNT_M) << TRIG_CYCLE_CNT_S;
+
+	ret = ksz_write32(dev, REG_TRIG_CYCLE_CNT, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int lan937x_set_tou_target_time(struct ksz_device *dev)
+{
+	struct timespec64 now, pps_start, diff;
+        int ret; 
+
+	/* Read current time */
+	ret = _lan937x_ptp_gettime(dev, &now);
+	if (ret)
+		return ret;
+
+	/* Determine and write start time of PPS */
+	pps_start.tv_sec = now.tv_sec + 1;
+	pps_start.tv_nsec = 0;
+	diff = timespec64_sub(pps_start, now);
+
+	/* Reserve at least 1ms for programming and activating */
+	if (diff.tv_nsec < 1000000)
+		pps_start.tv_sec++;
+
+        ret = ksz_write32(dev, REG_TRIG_TARGET_NANOSEC, pps_start.tv_nsec);
+	if (ret)
+		return ret;
+
+	ret = ksz_write32(dev, REG_TRIG_TARGET_SEC, pps_start.tv_sec);
+	if (ret)
+		return ret;
+        
+        return ret;
+}
+
+static int lan937x_ptp_tou_start(struct ksz_device *dev)
+{
+	u32 data;
+	int ret;
+
+	ret = ksz_read32(dev, REG_PTP_CTRL_STAT__4, &data);
+	if (ret)
+		return ret;
+
+	data |= (GPIO_OUT | TRIG_ENABLE);
+
+	ret = ksz_write32(dev, REG_PTP_CTRL_STAT__4, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int lan937x_ptp_tou_gpio(struct ksz_device *dev)
+{
+        u32 data;
+        int ret;
+
+        /* Set the Led Override register */
+        data = (LED_OVR_1 | LED_OVR_2);
+
+	ret = ksz_write32(dev, REG_SW_GLOBAL_LED_OVR__4, data);
+	if (ret)
+		return ret;
+
+        /* Set the Led Source register */
+        data = (LED_SRC_PTP_GPIO_2 | LED_SRC_PTP_GPIO_1);				
+
+	ret = ksz_write32(dev, REG_SW_GLOBAL_LED_SRC__4, data);
+	if (ret)
+		return ret;
+
+        return ret;
+}
+
+static int lan937x_ptp_enable_pps(struct ksz_device *dev, int on)
+{
+	u32 data;
+	int ret;
+
+	if (dev->ptp_tou_mode != KSZ_PTP_TOU_PPS && dev->ptp_tou_mode != KSZ_PTP_TOU_IDLE)
+		return -EBUSY;
+
+        /* Set the tou index register as 2 */
+        ret = lan937x_ptp_tou_index(dev, LAN937x_PPS_TOU);
+        if(ret)
+                return ret;
+
+	/* Reset trigger unit  */
+	ret = lan937x_ptp_tou_reset(dev);
+	if (ret)
+		return ret;
+
+	if (!on) {
+		dev->ptp_tou_mode = KSZ_PTP_TOU_IDLE;
+		return 0;  /* success */
+	}
+
+	/* set periodic pulse pattern */
+	data = (TRIG_POS_PERIOD << TRIG_PATTERN_S);
+	ret = ksz_write32(dev, REG_TRIG_CTRL__4, data);
+	if (ret)
+		return ret;
+
+	/* Set cycle width (1 s) */
+        ret = ksz_write32(dev, REG_TRIG_CYCLE_WIDTH, NSEC_PER_SEC);
+	if (ret)
+		return ret;
+
+	/* Set cycle count (infinite) */
+	ret = lan937x_ptp_tou_cycle_count_set(dev, 0);
+	if (ret)
+		return ret;
+
+	/* Set pulse with (20 ms / 8 ns) */
+        data = (20000000/8);
+        ret = ksz_write32(dev, REG_TRIG_PULSE_WIDTH__4, data);
+	if (ret)
+		return ret;
+        
+        /* Set target time */
+        ret = lan937x_set_tou_target_time(dev);
+        if(ret)
+                return ret;
+
+        /* Configure GPIO pins */
+        ret = lan937x_ptp_tou_gpio(dev);
+        if(ret)
+                return ret;
+
+	/* Activate trigger unit */
+	ret = lan937x_ptp_tou_start(dev);
+	if (ret)
+		return ret;
+
+	dev->ptp_tou_mode = KSZ_PTP_TOU_PPS;
+	return 0;
+}
+
 /*Time Stamping support - accessing the register */
 static int lan937x_ptp_enable_mode(struct ksz_device *dev, bool enable)
 {
@@ -218,7 +422,22 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 static int lan937x_ptp_enable(struct ptp_clock_info *ptp,
 			      struct ptp_clock_request *req, int on)
 {
-	return -ENOTTY;
+	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
+	int ret;
+
+        switch(req->type) {
+        case PTP_CLK_REQ_PPS:
+	        mutex_lock(&dev->ptp_mutex);
+	        ret = lan937x_ptp_enable_pps(dev, on);
+	        mutex_unlock(&dev->ptp_mutex);
+                break;
+
+        default:
+                ret = -EINVAL;
+                break;
+        }
+
+        return ret;
 }
 
 static int _lan937x_ptp_gettime(struct ksz_device *dev, struct timespec64 *ts)
@@ -315,6 +534,17 @@ static int lan937x_ptp_settime(struct ptp_clock_info *ptp,
 	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
 	if (ret)
 		goto error_return;
+
+        switch(dev->ptp_tou_mode) {
+        case KSZ_PTP_TOU_IDLE:
+                break;
+
+        case KSZ_PTP_TOU_PPS:
+                ret = lan937x_ptp_enable_pps(dev, true);
+                if(ret)
+                        goto error_return;
+                break;
+        }
 
 	spin_lock_bh(&ptp_shared->ptp_clock_lock);
 	ptp_shared->ptp_clock_time = *ts;
@@ -418,6 +648,17 @@ static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
 	if (ret)
 		goto error_return;
+
+        switch(dev->ptp_tou_mode) {
+        case KSZ_PTP_TOU_IDLE:
+                break;
+
+        case KSZ_PTP_TOU_PPS:
+                ret = lan937x_ptp_enable_pps(dev, true);
+                if(ret)
+                        goto error_return;
+                break;
+        }
 
 	spin_lock_bh(&ptp_shared->ptp_clock_lock);
 	ptp_shared->ptp_clock_time = timespec64_add(ptp_shared->ptp_clock_time, delta64);
@@ -886,9 +1127,9 @@ int lan937x_ptp_init(struct ksz_device *dev)
 		.adjtime	= lan937x_ptp_adjtime,
 		.do_aux_work	= lan937x_ptp_do_aux_work,
 		.n_alarm	= 0,
-		.n_ext_ts	= 0,  /* currently not implemented */
+		.n_ext_ts	= 0,
 		.n_per_out	= 0,
-		.pps		= 0
+		.pps		= 1
 	};
 
 	/* Start hardware counter (will overflow after 136 years) */

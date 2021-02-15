@@ -16,6 +16,11 @@
 #include <linux/regmap.h>
 #include <net/dsa.h>
 
+enum ksz_ptp_tou_mode {
+	KSZ_PTP_TOU_IDLE,
+	KSZ_PTP_TOU_PPS
+};
+
 struct vlan_table {
 	u32 table[3];
 };
@@ -108,6 +113,7 @@ struct ksz_device {
 	struct mutex ptp_mutex;  //to serialize the activity in the phc
 	
 	struct ksz_device_ptp_shared ptp_shared;
+	enum ksz_ptp_tou_mode ptp_tou_mode;
 #endif
 };
 
