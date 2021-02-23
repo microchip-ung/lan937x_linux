@@ -158,7 +158,7 @@ static int lan937x_ptp_tou_gpio(struct ksz_device *dev)
 		return ret;
 
         /* Set the Led Source register */
-        data = (LED_SRC_PTP_GPIO_2 | LED_SRC_PTP_GPIO_1);				
+        data = (LED_SRC_PTP_GPIO_1 | LED_SRC_PTP_GPIO_2);				
 
 	ret = ksz_write32(dev, REG_SW_GLOBAL_LED_SRC__4, data);
 	if (ret)
@@ -175,7 +175,7 @@ static int lan937x_ptp_enable_pps(struct ksz_device *dev, int on)
 	if (dev->ptp_tou_mode != KSZ_PTP_TOU_PPS && dev->ptp_tou_mode != KSZ_PTP_TOU_IDLE)
 		return -EBUSY;
 
-        /* Set the tou index register as 2 */
+        /* Set the tou index register */
         ret = lan937x_ptp_tou_index(dev, LAN937x_PPS_TOU);
         if(ret)
                 return ret;
