@@ -30,6 +30,9 @@
 static int _lan937x_ptp_gettime(struct ksz_device *dev, struct timespec64 *ts);
 
 /* PPS Support */
+#define PPS_LED_1       0
+#define PPS_LED_2       1
+
 #define LAN937x_PPS_TOU 2   /* currently fixed to trigger output unit 2 */
 
 static int lan937x_ptp_tou_index(struct ksz_device *dev, u8 index)
@@ -41,7 +44,7 @@ static int lan937x_ptp_tou_index(struct ksz_device *dev, u8 index)
 	if (ret)
 		return ret;
 
-	data |= (index << PTP_TOU_INDEX_S);
+	data |= ((index << PTP_TOU_INDEX_S) | (dev->pps_led_no << PTP_GPIO_INDEX_S));
 
 	ret = ksz_write32(dev,REG_PTP_UNIT_INDEX__4, data);
 	if (ret)
@@ -151,14 +154,28 @@ static int lan937x_ptp_tou_gpio(struct ksz_device *dev)
         int ret;
 
         /* Set the Led Override register */
-        data = (LED_OVR_1 | LED_OVR_2);
+	ret = ksz_read32(dev, REG_SW_GLOBAL_LED_OVR__4, &data);
+	if (ret)
+		return ret;
+
+        if(dev->pps_led_no == PPS_LED_2)
+                data |= LED_OVR_2;
+        else
+                data |= LED_OVR_1;
 
 	ret = ksz_write32(dev, REG_SW_GLOBAL_LED_OVR__4, data);
 	if (ret)
 		return ret;
 
         /* Set the Led Source register */
-        data = (LED_SRC_PTP_GPIO_1 | LED_SRC_PTP_GPIO_2);				
+	ret = ksz_read32(dev, REG_SW_GLOBAL_LED_SRC__4, &data);
+	if (ret)
+		return ret;
+
+        if(dev->pps_led_no == PPS_LED_2)
+                data |= LED_SRC_PTP_GPIO_2;
+        else
+                data |= LED_SRC_PTP_GPIO_1;
 
 	ret = ksz_write32(dev, REG_SW_GLOBAL_LED_SRC__4, data);
 	if (ret)
@@ -191,7 +208,7 @@ static int lan937x_ptp_enable_pps(struct ksz_device *dev, int on)
 	}
 
 	/* set periodic pulse pattern */
-	data = (TRIG_POS_PERIOD << TRIG_PATTERN_S);
+	data = (TRIG_POS_PERIOD << TRIG_PATTERN_S) | (dev->pps_led_no << TRIG_GPO_S);
 	ret = ksz_write32(dev, REG_TRIG_CTRL__4, data);
 	if (ret)
 		return ret;
@@ -1153,6 +1170,9 @@ int lan937x_ptp_init(struct ksz_device *dev)
 	ret = lan937x_ptp_8021as(dev, true);
         if(ret)
                 goto error_ports_deinit;
+
+        //set the ptp
+        dev->pps_led_no = 0;
 
 	return 0;
 

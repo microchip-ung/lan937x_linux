@@ -108,6 +108,7 @@ struct ksz_device {
 	u16 host_mask;
 	u16 port_mask;
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
+	u8 pps_led_no;
 	struct ptp_clock_info ptp_caps;
 	struct ptp_clock *ptp_clock;
 	struct mutex ptp_mutex;  //to serialize the activity in the phc
