@@ -987,7 +987,7 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 	}
 	/* For T1 PHY */
 	if (lan937x_is_internal_t1_phy_port(dev, port)) {
-		phylink_set(mask, 100baseT_Full);
+		phylink_set(mask, 100baseT1_Full);
 		phylink_set_port_modes(mask);
 	}
 
@@ -1028,7 +1028,19 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 
 int lan937x_switch_register(struct ksz_device *dev)
 {
-	return ksz_switch_register(dev, &lan937x_dev_ops);
+	int ret;
+
+	ret = ksz_switch_register(dev, &lan937x_dev_ops);
+
+	if (ret) {
+		if (dev->mdio_np) {
+			mdiobus_unregister(dev->ds->slave_mii_bus);
+			of_node_put(dev->mdio_np);
+		}
+
+	}
+
+	return ret;
 }
 EXPORT_SYMBOL(lan937x_switch_register);
 
