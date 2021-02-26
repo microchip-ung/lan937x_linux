@@ -35,47 +35,66 @@ static int _lan937x_ptp_gettime(struct ksz_device *dev, struct timespec64 *ts);
 
 #define LAN937x_PPS_TOU 2   /* currently fixed to trigger output unit 2 */
 
-static int lan937x_ptp_tou_index(struct ksz_device *dev, u8 index,
-                                 u32 pps_led_no)
+static int ksz_reg_setbits(struct ksz_device *dev, u32 reg, u32 val)
 {
         u32 data;
         int ret;
 
-	ret = ksz_read32(dev, REG_PTP_UNIT_INDEX__4, &data);
+	ret = ksz_read32(dev, reg, &data);
 	if (ret)
 		return ret;
 
-	data |= ((index << PTP_TOU_INDEX_S) | (pps_led_no << PTP_GPIO_INDEX_S));
+	data |= val;
 
-	ret = ksz_write32(dev,REG_PTP_UNIT_INDEX__4, data);
+	ret = ksz_write32(dev, reg, data);
 	if (ret)
 		return ret;
 
+        return 0; 
+}
 
+static int ksz_reg_clearbits(struct ksz_device *dev, u32 reg, u32 val)
+{
+        u32 data;
+        int ret;
+
+	ret = ksz_read32(dev, reg, &data);
+	if (ret)
+		return ret;
+
+	data &= ~val;
+
+	ret = ksz_write32(dev, reg, data);
+	if (ret)
+		return ret;
+
+        return 0; 
+}
+
+static int lan937x_ptp_tou_index(struct ksz_device *dev, u8 index,
+                                 u32 pps_led_index)
+{
+        u32 data;
+        int ret;
+
+	data = ((index << PTP_TOU_INDEX_S) | (pps_led_index << PTP_GPIO_INDEX_S));
+
+        ret = ksz_reg_setbits(dev ,REG_PTP_UNIT_INDEX__4, data);
+        
         return ret; 
 }
  
 static int lan937x_ptp_tou_reset(struct ksz_device *dev)
 {
-        u32 ctrl_stat;
 	int ret;
 
 	/* Reset trigger unit */
-	ret = ksz_read32(dev, REG_PTP_CTRL_STAT__4, &ctrl_stat);
-	if (ret)
-		return ret;
-
-	ctrl_stat |= TRIG_RESET;
-
-	ret = ksz_write32(dev, REG_PTP_CTRL_STAT__4, ctrl_stat);
+        ret = ksz_reg_setbits(dev, REG_PTP_CTRL_STAT__4, TRIG_RESET);
 	if (ret)
 		return ret;
 
         /* Clear reset */
-	ctrl_stat &= ~TRIG_ENABLE;  /* clear cached bit :-) */
-	ctrl_stat &= ~TRIG_RESET;
-
-	ret = ksz_write32(dev, REG_PTP_CTRL_STAT__4, ctrl_stat);
+        ret = ksz_reg_clearbits(dev, REG_PTP_CTRL_STAT__4, (TRIG_RESET | TRIG_ENABLE));
 	if (ret)
 		return ret;
 
@@ -128,28 +147,10 @@ static int lan937x_set_tou_target_time(struct ksz_device *dev)
 	if (ret)
 		return ret;
         
-        return ret;
+        return 0;
 }
 
-static int lan937x_ptp_tou_start(struct ksz_device *dev)
-{
-	u32 data;
-	int ret;
-
-	ret = ksz_read32(dev, REG_PTP_CTRL_STAT__4, &data);
-	if (ret)
-		return ret;
-
-	data |= (GPIO_OUT | TRIG_ENABLE);
-
-	ret = ksz_write32(dev, REG_PTP_CTRL_STAT__4, data);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
-static int lan937x_ptp_tou_gpio(struct ksz_device *dev, u32 pps_led_no)
+static int lan937x_ptp_tou_gpio(struct ksz_device *dev, u32 pps_led_index)
 {
         u32 data;
         int ret;
@@ -159,7 +160,7 @@ static int lan937x_ptp_tou_gpio(struct ksz_device *dev, u32 pps_led_no)
 	if (ret)
 		return ret;
 
-        if(pps_led_no == PPS_LED_2)
+        if(pps_led_index == PPS_LED_2)
                 data |= LED_OVR_2;
         else
                 data |= LED_OVR_1;
@@ -173,7 +174,7 @@ static int lan937x_ptp_tou_gpio(struct ksz_device *dev, u32 pps_led_no)
 	if (ret)
 		return ret;
 
-        if(pps_led_no == PPS_LED_2)
+        if(pps_led_index == PPS_LED_2)
                 data |= LED_SRC_PTP_GPIO_2;
         else
                 data |= LED_SRC_PTP_GPIO_1;
@@ -182,12 +183,12 @@ static int lan937x_ptp_tou_gpio(struct ksz_device *dev, u32 pps_led_no)
 	if (ret)
 		return ret;
 
-        return ret;
+        return 0;
 }
 
 static int lan937x_ptp_enable_pps(struct ksz_device *dev, int on)
 {
-        u32 pps_led_no = 0;
+        u32 pps_led_index = 0;
 	u32 data;
 	int ret;
 
@@ -195,11 +196,21 @@ static int lan937x_ptp_enable_pps(struct ksz_device *dev, int on)
 		return -EBUSY;
 
         //get the pps led no, numbering is -1 from dts tree
-        if(!of_property_read_u32(dev->dev->of_node, "pps_led_no", &pps_led_no))
-                pps_led_no -= 1;
+        if(of_property_read_u32(dev->dev->of_node, "pps_led_index", &pps_led_index))
+        {
+                dev_err(dev->dev, "pps_led_index not defined in dts tree");
+                return -EINVAL;
+        }
+        else
+        {
+                if((pps_led_index == 1) || (pps_led_index == 2))
+                        pps_led_index -= 1;
+                else
+                        return -EINVAL;
+        }
 
         /* Set the tou index register */
-        ret = lan937x_ptp_tou_index(dev, LAN937x_PPS_TOU, pps_led_no);
+        ret = lan937x_ptp_tou_index(dev, LAN937x_PPS_TOU, pps_led_index);
         if(ret)
                 return ret;
 
@@ -214,7 +225,7 @@ static int lan937x_ptp_enable_pps(struct ksz_device *dev, int on)
 	}
 
 	/* set periodic pulse pattern */
-	data = (TRIG_POS_PERIOD << TRIG_PATTERN_S) | (pps_led_no << TRIG_GPO_S);
+	data = (TRIG_POS_PERIOD << TRIG_PATTERN_S) | (pps_led_index << TRIG_GPO_S);
 	ret = ksz_write32(dev, REG_TRIG_CTRL__4, data);
 	if (ret)
 		return ret;
@@ -241,12 +252,12 @@ static int lan937x_ptp_enable_pps(struct ksz_device *dev, int on)
                 return ret;
 
         /* Configure GPIO pins */
-        ret = lan937x_ptp_tou_gpio(dev, pps_led_no);
+        ret = lan937x_ptp_tou_gpio(dev, pps_led_index);
         if(ret)
                 return ret;
 
 	/* Activate trigger unit */
-	ret = lan937x_ptp_tou_start(dev);
+        ret = ksz_reg_setbits(dev, REG_PTP_CTRL_STAT__4, (GPIO_OUT | TRIG_ENABLE));
 	if (ret)
 		return ret;
 
