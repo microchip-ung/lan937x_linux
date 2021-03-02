@@ -428,21 +428,16 @@ static int lan937x_t1_phy_init (struct phy_device *phydev)
 {
 	static const struct access_ereg_val init[] = {
 		/* TXPD/TXAMP6 and HW_Init Hi and Force_ED*/
-		{PHYACC_ATTR_MODE_WRITE,  T1_REG_BANK_SEL_AFE,  0x0B, 
-		0x002D, 0},
-		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x18,
-		 0x0D53, 0},
-		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x05,
-		 0x0AB2, 0},
-		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x06,
-		 0x0AB3, 0},
-		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x1A,
-		 0x0AEA, 0},
+		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_AFE, 0x0B, 0x002D, 0},
+		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x18, 0x0D53, 0},
+		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x05, 0x0AB2, 0},
+		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x06, 0x0AB3, 0},
+		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x1A, 0x0AEA, 0},
 		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x1B, 0x0AEB, 0},
 		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x1C, 0x0AEB, 0},
-		// Pointer delay
+		/* Pointer delay */
 		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x02, 0x1C00, 0},
-		// ---- tx iir edits ----
+		/* ---- tx iir edits ---- */
 		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1000, 0},
 		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1861, 0},
 		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1061, 0},
@@ -479,29 +474,19 @@ static int lan937x_t1_phy_init (struct phy_device *phydev)
 		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1811, 0},
 		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1011, 0},
 		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1000, 0},
-		// SQI enable
-		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x2E,  0x9572, 0},
-		// Flag LPS and WUR as idle errors
-		//phy_write(phydev,0x10, 0x0014);
-		{PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI, 0x10,  0x0014, 0},
-		// End 10x
-		
-		// Restore state machines without clearing registers
-		//phy_write(phydev,0x1A, 0x0200);
-		{PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI, 0x1A,  0x0200, 0},
-		//phy_write(phydev,0x10, 0x0094);
-		{PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI, 0x10,  0x0094, 0},
-
-		{PHYACC_ATTR_MODE_POLL, PHYACC_ATTR_BANK_SMI, 0x10,  0x0080, 0},
-
+		/* SQI enable */
+		{PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x2E, 0x9572, 0},
+		/* Flag LPS and WUR as idle errors */
+		{PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI, 0x10, 0x0014, 0},		
+		/* Restore state machines without clearing registers */
+		{PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI, 0x1A, 0x0200, 0},
+		{PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI, 0x10, 0x0094, 0},
+		{PHYACC_ATTR_MODE_POLL, PHYACC_ATTR_BANK_SMI, 0x10, 0x0080, 0},
 		{PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_AFE, 0x0B, 0x000C, 0},
-
 		/*Read INTERRUPT_SOURCE Register*/
 		{PHYACC_ATTR_MODE_READ, PHYACC_ATTR_BANK_SMI, 0x18, 0, 0},
-
 		/*Read INTERRUPT_SOURCE Register*/
 		{PHYACC_ATTR_MODE_READ, PHYACC_ATTR_BANK_MISC, 0x08, 0, 0},
-
 	};
 	int rc, i;
 	
@@ -511,13 +496,14 @@ static int lan937x_t1_phy_init (struct phy_device *phydev)
 	
 	if (rc < 0)
 		return rc;
-	
+	/* Clear HW_INIT */
 	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI, REG_PORT_T1_POWER_DOWN_CTRL,
 	 0x0000, T1_HW_INIT_SEQ_ENABLE);
 
 	if (rc < 0)
 		return rc;
 	
+	/* Set Master Mode */
 	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI, REG_PORT_T1_PHY_M_CTRL,
 	 PORT_T1_M_CFG, PORT_T1_M_CFG);
 	
@@ -595,7 +581,7 @@ static struct phy_driver microchip_t1_phy_driver[] = {
 	.phy_id         = 0x0007c150,
 	.phy_id_mask    = 0xfffffff0,
 	.name           = "Microchip LAN87xx T1",
-/*	.read_status 	= lan937x_read_status,*/
+	.read_status 	= lan937x_read_status,
 
 	.features       = PHY_BASIC_T1_FEATURES,
 

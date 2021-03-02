@@ -179,25 +179,35 @@
 						#size-cells = <0>;
 						port@0 {
 							reg = <0>;
+							phy-mode=<&t1phy0>;
 							label = "lan1";
-							phy-handle = <&t1phy0>
 						};
 						port@1 {
 							reg = <1>;
+							phy-mode=<&t1phy1>;
 							label = "lan2";
-							phy-handle = <&t1phy1>
 						};
 						port@2 {
-							reg = <2>;
-							label = "lan4";
-							phy-handle = <&t1phy2>
+							reg = <7>;
+							phy-mode=<&t1phy2>;
+							label = "lan3";
 						};
 						port@3 {
-							reg = <3>;
-							label = "lan6";
-							phy-handle = <&t1phy3>
+							reg = <2>;
+							phy-mode=<&t1phy3>;
+							label = "lan4";
 						};
 						port@4 {
+							reg = <6>;
+							phy-mode=<&t1phy4>;
+							label = "lan5";
+						};
+						port@5 {
+							reg = <3>;
+							phy-mode=<&t1phy5>;
+							label = "lan6";
+						};
+						port@6 {
 							reg = <4>;
 							phy-mode = "rgmii-tx";
 							label = "cpu";
@@ -207,7 +217,7 @@
 								full-duplex;
 							};
 						};
-						port@5 {
+						port@7 {
 							reg = <5>;
 							phy-mode = "rgmii-tx";
 							label = "lan7";
@@ -215,16 +225,6 @@
 								speed = <1000>;
 								full-duplex;
 							};
-						};
-						port@6 {
-							reg = <6>;
-							label = "lan5";
-							phy-handle = <&t1phy4>
-						};
-						port@7 {
-							reg = <7>;
-							label = "lan3";
-							phy-handle = <&t1phy5>
 						};
 					};
 					mdio {
@@ -246,10 +246,10 @@
 							reg = <0x3>;
 						};
 						t1phy4: ethernet-phy@4{
-							reg = <0x4>;
+							reg = <0x3>;
 						};
 						t1phy5: ethernet-phy@5{
-							reg = <0x5>;
+							reg = <0x3>;
 						};
 					};
 				};

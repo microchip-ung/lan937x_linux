@@ -190,14 +190,14 @@ static const struct dsa_device_ops ksz9893_netdev_ops = {
 DSA_TAG_DRIVER(ksz9893_netdev_ops);
 MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
 
-/* For Ingress (Host -> LAN937x), 2 bytes are added before FCS.
+/* For xmit, 2 bytes are added before FCS.
  * ---------------------------------------------------------------------------
  * DA(6bytes)|SA(6bytes)|....|Data(nbytes)|tag0(1byte)|tag1(1byte)|FCS(4bytes)
  * ---------------------------------------------------------------------------
  * tag0 : represents tag override, lookup and valid
  * tag1 : each bit represents port (eg, 0x01=port1, 0x02=port2, 0x80=port8)
  *
- * For Egress (LAN937x -> Host), 1 byte is added before FCS.
+ * For rcv, 1 byte is added before FCS.
  * ---------------------------------------------------------------------------
  * DA(6bytes)|SA(6bytes)|....|Data(nbytes)|tag0(1byte)|FCS(4bytes)
  * ---------------------------------------------------------------------------
@@ -219,7 +219,6 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	u8 *addr;
 	u16 val;
 
-	/* Tag encoding */
 	tag = skb_put(skb, LAN937X_INGRESS_TAG_LEN);
 	addr = skb_mac_header(skb);
 
@@ -236,26 +235,11 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	return skb;
 }
 
-static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev,
-				   struct packet_type *pt)
-{
-	/* Tag decoding */
-	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
-	unsigned int port = tag[0] & LAN937X_TAIL_TAG_PORT_MASK;
-	unsigned int len = KSZ_EGRESS_TAG_LEN;
-
-	/* Extra 4-bytes PTP timestamp */
-	if (tag[0] & KSZ9477_PTP_TAG_INDICATION)
-		len += KSZ9477_PTP_TAG_LEN;
-
-	return ksz_common_rcv(skb, dev, port, len);
-}
-
 static const struct dsa_device_ops lan937x_netdev_ops = {
 	.name	= "lan937x",
 	.proto	= DSA_TAG_PROTO_LAN937X,
 	.xmit	= lan937x_xmit,
-	.rcv	= lan937x_rcv,
+	.rcv	= ksz9477_rcv,
 	.overhead = LAN937X_INGRESS_TAG_LEN,
 	.tail_tag = true,
 };

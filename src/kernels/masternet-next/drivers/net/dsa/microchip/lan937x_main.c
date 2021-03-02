@@ -124,42 +124,16 @@ static enum dsa_tag_protocol lan937x_get_tag_protocol(struct dsa_switch *ds,
 	return DSA_TAG_PROTO_LAN937X_VALUE;
 }
 
-static int lan937x_get_link_status(struct ksz_device *dev, int port)
-{
-	u16 val1, val2;
-
-	lan937x_t1_tx_phy_read(dev, port, REG_PORT_T1_PHY_M_STATUS,
-			       &val1);
-
-	lan937x_t1_tx_phy_read(dev, port, REG_PORT_T1_MODE_STAT, &val2);
-
-	if (val1 & (PORT_T1_LOCAL_RX_OK | PORT_T1_REMOTE_RX_OK) &&
-	    val2 & (T1_PORT_DSCR_LOCK_STATUS_MSK | T1_PORT_LINK_UP_MSK))
-		return PHY_LINK_UP;
-
-	return PHY_LINK_DOWN;
-}
-
 static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
 {
 	struct ksz_device *dev = ds->priv;
 	u16 val;
+	int ret;
 
-	lan937x_t1_tx_phy_read(dev, addr, reg, &val);
+	ret = lan937x_internal_phy_read(dev, addr, reg, &val);
 
-	if (reg == MII_BMSR && lan937x_is_internal_t1_phy_port(dev, addr)) {
-		/* T1 PHY supports only 100 Mb FD, report through BMSR_100FULL bit*/
-		val |= BMSR_100FULL;
-
-		/* T1 Phy link is based on REG_PORT_T1_PHY_M_STATUS & REG_PORT_T1
-		 * _MODE_STAT registers for LAN937x, get the link status
-		 * and report through BMSR_LSTATUS bit
-		 */
-		if (lan937x_get_link_status(dev, addr) == PHY_LINK_UP)
-			val |= BMSR_LSTATUS;
-		else
-			val &= ~BMSR_LSTATUS;
-	}
+	if (ret)
+		return ret;
 
 	return val;
 }
@@ -169,7 +143,7 @@ static int lan937x_phy_write16(struct dsa_switch *ds, int addr, int reg,
 {
 	struct ksz_device *dev = ds->priv;
 
-	return lan937x_t1_tx_phy_write(dev, addr, reg, val);
+	return lan937x_internal_phy_write(dev, addr, reg, val);
 }
 
 static void lan937x_get_strings(struct dsa_switch *ds, int port,
@@ -202,13 +176,10 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 	switch (state) {
 	case BR_STATE_DISABLED:
 		data |= PORT_LEARN_DISABLE;
-		if (port != dev->cpu_port)
-			member = 0;
 		break;
 	case BR_STATE_LISTENING:
 		data |= (PORT_RX_ENABLE | PORT_LEARN_DISABLE);
-		if (port != dev->cpu_port &&
-		    p->stp_state == BR_STATE_DISABLED)
+		if (p->stp_state == BR_STATE_DISABLED)
 			member = dev->host_mask | p->vid_member;
 		break;
 	case BR_STATE_LEARNING:
@@ -216,10 +187,6 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 		break;
 	case BR_STATE_FORWARDING:
 		data |= (PORT_TX_ENABLE | PORT_RX_ENABLE);
-
-		/* This function is also used internally. */
-		if (port == dev->cpu_port)
-			break;
 
 		member = dev->host_mask | p->vid_member;
 		mutex_lock(&dev->dev_mutex);
@@ -233,8 +200,7 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 		break;
 	case BR_STATE_BLOCKING:
 		data |= PORT_LEARN_DISABLE;
-		if (port != dev->cpu_port &&
-		    p->stp_state == BR_STATE_DISABLED)
+		if (p->stp_state == BR_STATE_DISABLED)
 			member = dev->host_mask | p->vid_member;
 		break;
 	default:
@@ -839,9 +805,6 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 			interface = lan937x_get_interface(dev, i);
 			if (!p->interface) {
 				if (dev->compat_interface) {
-					dev_warn(dev->dev,
-						 "Using legacy switch \"phy-mode\" property, because it is missing on port %d node. Please update your device tree.\n",
-						 i);
 					p->interface = dev->compat_interface;
 				} else {
 					p->interface = interface;
