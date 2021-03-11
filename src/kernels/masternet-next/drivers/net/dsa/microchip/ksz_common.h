@@ -148,6 +148,8 @@ int ksz8795_switch_register(struct ksz_device *dev);
 int ksz9477_switch_register(struct ksz_device *dev);
 int lan937x_switch_register(struct ksz_device *dev);
 
+int lan937x_check_device_id(struct ksz_device *dev);
+
 void ksz_update_port_member(struct ksz_device *dev, int port);
 void ksz_init_mib_timer(struct ksz_device *dev);
 

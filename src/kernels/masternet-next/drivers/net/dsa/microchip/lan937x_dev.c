@@ -55,65 +55,6 @@ const struct mib_names lan937x_mib_names[] = {
 	{ 0x83, "tx_discards" },
 };
 
-static const struct lan937x_chip_data lan937x_switch_chips[] = {
-	{
-		.chip_id = 0x00937000,
-		.dev_name = "LAN9370",
-		.num_vlans = 4096,
-		.num_alus = 1024,
-		.num_statics = 256,
-		/* can be configured as cpu port */
-		.cpu_ports = 0x10,
-		/* total port count */
-		.port_cnt = 5,
-	},
-	{
-		.chip_id = 0x00937100,
-		.dev_name = "LAN9371",
-		.num_vlans = 4096,
-		.num_alus = 1024,
-		.num_statics = 256,
-		/* can be configured as cpu port */
-		.cpu_ports = 0x30,
-		/* total port count */
-		.port_cnt = 6,
-	},
-	{
-		.chip_id = 0x00937200,
-		.dev_name = "LAN9372",
-		.num_vlans = 4096,
-		.num_alus = 1024,
-		.num_statics = 256,
-		/* can be configured as cpu port */
-		.cpu_ports = 0x30,
-		/* total port count */
-		.port_cnt = 8,
-	},
-	{
-		.chip_id = 0x00937300,
-		.dev_name = "LAN9373",
-		.num_vlans = 4096,
-		.num_alus = 1024,
-		.num_statics = 256,
-		/* can be configured as cpu port */
-		.cpu_ports = 0x38,
-		/* total port count */
-		.port_cnt = 5,
-	},
-	{
-		.chip_id = 0x00937400,
-		.dev_name = "LAN9374",
-		.num_vlans = 4096,
-		.num_alus = 1024,
-		.num_statics = 256,
-		/* can be configured as cpu port */
-		.cpu_ports = 0x30,
-		/* total port count */
-		.port_cnt = 8,
-	},
-
-};
-
 void lan937x_cfg(struct ksz_device *dev, u32 addr, u8 bits, bool set)
 {
 	regmap_update_bits(dev->regmap[0], addr, bits, set ? bits : 0);
@@ -613,29 +554,18 @@ static int lan937x_mdio_register(struct dsa_switch *ds)
 	return 0;
 }
 
+
 static int lan937x_switch_init(struct ksz_device *dev)
 {
-	int i;
+	int i, ret;
 
 	dev->ds->ops = &lan937x_switch_ops;
 
-	for (i = 0; i < ARRAY_SIZE(lan937x_switch_chips); i++) {
-		const struct lan937x_chip_data *chip = &lan937x_switch_chips[i];
+	/* Check device tree */
+	ret = lan937x_check_device_id(dev);
 
-		if (dev->chip_id == chip->chip_id) {
-			dev->name = chip->dev_name;
-			dev->num_vlans = chip->num_vlans;
-			dev->num_alus = chip->num_alus;
-			dev->num_statics = chip->num_statics;
-			dev->port_cnt = chip->port_cnt;
-			dev->cpu_ports = chip->cpu_ports;
-			break;
-		}
-	}
-
-	/* no switch found */
-	if (!dev->port_cnt)
-		return -ENODEV;
+	if (ret)
+		return ret;
 
 	dev->port_mask = (1 << dev->port_cnt) - 1;
 

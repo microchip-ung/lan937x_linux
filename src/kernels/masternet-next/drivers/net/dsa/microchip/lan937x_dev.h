@@ -43,16 +43,6 @@ struct mib_names {
 	char string[ETH_GSTRING_LEN];
 };
 
-struct lan937x_chip_data {
-	u32 chip_id;
-	const char *dev_name;
-	int num_vlans;
-	int num_alus;
-	int num_statics;
-	int cpu_ports;
-	int port_cnt;
-};
-
 struct lan_alu_struct {
 	/* entry 1 */
 	u8	is_static:1;

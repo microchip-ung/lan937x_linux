@@ -209,10 +209,9 @@
 						};
 					};
 					mdio {
-						compatible = "microchip,lan937x-mdio";
-						reg = <0x0>;
 						#address-cells = <1>;
 						#size-cells = <0>;
+						compatible = "microchip,lan937x-mdio";
 						
 						t1phy0: ethernet-phy@0{
 							reg = <0x0>;
