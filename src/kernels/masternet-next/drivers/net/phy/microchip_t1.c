@@ -236,13 +236,6 @@ static irqreturn_t lan87xx_handle_interrupt(struct phy_device *phydev)
 	return IRQ_HANDLED;
 }
 
-static int lan87xx_config_init(struct phy_device *phydev)
-{
-	int rc = lan87xx_phy_init(phydev);
-
-	return rc < 0 ? rc : 0;
-}
-
 static int lan937x_read_status(struct phy_device *phydev)
 {
 	int val1, val2;

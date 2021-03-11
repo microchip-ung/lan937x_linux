@@ -188,26 +188,16 @@
 							label = "lan2";
 						};
 						port@2 {
-							reg = <7>;
-							phy-mode=<&t1phy2>;
-							label = "lan3";
-						};
-						port@3 {
 							reg = <2>;
-							phy-mode=<&t1phy3>;
+							phy-mode=<&t1phy2>;
 							label = "lan4";
 						};
-						port@4 {
-							reg = <6>;
-							phy-mode=<&t1phy4>;
-							label = "lan5";
-						};
-						port@5 {
+						port@3 {
 							reg = <3>;
-							phy-mode=<&t1phy5>;
+							phy-mode=<&t1phy3>;
 							label = "lan6";
 						};
-						port@6 {
+						port@4 {
 							reg = <4>;
 							phy-mode = "rgmii-tx";
 							label = "cpu";
@@ -217,7 +207,7 @@
 								full-duplex;
 							};
 						};
-						port@7 {
+						port@5 {
 							reg = <5>;
 							phy-mode = "rgmii-tx";
 							label = "lan7";
@@ -226,10 +216,19 @@
 								full-duplex;
 							};
 						};
+						port@6 {
+							reg = <6>;
+							phy-mode=<&t1phy4>;
+							label = "lan5";
+						};
+						port@7 {
+							reg = <7>;
+							phy-mode=<&t1phy5>;
+							label = "lan3";
+						};
 					};
 					mdio {
 						compatible = "microchip,lan937x-mdio";
-						reg = <0x0>;
 						#address-cells = <1>;
 						#size-cells = <0>;
 						
@@ -246,10 +245,10 @@
 							reg = <0x3>;
 						};
 						t1phy4: ethernet-phy@4{
-							reg = <0x3>;
+							reg = <0x6>;
 						};
 						t1phy5: ethernet-phy@5{
-							reg = <0x3>;
+							reg = <0x7>;
 						};
 					};
 				};
