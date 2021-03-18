@@ -13,6 +13,7 @@
 #include "lan937x_ptp.h"
 #include "ksz_common.h"
 #include "lan937x_dev.h"
+#include "lan937x_tc.h"
 
 static int lan937x_wait_vlan_ctrl_ready(struct ksz_device *dev)
 {
@@ -306,10 +307,10 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 		vlan_table[1] |= BIT(port);
 	else
 		vlan_table[1] &= ~BIT(port);
+
 	vlan_table[1] &= ~(BIT(dev->cpu_port));
 
-	vlan_table[2] |= BIT(port) |
-					BIT(dev->cpu_port);
+	vlan_table[2] |= BIT(port) | BIT(dev->cpu_port);
 
 	err = lan937x_set_vlan_table(dev, vlan->vid, vlan_table);
 	if (err) {
@@ -928,6 +929,8 @@ static int lan937x_setup(struct dsa_switch *ds)
 	ret = lan937x_ptp_init(dev);
 	if (ret) 
                 goto error_ptp_deinit;
+        
+        lan937x_tc_queue_init(ds);
 
 	/* start switch */
 	lan937x_cfg(dev, REG_SW_OPERATION, SW_START, true);
@@ -1005,6 +1008,7 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 		   __ETHTOOL_LINK_MODE_MASK_NBITS);
 }
 
+
 const struct dsa_switch_ops lan937x_switch_ops = {
 	.get_tag_protocol	= lan937x_get_tag_protocol,
 	.setup			= lan937x_setup,
@@ -1037,7 +1041,8 @@ const struct dsa_switch_ops lan937x_switch_ops = {
         /* never defer rx delivery, tstamping is done via tail tagging */
 	.port_rxtstamp		= NULL, 
 	.port_txtstamp		= lan937x_port_txtstamp,
-	.get_ts_info            = lan937x_get_ts_info
+	.get_ts_info            = lan937x_get_ts_info,
+        .port_setup_tc          = lan937x_setup_tc
 };
 
 

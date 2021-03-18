@@ -646,7 +646,7 @@ static void t1_phy_port_init(struct ksz_device *dev, int port)
 
 	/* Configure T1 phy role */
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_M_CTRL,
-				   PORT_T1_M_CFG, true);
+				   PORT_T1_M_CFG, false);
 
 	/* Software reset. */
 	lan937x_t1_tx_phy_mod_bits(dev, port, REG_PORT_T1_PHY_BASIC_CTRL,
