@@ -218,6 +218,27 @@ static int access_ereg_clr_poll_timeout(struct phy_device *phydev, u8 bank,
 				     150, 30000, true);
 }
 
+static int lan87xx_phy_config_intr(struct phy_device *phydev)
+{
+	int rc, val = 0;
+
+	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
+		/* unmask all source and clear them before enable */
+		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, 0x7FFF);
+		rc = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
+		val = LAN87XX_MASK_LINK_UP | LAN87XX_MASK_LINK_DOWN;
+		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, val);
+	} else {
+		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, val);
+		if (rc)
+			return rc;
+
+		rc = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
+	}
+
+	return rc < 0 ? rc : 0;
+}
+
 static irqreturn_t lan87xx_handle_interrupt(struct phy_device *phydev)
 {
 	int irq_status;
@@ -457,40 +478,33 @@ static int mchp_t1_phy_config_init(struct phy_device *phydev)
 }
 
 static struct phy_driver microchip_t1_phy_driver[] = {
-	/*{
-		.phy_id         = 0x0007c150,
-		.phy_id_mask    = 0xfffffff0,
-		.name           = "LAN87xx T1",
-
-		.features       = PHY_BASIC_T1_FEATURES,
-
-		.config_init	= mchp_t1_phy_config_init,
-
-		.config_intr    = lan87xx_phy_config_intr,
-		.handle_interrupt = lan87xx_handle_interrupt,
-
-		.suspend        = genphy_suspend,
-		.resume         = genphy_resume,
-	}*/
-	{
-		.phy_id = 0x0007c150,/*TBD*/
-		.phy_id_mask = 0xfffffff0,
-		.name = "LAN937x T1",
-		.read_status = lan937x_read_status,
-
-		.features = PHY_BASIC_T1_FEATURES,
-
-		.config_init = mchp_t1_phy_config_init,
-
-		.suspend = genphy_suspend,
-		.resume = genphy_resume,
-	}
-};
+/*{
+	.phy_id         = 0x0007c150,
+	.phy_id_mask    = 0xfffffff0,
+	.name           = "LAN87xx T1",
+	.features       = PHY_BASIC_T1_FEATURES,
+	.config_init	= mchp_t1_phy_config_init,
+	.config_intr    = lan87xx_phy_config_intr,
+	.handle_interrupt = lan87xx_handle_interrupt,
+	.suspend        = genphy_suspend,
+	.resume         = genphy_resume,
+}, */{
+	/*.phy_id 		= 0x0007c181,*/
+	.phy_id			= 0x0007c150,
+	.phy_id_mask 	= 0xfffffff0,
+	.name 			= "LAN937x T1",
+	.read_status 	= lan937x_read_status,
+	.features 		= PHY_BASIC_T1_FEATURES,
+	.config_init 	= mchp_t1_phy_config_init,
+	.suspend 		= genphy_suspend,
+	.resume 		= genphy_resume,
+} };
 
 module_phy_driver(microchip_t1_phy_driver);
 
 static struct mdio_device_id __maybe_unused microchip_t1_tbl[] = {
-	/*{ 0x0007c150, 0xfffffff0 },*/
+/*	{ 0x0007c150, 0xfffffff0 },*/
+/*	{ 0x0007c181, 0xfffffff0 },*/
 	{ 0x0007c150, 0xfffffff0 },
 	{}
 };

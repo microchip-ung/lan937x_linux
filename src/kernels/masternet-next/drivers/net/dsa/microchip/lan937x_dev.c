@@ -365,7 +365,7 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr,
 	unsigned int value;
 	int ret;
 
-		/* Check for internal phy port */
+	/* Check for internal phy port */
 	if (!lan937x_is_internal_phy_port(dev, addr))
 		return 0;
 
@@ -392,7 +392,6 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr,
 	}
 	/* Read the VPHY register which has the PHY data*/
 	ksz_read16(dev, REG_VPHY_IND_DATA__2, val);
-
 
 	return 0;
 }

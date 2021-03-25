@@ -135,10 +135,10 @@ examples:
             reg = <0x3>;
           };
           t1phy4: ethernet-phy@4{
-            reg = <0x4>;
+            reg = <0x6>;
           };
           t1phy5: ethernet-phy@5{
-            reg = <0x5>;
+            reg = <0x7>;
           };
 				};
       };

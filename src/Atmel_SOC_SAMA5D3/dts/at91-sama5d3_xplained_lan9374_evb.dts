@@ -179,22 +179,22 @@
 						#size-cells = <0>;
 						port@0 {
 							reg = <0>;
-							phy-mode=<&t1phy0>;
+							phy-handle=<&t1phy0>;
 							label = "lan1";
 						};
 						port@1 {
 							reg = <1>;
-							phy-mode=<&t1phy1>;
+							phy-handle=<&t1phy1>;
 							label = "lan2";
 						};
 						port@2 {
 							reg = <2>;
-							phy-mode=<&t1phy2>;
+							phy-handle=<&t1phy2>;
 							label = "lan4";
 						};
 						port@3 {
 							reg = <3>;
-							phy-mode=<&t1phy3>;
+							phy-handle=<&t1phy3>;
 							label = "lan6";
 						};
 						port@4 {
@@ -218,12 +218,12 @@
 						};
 						port@6 {
 							reg = <6>;
-							phy-mode=<&t1phy4>;
+							phy-handle=<&t1phy4>;
 							label = "lan5";
 						};
 						port@7 {
 							reg = <7>;
-							phy-mode=<&t1phy5>;
+							phy-handle=<&t1phy5>;
 							label = "lan3";
 						};
 					};
