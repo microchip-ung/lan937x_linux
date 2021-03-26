@@ -335,8 +335,6 @@ static void mcp251xfd_ring_init(struct mcp251xfd_priv *priv)
 	u8 len;
 	int i, j;
 
-	netdev_reset_queue(priv->ndev);
-
 	/* TEF */
 	tef_ring = priv->tef;
 	tef_ring->head = 0;
@@ -596,11 +594,9 @@ static int mcp251xfd_chip_clock_enable(const struct mcp251xfd_priv *priv)
 			   "Timeout waiting for Oscillator Ready (osc=0x%08x, osc_reference=0x%08x)\n",
 			   osc, osc_reference);
 		return -ETIMEDOUT;
-	} else if (err) {
-		return err;
 	}
 
-	return 0;
+	return err;
 }
 
 static int mcp251xfd_chip_softreset_do(const struct mcp251xfd_priv *priv)
@@ -651,7 +647,7 @@ static int mcp251xfd_chip_softreset_check(const struct mcp251xfd_priv *priv)
 
 	if (osc != osc_reference) {
 		netdev_info(priv->ndev,
-			    "Controller failed to reset. osc=0x%08x, reference value=0x%08x\n",
+			    "Controller failed to reset. osc=0x%08x, reference value=0x%08x.\n",
 			    osc, osc_reference);
 		return -ETIMEDOUT;
 	}
@@ -666,7 +662,7 @@ static int mcp251xfd_chip_softreset(const struct mcp251xfd_priv *priv)
 	for (i = 0; i < MCP251XFD_SOFTRESET_RETRIES_MAX; i++) {
 		if (i)
 			netdev_info(priv->ndev,
-				    "Retrying to reset Controller.\n");
+				    "Retrying to reset controller.\n");
 
 		err = mcp251xfd_chip_softreset_do(priv);
 		if (err == -ETIMEDOUT)
@@ -1239,7 +1235,7 @@ mcp251xfd_handle_tefif_recover(const struct mcp251xfd_priv *priv, const u32 seq)
 	}
 
 	netdev_info(priv->ndev,
-		    "Transmit Event FIFO buffer %s. (seq=0x%08x, tef_tail=0x%08x, tef_head=0x%08x, tx_head=0x%08x)\n",
+		    "Transmit Event FIFO buffer %s. (seq=0x%08x, tef_tail=0x%08x, tef_head=0x%08x, tx_head=0x%08x).\n",
 		    tef_sta & MCP251XFD_REG_TEFSTA_TEFFIF ?
 		    "full" : tef_sta & MCP251XFD_REG_TEFSTA_TEFNEIF ?
 		    "not empty" : "empty",
@@ -1251,8 +1247,7 @@ mcp251xfd_handle_tefif_recover(const struct mcp251xfd_priv *priv, const u32 seq)
 
 static int
 mcp251xfd_handle_tefif_one(struct mcp251xfd_priv *priv,
-			   const struct mcp251xfd_hw_tef_obj *hw_tef_obj,
-			   unsigned int *frame_len_ptr)
+			   const struct mcp251xfd_hw_tef_obj *hw_tef_obj)
 {
 	struct net_device_stats *stats = &priv->ndev->stats;
 	u32 seq, seq_masked, tef_tail_masked;
@@ -1274,8 +1269,7 @@ mcp251xfd_handle_tefif_one(struct mcp251xfd_priv *priv,
 	stats->tx_bytes +=
 		can_rx_offload_get_echo_skb(&priv->offload,
 					    mcp251xfd_get_tef_tail(priv),
-					    hw_tef_obj->ts,
-					    frame_len_ptr);
+					    hw_tef_obj->ts, NULL);
 	stats->tx_packets++;
 	priv->tef->tail++;
 
@@ -1333,7 +1327,6 @@ mcp251xfd_tef_obj_read(const struct mcp251xfd_priv *priv,
 static int mcp251xfd_handle_tefif(struct mcp251xfd_priv *priv)
 {
 	struct mcp251xfd_hw_tef_obj hw_tef_obj[MCP251XFD_TX_OBJ_NUM_MAX];
-	unsigned int total_frame_len = 0;
 	u8 tef_tail, len, l;
 	int err, i;
 
@@ -1355,9 +1348,7 @@ static int mcp251xfd_handle_tefif(struct mcp251xfd_priv *priv)
 	}
 
 	for (i = 0; i < len; i++) {
-		unsigned int frame_len;
-
-		err = mcp251xfd_handle_tefif_one(priv, &hw_tef_obj[i], &frame_len);
+		err = mcp251xfd_handle_tefif_one(priv, &hw_tef_obj[i]);
 		/* -EAGAIN means the Sequence Number in the TEF
 		 * doesn't match our tef_tail. This can happen if we
 		 * read the TEF objects too early. Leave loop let the
@@ -1367,8 +1358,6 @@ static int mcp251xfd_handle_tefif(struct mcp251xfd_priv *priv)
 			goto out_netif_wake_queue;
 		if (err)
 			return err;
-
-		total_frame_len += frame_len;
 	}
 
  out_netif_wake_queue:
@@ -1399,7 +1388,6 @@ static int mcp251xfd_handle_tefif(struct mcp251xfd_priv *priv)
 			return err;
 
 		tx_ring->tail += len;
-		netdev_completed_queue(priv->ndev, len, total_frame_len);
 
 		err = mcp251xfd_check_tef_tail(priv);
 		if (err)
@@ -1465,7 +1453,7 @@ mcp251xfd_hw_rx_obj_to_skb(const struct mcp251xfd_priv *priv,
 					hw_rx_obj->id);
 	}
 
-	dlc = FIELD_GET(MCP251XFD_OBJ_FLAGS_DLC, hw_rx_obj->flags);
+	dlc = FIELD_GET(MCP251XFD_OBJ_FLAGS_DLC_MASK, hw_rx_obj->flags);
 
 	/* CANFD */
 	if (hw_rx_obj->flags & MCP251XFD_OBJ_FLAGS_FDF) {
@@ -1891,7 +1879,7 @@ mcp251xfd_handle_modif(const struct mcp251xfd_priv *priv, bool *set_normal_mode)
 			   "Controller changed into %s Mode (%u).\n",
 			   mcp251xfd_get_mode_str(mode), mode);
 
-	/* After the application requests Normal mode, the Controller
+	/* After the application requests Normal mode, the controller
 	 * will automatically attempt to retransmit the message that
 	 * caused the TX MAB underflow.
 	 *
@@ -2359,7 +2347,7 @@ mcp251xfd_tx_obj_from_skb(const struct mcp251xfd_priv *priv,
 				     priv->can.ctrlmode);
 	}
 
-	flags |= FIELD_PREP(MCP251XFD_OBJ_FLAGS_DLC, dlc);
+	flags |= FIELD_PREP(MCP251XFD_OBJ_FLAGS_DLC_MASK, dlc);
 
 	load_buf = &tx_obj->buf;
 	if (priv->devtype_data.quirks & MCP251XFD_QUIRK_CRC_TX)
@@ -2445,7 +2433,6 @@ static netdev_tx_t mcp251xfd_start_xmit(struct sk_buff *skb,
 	struct mcp251xfd_priv *priv = netdev_priv(ndev);
 	struct mcp251xfd_tx_ring *tx_ring = priv->tx;
 	struct mcp251xfd_tx_obj *tx_obj;
-	unsigned int frame_len;
 	u8 tx_head;
 	int err;
 
@@ -2464,9 +2451,7 @@ static netdev_tx_t mcp251xfd_start_xmit(struct sk_buff *skb,
 	if (mcp251xfd_get_tx_free(tx_ring) == 0)
 		netif_stop_queue(ndev);
 
-	frame_len = can_skb_get_frame_len(skb);
-	can_put_echo_skb(skb, ndev, tx_head, frame_len);
-	netdev_sent_queue(priv->ndev, frame_len);
+	can_put_echo_skb(skb, ndev, tx_head, 0);
 
 	err = mcp251xfd_tx_obj_write(priv, tx_obj);
 	if (err)
@@ -2851,32 +2836,28 @@ static int mcp251xfd_probe(struct spi_device *spi)
 
 	rx_int = devm_gpiod_get_optional(&spi->dev, "microchip,rx-int",
 					 GPIOD_IN);
-	if (PTR_ERR(rx_int) == -EPROBE_DEFER)
-		return -EPROBE_DEFER;
-	else if (IS_ERR(rx_int))
-		return PTR_ERR(rx_int);
+	if (IS_ERR(rx_int))
+		return dev_err_probe(&spi->dev, PTR_ERR(rx_int),
+				     "Failed to get RX-INT!\n");
 
 	reg_vdd = devm_regulator_get_optional(&spi->dev, "vdd");
-	if (PTR_ERR(reg_vdd) == -EPROBE_DEFER)
-		return -EPROBE_DEFER;
-	else if (PTR_ERR(reg_vdd) == -ENODEV)
+	if (PTR_ERR(reg_vdd) == -ENODEV)
 		reg_vdd = NULL;
 	else if (IS_ERR(reg_vdd))
-		return PTR_ERR(reg_vdd);
+		return dev_err_probe(&spi->dev, PTR_ERR(reg_vdd),
+				     "Failed to get VDD regulator!\n");
 
 	reg_xceiver = devm_regulator_get_optional(&spi->dev, "xceiver");
-	if (PTR_ERR(reg_xceiver) == -EPROBE_DEFER)
-		return -EPROBE_DEFER;
-	else if (PTR_ERR(reg_xceiver) == -ENODEV)
+	if (PTR_ERR(reg_xceiver) == -ENODEV)
 		reg_xceiver = NULL;
 	else if (IS_ERR(reg_xceiver))
-		return PTR_ERR(reg_xceiver);
+		return dev_err_probe(&spi->dev, PTR_ERR(reg_xceiver),
+				     "Failed to get Transceiver regulator!\n");
 
 	clk = devm_clk_get(&spi->dev, NULL);
-	if (IS_ERR(clk)) {
-		dev_err(&spi->dev, "No Oscillator (clock) defined.\n");
-		return PTR_ERR(clk);
-	}
+	if (IS_ERR(clk))
+		dev_err_probe(&spi->dev, PTR_ERR(clk),
+			      "Failed to get Oscillator (clock)!\n");
 	freq = clk_get_rate(clk);
 
 	/* Sanity check */
@@ -2932,7 +2913,7 @@ static int mcp251xfd_probe(struct spi_device *spi)
 			spi_get_device_id(spi)->driver_data;
 
 	/* Errata Reference:
-	 * mcp2517fd: DS80000789B, mcp2518fd: DS80000792C 4.
+	 * mcp2517fd: DS80000792C 5., mcp2518fd: DS80000789C 4.
 	 *
 	 * The SPI can write corrupted data to the RAM at fast SPI
 	 * speeds:
@@ -2945,18 +2926,16 @@ static int mcp251xfd_probe(struct spi_device *spi)
 	 * Ensure that FSCK is less than or equal to 0.85 *
 	 * (FSYSCLK/2).
 	 *
-	 * Known good and bad combinations are:
+	 * Known good combinations are:
 	 *
-	 * MCP	ext-clk	SoC			SPI			SPI-clk		max-clk	parent-clk	Status	config
+	 * MCP	ext-clk	SoC			SPI			SPI-clk		max-clk	parent-clk	config
 	 *
-	 * 2518	20 MHz	allwinner,sun8i-h3	allwinner,sun8i-h3-spi	 8333333 Hz	 83.33%	600000000 Hz	good	assigned-clocks = <&ccu CLK_SPIx>
-	 * 2518	20 MHz	allwinner,sun8i-h3	allwinner,sun8i-h3-spi	 9375000 Hz	 93.75%	600000000 Hz	bad	assigned-clocks = <&ccu CLK_SPIx>
-	 * 2518	40 MHz	allwinner,sun8i-h3	allwinner,sun8i-h3-spi	16666667 Hz	 83.33%	600000000 Hz	good	assigned-clocks = <&ccu CLK_SPIx>
-	 * 2518	40 MHz	allwinner,sun8i-h3	allwinner,sun8i-h3-spi	18750000 Hz	 93.75%	600000000 Hz	bad	assigned-clocks = <&ccu CLK_SPIx>
-	 * 2517	20 MHz	fsl,imx8mm		fsl,imx51-ecspi		 8333333 Hz	 83.33%	 16666667 Hz	good	assigned-clocks = <&clk IMX8MM_CLK_ECSPIx_ROOT>
-	 * 2517	20 MHz	fsl,imx8mm		fsl,imx51-ecspi		 9523809 Hz	 95.34%	 28571429 Hz	bad	assigned-clocks = <&clk IMX8MM_CLK_ECSPIx_ROOT>
-	 * 2517 40 MHz	atmel,sama5d27		atmel,at91rm9200-spi	16400000 Hz	 82.00%	 82000000 Hz	good	default
-	 * 2518 40 MHz	atmel,sama5d27		atmel,at91rm9200-spi	16400000 Hz	 82.00%	 82000000 Hz	good	default
+	 * 2518	20 MHz	allwinner,sun8i-h3	allwinner,sun8i-h3-spi	 8333333 Hz	 83.33%	600000000 Hz	assigned-clocks = <&ccu CLK_SPIx>
+	 * 2518	40 MHz	allwinner,sun8i-h3	allwinner,sun8i-h3-spi	16666667 Hz	 83.33%	600000000 Hz	assigned-clocks = <&ccu CLK_SPIx>
+	 * 2517	40 MHz	atmel,sama5d27		atmel,at91rm9200-spi	16400000 Hz	 82.00%	 82000000 Hz	default
+	 * 2518	40 MHz	atmel,sama5d27		atmel,at91rm9200-spi	16400000 Hz	 82.00%	 82000000 Hz	default
+	 * 2518	40 MHz	fsl,imx6dl		fsl,imx51-ecspi		15000000 Hz	 75.00%	 30000000 Hz	default
+	 * 2517	20 MHz	fsl,imx8mm		fsl,imx51-ecspi		 8333333 Hz	 83.33%	 16666667 Hz	assigned-clocks = <&clk IMX8MM_CLK_ECSPIx_ROOT>
 	 *
 	 */
 	priv->spi_max_speed_hz_orig = spi->max_speed_hz;

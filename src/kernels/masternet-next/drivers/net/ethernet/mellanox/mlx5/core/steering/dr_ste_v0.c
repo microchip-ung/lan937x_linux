@@ -248,8 +248,8 @@ static void dr_ste_v0_set_miss_addr(u8 *hw_ste_p, u64 miss_addr)
 static u64 dr_ste_v0_get_miss_addr(u8 *hw_ste_p)
 {
 	u64 index =
-		(MLX5_GET(ste_rx_steering_mult, hw_ste_p, miss_address_31_6) |
-		 MLX5_GET(ste_rx_steering_mult, hw_ste_p, miss_address_39_32) << 26);
+		((u64)MLX5_GET(ste_rx_steering_mult, hw_ste_p, miss_address_31_6) |
+		 ((u64)MLX5_GET(ste_rx_steering_mult, hw_ste_p, miss_address_39_32)) << 26);
 
 	return index << 6;
 }
@@ -331,7 +331,7 @@ static void dr_ste_v0_set_tx_push_vlan(u8 *hw_ste_p, u32 vlan_hdr,
 	MLX5_SET(ste_sx_transmit, hw_ste_p, action_type,
 		 DR_STE_ACTION_TYPE_PUSH_VLAN);
 	MLX5_SET(ste_sx_transmit, hw_ste_p, encap_pointer_vlan_data, vlan_hdr);
-	/* Due to HW limitation we need to set this bit, otherwise reforamt +
+	/* Due to HW limitation we need to set this bit, otherwise reformat +
 	 * push vlan will not work.
 	 */
 	if (go_back)

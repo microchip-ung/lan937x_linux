@@ -135,11 +135,11 @@ Resume
 On transmit:
 ------------
 
-dev->header_ops != NULL
+dev_has_header(dev) == true
    mac_header -> ll header
    data       -> ll header
 
-dev->header_ops == NULL (ll header is invisible to us)
+dev_has_header(dev) == false (ll header is invisible to us)
    mac_header -> data
    data       -> data
 
@@ -2057,7 +2057,7 @@ static int packet_rcv_vnet(struct msghdr *msg, const struct sk_buff *skb,
  * and skb->cb are mangled. It works because (and until) packets
  * falling here are owned by current CPU. Output packets are cloned
  * by dev_queue_xmit_nit(), input packets are processed by net_bh
- * sequencially, so that if we return skb to original state on exit,
+ * sequentially, so that if we return skb to original state on exit,
  * we will not harm anyone.
  */
 

@@ -232,7 +232,8 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 }
 
 static int lan937x_port_vlan_filtering(struct dsa_switch *ds, int port,
-				       bool flag)
+				       bool flag,
+				       struct netlink_ext_ack *extack)
 {
 	struct ksz_device *dev = ds->priv;
 
@@ -250,7 +251,8 @@ static int lan937x_port_vlan_filtering(struct dsa_switch *ds, int port,
 }
 
 static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
-				 const struct switchdev_obj_port_vlan *vlan)
+				 const struct switchdev_obj_port_vlan *vlan,
+				 struct netlink_ext_ack *extack)
 {
 	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
 	struct ksz_device *dev = ds->priv;
@@ -960,6 +962,20 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 		   __ETHTOOL_LINK_MODE_MASK_NBITS);
 }
 
+int	lan937x_port_pre_bridge_flags(struct dsa_switch *ds, int port,
+					 struct switchdev_brport_flags flags,
+					 struct netlink_ext_ack *extack)
+{
+	return 0;
+}
+
+int	lan937x_port_bridge_flags(struct dsa_switch *ds, int port,
+					 struct switchdev_brport_flags flags,
+					 struct netlink_ext_ack *extack)
+{
+	return 0;
+}
+
 const struct dsa_switch_ops lan937x_switch_ops = {
 	.get_tag_protocol	= lan937x_get_tag_protocol,
 	.setup			= lan937x_setup,
@@ -971,6 +987,8 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.get_sset_count		= ksz_sset_count,
 	.port_bridge_join	= ksz_port_bridge_join,
 	.port_bridge_leave	= ksz_port_bridge_leave,
+	.port_pre_bridge_flags	= lan937x_port_pre_bridge_flags,
+	.port_bridge_flags	= lan937x_port_bridge_flags,
 	.port_stp_state_set	= lan937x_port_stp_state_set,
 	.port_fast_age		= ksz_port_fast_age,
 	.port_vlan_filtering	= lan937x_port_vlan_filtering,

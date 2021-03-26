@@ -426,13 +426,29 @@ struct ethtool_link_usettings {
 int __ethtool_get_link_ksettings(struct net_device *dev,
 				 struct ethtool_link_ksettings *link_ksettings)
 {
+	const struct link_mode_info *link_info;
+	int err;
+
 	ASSERT_RTNL();
 
 	if (!dev->ethtool_ops->get_link_ksettings)
 		return -EOPNOTSUPP;
 
 	memset(link_ksettings, 0, sizeof(*link_ksettings));
-	return dev->ethtool_ops->get_link_ksettings(dev, link_ksettings);
+
+	link_ksettings->link_mode = -1;
+	err = dev->ethtool_ops->get_link_ksettings(dev, link_ksettings);
+	if (err)
+		return err;
+
+	if (link_ksettings->link_mode != -1) {
+		link_info = &link_mode_params[link_ksettings->link_mode];
+		link_ksettings->base.speed = link_info->speed;
+		link_ksettings->lanes = link_info->lanes;
+		link_ksettings->base.duplex = link_info->duplex;
+	}
+
+	return 0;
 }
 EXPORT_SYMBOL(__ethtool_get_link_ksettings);
 
@@ -1827,6 +1843,18 @@ out:
 	vfree(data);
 	return ret;
 }
+
+__printf(2, 3) void ethtool_sprintf(u8 **data, const char *fmt, ...)
+{
+	va_list args;
+
+	va_start(args, fmt);
+	vsnprintf(*data, ETH_GSTRING_LEN, fmt, args);
+	va_end(args);
+
+	*data += ETH_GSTRING_LEN;
+}
+EXPORT_SYMBOL(ethtool_sprintf);
 
 static int ethtool_phys_id(struct net_device *dev, void __user *useraddr)
 {

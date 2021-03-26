@@ -8,53 +8,53 @@
 #include <linux/phy.h>
 
 /* External Register Control Register */
-#define LAN87XX_EXT_REG_CTL 		(0x14)
-#define LAN87XX_EXT_REG_CTL_RD_CTL 	(0x1000)
-#define LAN87XX_EXT_REG_CTL_WR_CTL 	(0x0800)
+#define LAN87XX_EXT_REG_CTL                     (0x14)
+#define LAN87XX_EXT_REG_CTL_RD_CTL              (0x1000)
+#define LAN87XX_EXT_REG_CTL_WR_CTL              (0x0800)
 
 /* External Register Read Data Register */
-#define LAN87XX_EXT_REG_RD_DATA (0x15)
+#define LAN87XX_EXT_REG_RD_DATA                 (0x15)
 
 /* External Register Write Data Register */
-#define LAN87XX_EXT_REG_WR_DATA 	(0x16)
+#define LAN87XX_EXT_REG_WR_DATA                 (0x16)
 
 /* Interrupt Source Register */
-#define LAN87XX_INTERRUPT_SOURCE (0x18)
+#define LAN87XX_INTERRUPT_SOURCE                (0x18)
 
 /* Interrupt Mask Register */
-#define LAN87XX_INTERRUPT_MASK 	(0x19)
-#define LAN87XX_MASK_LINK_UP	(0x0004)
-#define LAN87XX_MASK_LINK_DOWN 	(0x0002)
+#define LAN87XX_INTERRUPT_MASK                  (0x19)
+#define LAN87XX_MASK_LINK_UP                    (0x0004)
+#define LAN87XX_MASK_LINK_DOWN                  (0x0002)
 
 /* phyaccess nested types */
-#define PHYACC_ATTR_MODE_READ 	0
-#define PHYACC_ATTR_MODE_WRITE 	1
-#define PHYACC_ATTR_MODE_MODIFY 2
-#define PHYACC_ATTR_MODE_POLL 	3
+#define	PHYACC_ATTR_MODE_READ		0
+#define	PHYACC_ATTR_MODE_WRITE		1
+#define	PHYACC_ATTR_MODE_MODIFY		2
+#define PHYACC_ATTR_MODE_POLL 		3
 
-#define PHYACC_ATTR_BANK_SMI 	0
-#define PHYACC_ATTR_BANK_MISC 	1
-#define PHYACC_ATTR_BANK_PCS 	2
-#define PHYACC_ATTR_BANK_AFE 	3
-#define PHYACC_ATTR_BANK_DSP 	4
-#define PHYACC_ATTR_BANK_MAX 	7
+#define	PHYACC_ATTR_BANK_SMI		0
+#define	PHYACC_ATTR_BANK_MISC		1
+#define	PHYACC_ATTR_BANK_PCS		2
+#define	PHYACC_ATTR_BANK_AFE		3
+#define PHYACC_ATTR_BANK_DSP 		4
+#define	PHYACC_ATTR_BANK_MAX		7
 
-#define DRIVER_AUTHOR "Nisar Sayed <nisar.sayed@microchip.com>"
-#define DRIVER_DESC "Microchip LAN87XX T1 PHY driver"
+#define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
+#define DRIVER_DESC	"Microchip LAN87XX T1 PHY driver"
 
 #define REG_PORT_T1_PHY_BASIC_CTRL 0x00
 
-#define PORT_T1_PHY_RESET 		BIT(15)
+#define PORT_T1_PHY_RESET 	BIT(15)
 #define PORT_T1_PHY_LOOPBACK 	BIT(14)
 #define PORT_T1_SPEED_100MBIT 	BIT(13)
-#define PORT_T1_POWER_DOWN 		BIT(11)
-#define PORT_T1_ISOLATE 		BIT(10)
+#define PORT_T1_POWER_DOWN 	BIT(11)
+#define PORT_T1_ISOLATE 	BIT(10)
 #define PORT_T1_FULL_DUPLEX 	BIT(8)
 
 #define REG_PORT_T1_PHY_BASIC_STATUS 0x01
 
 #define PORT_T1_MII_SUPPRESS_CAPABLE 	BIT(6)
-#define PORT_T1_LINK_STATUS 			BIT(2)
+#define PORT_T1_LINK_STATUS 		BIT(2)
 #define PORT_T1_EXTENDED_CAPABILITY 	BIT(0)
 
 #define REG_PORT_T1_PHY_ID_HI 0x02
@@ -71,7 +71,7 @@
 #define REG_PORT_T1_PHY_M_STATUS 0x0A
 
 #define REG_PORT_T1_MODE_STAT 			0x11
-#define T1_PORT_DSCR_LOCK_STATUS_MSK 	BIT(3)
+#define T1_PORT_DSCR_LOCK_STATUS_MSK 		BIT(3)
 #define T1_PORT_LINK_UP_MSK 			BIT(0)
 
 #define REG_PORT_T1_LOOPBACK_CTRL 0x12
@@ -82,7 +82,7 @@
 
 #define REG_PORT_T1_EXT_REG_CTRL 0x14
 
-#define T1_PCS_STS_CNT_RESET 	BIT(15)
+#define T1_PCS_STS_CNT_RESET 		BIT(15)
 #define T1_IND_DATA_READ 		BIT(12)
 #define T1_IND_DATA_WRITE 		BIT(11)
 #define T1_REG_BANK_SEL_M 		0x7
@@ -113,19 +113,19 @@
 #define PORT_T1_REMOTE_RX_OK 	BIT(12)
 
 struct access_ereg_val {
-	u8 mode;
-	u8 bank;
-	u8 offset;
+	u8  mode;
+	u8  bank;
+	u8  offset;
 	u16 val;
 	u16 mask;
 };
 
-static int access_ereg(struct phy_device *phydev, u8 mode, u8 bank, u8 offset,
-		       u16 val)
+static int access_ereg(struct phy_device *phydev, u8 mode, u8 bank,
+		       u8 offset, u16 val)
 {
 	u8 prev_bank;
-	u16 ereg;
-	int rc;
+	u16 ereg = 0;
+	int rc = 0;
 
 	/* return if mode and bank are invalid */
 	if (mode > PHYACC_ATTR_MODE_WRITE || bank > PHYACC_ATTR_BANK_MAX)
@@ -188,8 +188,8 @@ static int access_ereg(struct phy_device *phydev, u8 mode, u8 bank, u8 offset,
 	return rc;
 }
 
-static int access_ereg_modify_changed(struct phy_device *phydev, u8 bank,
-				      u8 offset, u16 val, u16 mask)
+static int access_ereg_modify_changed(struct phy_device *phydev,
+				      u8 bank, u8 offset, u16 val, u16 mask)
 {
 	int new = 0, rc = 0;
 
@@ -216,72 +216,6 @@ static int access_ereg_clr_poll_timeout(struct phy_device *phydev, u8 bank,
 
 	return phy_read_poll_timeout(phydev, offset, val, (val & mask) == clr,
 				     150, 30000, true);
-}
-
-static int lan87xx_phy_config_intr(struct phy_device *phydev)
-{
-	int rc, val = 0;
-
-	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
-		/* unmask all source and clear them before enable */
-		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, 0x7FFF);
-		rc = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
-		val = LAN87XX_MASK_LINK_UP | LAN87XX_MASK_LINK_DOWN;
-		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, val);
-	} else {
-		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, val);
-		if (rc)
-			return rc;
-
-		rc = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
-	}
-
-	return rc < 0 ? rc : 0;
-}
-
-static irqreturn_t lan87xx_handle_interrupt(struct phy_device *phydev)
-{
-	int irq_status;
-
-	irq_status = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
-	if (irq_status < 0) {
-		phy_error(phydev);
-		return IRQ_NONE;
-	}
-
-	if (irq_status == 0)
-		return IRQ_NONE;
-
-	phy_trigger_machine(phydev);
-
-	return IRQ_HANDLED;
-}
-
-static int lan937x_read_status(struct phy_device *phydev)
-{
-	int val1, val2;
-
-	val1 = phy_read(phydev, REG_PORT_T1_PHY_M_STATUS);
-
-	if (val1 < 0)
-		return val1;
-
-	val2 = phy_read(phydev, REG_PORT_T1_MODE_STAT);
-
-	if (val2 < 0)
-		return val2;
-
-	if (val1 & (PORT_T1_LOCAL_RX_OK | PORT_T1_REMOTE_RX_OK) &&
-	    val2 & (T1_PORT_DSCR_LOCK_STATUS_MSK | T1_PORT_LINK_UP_MSK))
-		phydev->link = 1;
-	else
-		phydev->link = 0;
-
-	phydev->duplex = DUPLEX_FULL;
-	phydev->speed = SPEED_100;
-	phydev->pause = phydev->asym_pause = 0;
-
-	return 0;
 }
 
 static int mchp_t1_phy_init(struct phy_device *phydev)
@@ -467,6 +401,45 @@ static int mchp_t1_phy_init(struct phy_device *phydev)
 	return 0;
 }
 
+static int lan87xx_phy_config_intr(struct phy_device *phydev)
+{
+	int rc, val = 0;
+
+	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
+		/* unmask all source and clear them before enable */
+		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, 0x7FFF);
+		rc = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
+		val = LAN87XX_MASK_LINK_UP | LAN87XX_MASK_LINK_DOWN;
+		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, val);
+	} else {
+		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, val);
+		if (rc)
+			return rc;
+
+		rc = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
+	}
+
+	return rc < 0 ? rc : 0;
+}
+
+static irqreturn_t lan87xx_handle_interrupt(struct phy_device *phydev)
+{
+	int irq_status;
+
+	irq_status = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
+	if (irq_status < 0) {
+		phy_error(phydev);
+		return IRQ_NONE;
+	}
+
+	if (irq_status == 0)
+		return IRQ_NONE;
+
+	phy_trigger_machine(phydev);
+
+	return IRQ_HANDLED;
+}
+
 static int mchp_t1_phy_config_init(struct phy_device *phydev)
 {
 	int rc = mchp_t1_phy_init(phydev);
@@ -475,6 +448,33 @@ static int mchp_t1_phy_config_init(struct phy_device *phydev)
 		phydev_err(phydev, "failed to initialize phy\n");
 
 	return rc < 0 ? rc : 0;
+}
+
+static int lan937x_read_status(struct phy_device *phydev)
+{
+	int val1, val2;
+
+	val1 = phy_read(phydev, REG_PORT_T1_PHY_M_STATUS);
+
+	if (val1 < 0)
+		return val1;
+
+	val2 = phy_read(phydev, REG_PORT_T1_MODE_STAT);
+
+	if (val2 < 0)
+		return val2;
+
+	if (val1 & (PORT_T1_LOCAL_RX_OK | PORT_T1_REMOTE_RX_OK) &&
+	    val2 & (T1_PORT_DSCR_LOCK_STATUS_MSK | T1_PORT_LINK_UP_MSK))
+		phydev->link = 1;
+	else
+		phydev->link = 0;
+
+	phydev->duplex = DUPLEX_FULL;
+	phydev->speed = SPEED_100;
+	phydev->pause = phydev->asym_pause = 0;
+
+	return 0;
 }
 
 static struct phy_driver microchip_t1_phy_driver[] = {
@@ -506,7 +506,7 @@ static struct mdio_device_id __maybe_unused microchip_t1_tbl[] = {
 /*	{ 0x0007c150, 0xfffffff0 },*/
 /*	{ 0x0007c181, 0xfffffff0 },*/
 	{ 0x0007c150, 0xfffffff0 },
-	{}
+	{ }
 };
 
 MODULE_DEVICE_TABLE(mdio, microchip_t1_tbl);

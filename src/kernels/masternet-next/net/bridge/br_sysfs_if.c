@@ -16,7 +16,10 @@
 #include <linux/sched/signal.h>
 
 #include "br_private.h"
-#include "br_private_mcast_eht.h"
+
+/* IMPORTANT: new bridge port options must be added with netlink support only
+ *            please do not add new sysfs entries
+ */
 
 struct brport_attribute {
 	struct attribute	attr;
@@ -56,9 +59,9 @@ static BRPORT_ATTR(_name, 0644,					\
 static int store_flag(struct net_bridge_port *p, unsigned long v,
 		      unsigned long mask)
 {
-	unsigned long flags;
-
-	flags = p->flags;
+	struct netlink_ext_ack extack = {0};
+	unsigned long flags = p->flags;
+	int err;
 
 	if (v)
 		flags |= mask;
@@ -66,6 +69,12 @@ static int store_flag(struct net_bridge_port *p, unsigned long v,
 		flags &= ~mask;
 
 	if (flags != p->flags) {
+		err = br_switchdev_set_port_flag(p, flags, mask, &extack);
+		if (err) {
+			netdev_err(p->dev, "%s\n", extack._msg);
+			return err;
+		}
+
 		p->flags = flags;
 		br_port_flags_change(p, mask);
 	}
@@ -246,29 +255,6 @@ static int store_multicast_router(struct net_bridge_port *p,
 static BRPORT_ATTR(multicast_router, 0644, show_multicast_router,
 		   store_multicast_router);
 
-static ssize_t show_multicast_eht_hosts_limit(struct net_bridge_port *p,
-					      char *buf)
-{
-	return sprintf(buf, "%u\n", p->multicast_eht_hosts_limit);
-}
-
-static int store_multicast_eht_hosts_limit(struct net_bridge_port *p,
-					   unsigned long v)
-{
-	return br_multicast_eht_set_hosts_limit(p, v);
-}
-static BRPORT_ATTR(multicast_eht_hosts_limit, 0644,
-		   show_multicast_eht_hosts_limit,
-		   store_multicast_eht_hosts_limit);
-
-static ssize_t show_multicast_eht_hosts_cnt(struct net_bridge_port *p,
-					    char *buf)
-{
-	return sprintf(buf, "%u\n", p->multicast_eht_hosts_cnt);
-}
-static BRPORT_ATTR(multicast_eht_hosts_cnt, 0444, show_multicast_eht_hosts_cnt,
-		   NULL);
-
 BRPORT_ATTR_FLAG(multicast_fast_leave, BR_MULTICAST_FAST_LEAVE);
 BRPORT_ATTR_FLAG(multicast_to_unicast, BR_MULTICAST_TO_UNICAST);
 #endif
@@ -298,8 +284,6 @@ static const struct brport_attribute *brport_attrs[] = {
 	&brport_attr_multicast_router,
 	&brport_attr_multicast_fast_leave,
 	&brport_attr_multicast_to_unicast,
-	&brport_attr_multicast_eht_hosts_limit,
-	&brport_attr_multicast_eht_hosts_cnt,
 #endif
 	&brport_attr_proxyarp,
 	&brport_attr_proxyarp_wifi,

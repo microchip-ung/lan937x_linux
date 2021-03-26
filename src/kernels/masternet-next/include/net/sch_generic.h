@@ -1151,7 +1151,7 @@ static inline struct Qdisc *qdisc_replace(struct Qdisc *sch, struct Qdisc *new,
 	old = *pold;
 	*pold = new;
 	if (old != NULL)
-		qdisc_tree_flush_backlog(old);
+		qdisc_purge_queue(old);
 	sch_tree_unlock(sch);
 
 	return old;
@@ -1241,6 +1241,20 @@ static inline void psched_ratecfg_getrate(struct tc_ratespec *res,
 	res->overhead = r->overhead;
 	res->linklayer = (r->linklayer & TC_LINKLAYER_MASK);
 }
+
+struct psched_pktrate {
+	u64	rate_pkts_ps; /* packets per second */
+	u32	mult;
+	u8	shift;
+};
+
+static inline u64 psched_pkt2t_ns(const struct psched_pktrate *r,
+				  unsigned int pkt_num)
+{
+	return ((u64)pkt_num * r->mult) >> r->shift;
+}
+
+void psched_ppscfg_precompute(struct psched_pktrate *r, u64 pktrate64);
 
 /* Mini Qdisc serves for specific needs of ingress/clsact Qdisc.
  * The fast path only needs to access filter list and to update stats

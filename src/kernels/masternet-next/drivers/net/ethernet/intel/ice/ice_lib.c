@@ -161,8 +161,9 @@ static void ice_vsi_set_num_qs(struct ice_vsi *vsi, u16 vf_id)
 
 	switch (vsi->type) {
 	case ICE_VSI_PF:
-		vsi->alloc_txq = min_t(int, ice_get_avail_txq_count(pf),
-				       num_online_cpus());
+		vsi->alloc_txq = min3(pf->num_lan_msix,
+				      ice_get_avail_txq_count(pf),
+				      (u16)num_online_cpus());
 		if (vsi->req_txq) {
 			vsi->alloc_txq = vsi->req_txq;
 			vsi->num_txq = vsi->req_txq;
@@ -174,8 +175,9 @@ static void ice_vsi_set_num_qs(struct ice_vsi *vsi, u16 vf_id)
 		if (!test_bit(ICE_FLAG_RSS_ENA, pf->flags)) {
 			vsi->alloc_rxq = 1;
 		} else {
-			vsi->alloc_rxq = min_t(int, ice_get_avail_rxq_count(pf),
-					       num_online_cpus());
+			vsi->alloc_rxq = min3(pf->num_lan_msix,
+					      ice_get_avail_rxq_count(pf),
+					      (u16)num_online_cpus());
 			if (vsi->req_rxq) {
 				vsi->alloc_rxq = vsi->req_rxq;
 				vsi->num_rxq = vsi->req_rxq;
@@ -184,7 +186,9 @@ static void ice_vsi_set_num_qs(struct ice_vsi *vsi, u16 vf_id)
 
 		pf->num_lan_rx = vsi->alloc_rxq;
 
-		vsi->num_q_vectors = max_t(int, vsi->alloc_rxq, vsi->alloc_txq);
+		vsi->num_q_vectors = min_t(int, pf->num_lan_msix,
+					   max_t(int, vsi->alloc_rxq,
+						 vsi->alloc_txq));
 		break;
 	case ICE_VSI_VF:
 		vf = &pf->vf[vsi->vf_id];
@@ -339,6 +343,9 @@ static int ice_vsi_clear(struct ice_vsi *vsi)
 	pf->vsi[vsi->idx] = NULL;
 	if (vsi->idx < pf->next_vsi && vsi->type != ICE_VSI_CTRL)
 		pf->next_vsi = vsi->idx;
+	if (vsi->idx < pf->next_vsi && vsi->type == ICE_VSI_CTRL &&
+	    vsi->vf_id != ICE_INVAL_VFID)
+		pf->next_vsi = vsi->idx;
 
 	ice_vsi_free_arrays(vsi);
 	mutex_unlock(&pf->sw_mutex);
@@ -450,8 +457,8 @@ ice_vsi_alloc(struct ice_pf *pf, enum ice_vsi_type vsi_type, u16 vf_id)
 		goto unlock_pf;
 	}
 
-	if (vsi->type == ICE_VSI_CTRL) {
-		/* Use the last VSI slot as the index for the control VSI */
+	if (vsi->type == ICE_VSI_CTRL && vf_id == ICE_INVAL_VFID) {
+		/* Use the last VSI slot as the index for PF control VSI */
 		vsi->idx = pf->num_alloc_vsi - 1;
 		pf->ctrl_vsi_idx = vsi->idx;
 		pf->vsi[vsi->idx] = vsi;
@@ -464,6 +471,9 @@ ice_vsi_alloc(struct ice_pf *pf, enum ice_vsi_type vsi_type, u16 vf_id)
 		pf->next_vsi = ice_get_free_slot(pf->vsi, pf->num_alloc_vsi,
 						 pf->next_vsi);
 	}
+
+	if (vsi->type == ICE_VSI_CTRL && vf_id != ICE_INVAL_VFID)
+		pf->vf[vf_id].ctrl_vsi_idx = vsi->idx;
 	goto unlock_pf;
 
 err_rings:
@@ -502,7 +512,7 @@ static int ice_alloc_fd_res(struct ice_vsi *vsi)
 	if (!b_val)
 		return -EPERM;
 
-	if (vsi->type != ICE_VSI_PF)
+	if (!(vsi->type == ICE_VSI_PF || vsi->type == ICE_VSI_VF))
 		return -EPERM;
 
 	if (!test_bit(ICE_FLAG_FD_ENA, pf->flags))
@@ -512,6 +522,13 @@ static int ice_alloc_fd_res(struct ice_vsi *vsi)
 
 	/* each VSI gets same "best_effort" quota */
 	vsi->num_bfltr = b_val;
+
+	if (vsi->type == ICE_VSI_VF) {
+		vsi->num_gfltr = 0;
+
+		/* each VSI gets same "best_effort" quota */
+		vsi->num_bfltr = b_val;
+	}
 
 	return 0;
 }
@@ -852,7 +869,8 @@ static void ice_set_fd_vsi_ctx(struct ice_vsi_ctx *ctxt, struct ice_vsi *vsi)
 	u8 dflt_q_group, dflt_q_prio;
 	u16 dflt_q, report_q, val;
 
-	if (vsi->type != ICE_VSI_PF && vsi->type != ICE_VSI_CTRL)
+	if (vsi->type != ICE_VSI_PF && vsi->type != ICE_VSI_CTRL &&
+	    vsi->type != ICE_VSI_VF)
 		return;
 
 	val = ICE_AQ_VSI_PROP_FLOW_DIR_VALID;
@@ -1175,7 +1193,24 @@ static int ice_vsi_setup_vector_base(struct ice_vsi *vsi)
 
 	num_q_vectors = vsi->num_q_vectors;
 	/* reserve slots from OS requested IRQs */
-	base = ice_get_res(pf, pf->irq_tracker, num_q_vectors, vsi->idx);
+	if (vsi->type == ICE_VSI_CTRL && vsi->vf_id != ICE_INVAL_VFID) {
+		struct ice_vf *vf;
+		int i;
+
+		ice_for_each_vf(pf, i) {
+			vf = &pf->vf[i];
+			if (i != vsi->vf_id && vf->ctrl_vsi_idx != ICE_NO_VSI) {
+				base = pf->vsi[vf->ctrl_vsi_idx]->base_vector;
+				break;
+			}
+		}
+		if (i == pf->num_alloc_vfs)
+			base = ice_get_res(pf, pf->irq_tracker, num_q_vectors,
+					   ICE_RES_VF_CTRL_VEC_ID);
+	} else {
+		base = ice_get_res(pf, pf->irq_tracker, num_q_vectors,
+				   vsi->idx);
+	}
 
 	if (base < 0) {
 		dev_err(dev, "%d MSI-X interrupts available. %s %d failed to get %d MSI-X vectors\n",
@@ -2074,7 +2109,7 @@ err_out:
 
 static void ice_vsi_set_tc_cfg(struct ice_vsi *vsi)
 {
-	struct ice_dcbx_cfg *cfg = &vsi->port_info->local_dcbx_cfg;
+	struct ice_dcbx_cfg *cfg = &vsi->port_info->qos_cfg.local_dcbx_cfg;
 
 	vsi->tc_cfg.ena_tc = ice_dcb_get_ena_tc(cfg);
 	vsi->tc_cfg.numtc = ice_dcb_get_num_tc(cfg);
@@ -2141,16 +2176,143 @@ void ice_cfg_sw_lldp(struct ice_vsi *vsi, bool tx, bool create)
 	dev = ice_pf_to_dev(pf);
 	eth_fltr = create ? ice_fltr_add_eth : ice_fltr_remove_eth;
 
-	if (tx)
+	if (tx) {
 		status = eth_fltr(vsi, ETH_P_LLDP, ICE_FLTR_TX,
 				  ICE_DROP_PACKET);
-	else
-		status = eth_fltr(vsi, ETH_P_LLDP, ICE_FLTR_RX, ICE_FWD_TO_VSI);
+	} else {
+		if (ice_fw_supports_lldp_fltr_ctrl(&pf->hw)) {
+			status = ice_lldp_fltr_add_remove(&pf->hw, vsi->vsi_num,
+							  create);
+		} else {
+			status = eth_fltr(vsi, ETH_P_LLDP, ICE_FLTR_RX,
+					  ICE_FWD_TO_VSI);
+		}
+	}
 
 	if (status)
 		dev_err(dev, "Fail %s %s LLDP rule on VSI %i error: %s\n",
 			create ? "adding" : "removing", tx ? "TX" : "RX",
 			vsi->vsi_num, ice_stat_str(status));
+}
+
+/**
+ * ice_set_agg_vsi - sets up scheduler aggregator node and move VSI into it
+ * @vsi: pointer to the VSI
+ *
+ * This function will allocate new scheduler aggregator now if needed and will
+ * move specified VSI into it.
+ */
+static void ice_set_agg_vsi(struct ice_vsi *vsi)
+{
+	struct device *dev = ice_pf_to_dev(vsi->back);
+	struct ice_agg_node *agg_node_iter = NULL;
+	u32 agg_id = ICE_INVALID_AGG_NODE_ID;
+	struct ice_agg_node *agg_node = NULL;
+	int node_offset, max_agg_nodes = 0;
+	struct ice_port_info *port_info;
+	struct ice_pf *pf = vsi->back;
+	u32 agg_node_id_start = 0;
+	enum ice_status status;
+
+	/* create (as needed) scheduler aggregator node and move VSI into
+	 * corresponding aggregator node
+	 * - PF aggregator node to contains VSIs of type _PF and _CTRL
+	 * - VF aggregator nodes will contain VF VSI
+	 */
+	port_info = pf->hw.port_info;
+	if (!port_info)
+		return;
+
+	switch (vsi->type) {
+	case ICE_VSI_CTRL:
+	case ICE_VSI_LB:
+	case ICE_VSI_PF:
+		max_agg_nodes = ICE_MAX_PF_AGG_NODES;
+		agg_node_id_start = ICE_PF_AGG_NODE_ID_START;
+		agg_node_iter = &pf->pf_agg_node[0];
+		break;
+	case ICE_VSI_VF:
+		/* user can create 'n' VFs on a given PF, but since max children
+		 * per aggregator node can be only 64. Following code handles
+		 * aggregator(s) for VF VSIs, either selects a agg_node which
+		 * was already created provided num_vsis < 64, otherwise
+		 * select next available node, which will be created
+		 */
+		max_agg_nodes = ICE_MAX_VF_AGG_NODES;
+		agg_node_id_start = ICE_VF_AGG_NODE_ID_START;
+		agg_node_iter = &pf->vf_agg_node[0];
+		break;
+	default:
+		/* other VSI type, handle later if needed */
+		dev_dbg(dev, "unexpected VSI type %s\n",
+			ice_vsi_type_str(vsi->type));
+		return;
+	}
+
+	/* find the appropriate aggregator node */
+	for (node_offset = 0; node_offset < max_agg_nodes; node_offset++) {
+		/* see if we can find space in previously created
+		 * node if num_vsis < 64, otherwise skip
+		 */
+		if (agg_node_iter->num_vsis &&
+		    agg_node_iter->num_vsis == ICE_MAX_VSIS_IN_AGG_NODE) {
+			agg_node_iter++;
+			continue;
+		}
+
+		if (agg_node_iter->valid &&
+		    agg_node_iter->agg_id != ICE_INVALID_AGG_NODE_ID) {
+			agg_id = agg_node_iter->agg_id;
+			agg_node = agg_node_iter;
+			break;
+		}
+
+		/* find unclaimed agg_id */
+		if (agg_node_iter->agg_id == ICE_INVALID_AGG_NODE_ID) {
+			agg_id = node_offset + agg_node_id_start;
+			agg_node = agg_node_iter;
+			break;
+		}
+		/* move to next agg_node */
+		agg_node_iter++;
+	}
+
+	if (!agg_node)
+		return;
+
+	/* if selected aggregator node was not created, create it */
+	if (!agg_node->valid) {
+		status = ice_cfg_agg(port_info, agg_id, ICE_AGG_TYPE_AGG,
+				     (u8)vsi->tc_cfg.ena_tc);
+		if (status) {
+			dev_err(dev, "unable to create aggregator node with agg_id %u\n",
+				agg_id);
+			return;
+		}
+		/* aggregator node is created, store the neeeded info */
+		agg_node->valid = true;
+		agg_node->agg_id = agg_id;
+	}
+
+	/* move VSI to corresponding aggregator node */
+	status = ice_move_vsi_to_agg(port_info, agg_id, vsi->idx,
+				     (u8)vsi->tc_cfg.ena_tc);
+	if (status) {
+		dev_err(dev, "unable to move VSI idx %u into aggregator %u node",
+			vsi->idx, agg_id);
+		return;
+	}
+
+	/* keep active children count for aggregator node */
+	agg_node->num_vsis++;
+
+	/* cache the 'agg_id' in VSI, so that after reset - VSI will be moved
+	 * to aggregator node
+	 */
+	vsi->agg_node = agg_node;
+	dev_dbg(dev, "successfully moved VSI idx %u tc_bitmap 0x%x) into aggregator node %d which has num_vsis %u\n",
+		vsi->idx, vsi->tc_cfg.ena_tc, vsi->agg_node->agg_id,
+		vsi->agg_node->num_vsis);
 }
 
 /**
@@ -2177,7 +2339,7 @@ ice_vsi_setup(struct ice_pf *pf, struct ice_port_info *pi,
 	struct ice_vsi *vsi;
 	int ret, i;
 
-	if (vsi_type == ICE_VSI_VF)
+	if (vsi_type == ICE_VSI_VF || vsi_type == ICE_VSI_CTRL)
 		vsi = ice_vsi_alloc(pf, vsi_type, vf_id);
 	else
 		vsi = ice_vsi_alloc(pf, vsi_type, ICE_INVAL_VFID);
@@ -2192,7 +2354,7 @@ ice_vsi_setup(struct ice_pf *pf, struct ice_port_info *pi,
 	if (vsi->type == ICE_VSI_PF)
 		vsi->ethtype = ETH_P_PAUSE;
 
-	if (vsi->type == ICE_VSI_VF)
+	if (vsi->type == ICE_VSI_VF || vsi->type == ICE_VSI_CTRL)
 		vsi->vf_id = vf_id;
 
 	ice_alloc_fd_res(vsi);
@@ -2323,6 +2485,8 @@ ice_vsi_setup(struct ice_pf *pf, struct ice_port_info *pi,
 			ice_cfg_sw_lldp(vsi, true, true);
 		}
 
+	if (!vsi->agg_node)
+		ice_set_agg_vsi(vsi);
 	return vsi;
 
 unroll_clear_rings:
@@ -2338,6 +2502,8 @@ unroll_vsi_init:
 unroll_get_qs:
 	ice_vsi_put_qs(vsi);
 unroll_vsi_alloc:
+	if (vsi_type == ICE_VSI_VF)
+		ice_enable_lag(pf->lag);
 	ice_vsi_clear(vsi);
 
 	return NULL;
@@ -2635,7 +2801,24 @@ int ice_vsi_release(struct ice_vsi *vsi)
 	 * many interrupts each VF needs. SR-IOV MSIX resources are also
 	 * cleared in the same manner.
 	 */
-	if (vsi->type != ICE_VSI_VF) {
+	if (vsi->type == ICE_VSI_CTRL && vsi->vf_id != ICE_INVAL_VFID) {
+		struct ice_vf *vf;
+		int i;
+
+		ice_for_each_vf(pf, i) {
+			vf = &pf->vf[i];
+			if (i != vsi->vf_id && vf->ctrl_vsi_idx != ICE_NO_VSI)
+				break;
+		}
+		if (i == pf->num_alloc_vfs) {
+			/* No other VFs left that have control VSI, reclaim SW
+			 * interrupts back to the common pool
+			 */
+			ice_free_res(pf->irq_tracker, vsi->base_vector,
+				     ICE_RES_VF_CTRL_VEC_ID);
+			pf->num_avail_sw_msix += vsi->num_q_vectors;
+		}
+	} else if (vsi->type != ICE_VSI_VF) {
 		/* reclaim SW interrupts back to the common pool */
 		ice_free_res(pf->irq_tracker, vsi->base_vector, vsi->idx);
 		pf->num_avail_sw_msix += vsi->num_q_vectors;
@@ -2665,6 +2848,9 @@ int ice_vsi_release(struct ice_vsi *vsi)
 		vsi->netdev = NULL;
 	}
 
+	if (vsi->type == ICE_VSI_VF &&
+	    vsi->agg_node && vsi->agg_node->valid)
+		vsi->agg_node->num_vsis--;
 	ice_vsi_clear_rings(vsi);
 
 	ice_vsi_put_qs(vsi);
