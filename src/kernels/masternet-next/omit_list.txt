@@ -1,0 +1,8 @@
+drivers/net/dsa/microchip/
+drivers/net/phy/microchip_t1.c
+net/dsa/tag_ksz.c
+Documentation/devicetree/bindings/net/dsa/microchip,lan937x.yaml
+MAINTAINERS
+include/net/dsa.h
+net/dsa/Kconfig                             
+net/dsa/tag_ksz.c
