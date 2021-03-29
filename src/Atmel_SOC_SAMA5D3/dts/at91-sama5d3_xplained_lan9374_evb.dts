@@ -173,6 +173,7 @@
 					interrupt-parent = <&pioB>;
 					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;					
 					status = "okay";
+					pps_led_index = <1>;
 					ports {
 						#address-cells = <1>;
 						#size-cells = <0>;
@@ -194,7 +195,7 @@
 						};
 						port@4 {
 							reg = <4>;
-							phy-mode = "rmii";
+							phy-mode = "rgmii";
 							label = "cpu";
 							ethernet = <&macb0>;
 							fixed-link {
