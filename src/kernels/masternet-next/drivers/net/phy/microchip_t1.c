@@ -473,6 +473,7 @@ static int lan937x_read_status(struct phy_device *phydev)
 	phydev->duplex = DUPLEX_FULL;
 	phydev->speed = SPEED_100;
 	phydev->pause = phydev->asym_pause = 0;
+	phydev->interface = PHY_INTERFACE_MODE_INTERNAL;
 
 	return 0;
 }

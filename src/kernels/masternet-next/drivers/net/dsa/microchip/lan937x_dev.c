@@ -55,63 +55,69 @@ const struct mib_names lan937x_mib_names[] = {
 	{ 0x83, "tx_discards" },
 };
 
-void lan937x_cfg(struct ksz_device *dev, u32 addr, u8 bits, bool set)
+struct prt_init {
+	int addr;
+	u8 mask;
+	bool is_set;
+};
+
+int lan937x_cfg(struct ksz_device *dev, u32 addr, u8 bits, bool set)
 {
-	regmap_update_bits(dev->regmap[0], addr, bits, set ? bits : 0);
+	return regmap_update_bits(dev->regmap[0], addr, bits, set ? bits : 0);
 }
 
-void lan937x_port_cfg(struct ksz_device *dev, int port, int offset,
+int lan937x_port_cfg(struct ksz_device *dev, int port, int offset,
 		      u8 bits, bool set)
 {
-	regmap_update_bits(dev->regmap[0], PORT_CTRL_ADDR(port, offset),
+	return regmap_update_bits(dev->regmap[0], PORT_CTRL_ADDR(port, offset),
 			   bits, set ? bits : 0);
 }
 
-void lan937x_cfg32(struct ksz_device *dev, u32 addr, u32 bits, bool set)
+int lan937x_cfg32(struct ksz_device *dev, u32 addr, u32 bits, bool set)
 {
-	regmap_update_bits(dev->regmap[2], addr, bits, set ? bits : 0);
+	return regmap_update_bits(dev->regmap[2], addr, bits, set ? bits : 0);
 }
 
-void lan937x_pread8(struct ksz_device *dev, int port, int offset,
+int lan937x_pread8(struct ksz_device *dev, int port, int offset,
 		    u8 *data)
 {
-	ksz_read8(dev, PORT_CTRL_ADDR(port, offset), data);
+	return ksz_read8(dev, PORT_CTRL_ADDR(port, offset), data);
 }
 
-void lan937x_pread16(struct ksz_device *dev, int port, int offset,
+int lan937x_pread16(struct ksz_device *dev, int port, int offset,
 		     u16 *data)
 {
-	ksz_read16(dev, PORT_CTRL_ADDR(port, offset), data);
+	return ksz_read16(dev, PORT_CTRL_ADDR(port, offset), data);
 }
 
-void lan937x_pread32(struct ksz_device *dev, int port, int offset,
+int lan937x_pread32(struct ksz_device *dev, int port, int offset,
 		     u32 *data)
 {
-	ksz_read32(dev, PORT_CTRL_ADDR(port, offset), data);
+	return ksz_read32(dev, PORT_CTRL_ADDR(port, offset), data);
 }
 
-void lan937x_pwrite8(struct ksz_device *dev, int port,
+int lan937x_pwrite8(struct ksz_device *dev, int port,
 		     int offset, u8 data)
 {
-	ksz_write8(dev, PORT_CTRL_ADDR(port, offset), data);
+	return ksz_write8(dev, PORT_CTRL_ADDR(port, offset), data);
 }
 
-void lan937x_pwrite16(struct ksz_device *dev, int port,
+int lan937x_pwrite16(struct ksz_device *dev, int port,
 		      int offset, u16 data)
 {
-	ksz_write16(dev, PORT_CTRL_ADDR(port, offset), data);
+	return ksz_write16(dev, PORT_CTRL_ADDR(port, offset), data);
 }
 
-void lan937x_pwrite32(struct ksz_device *dev, int port,
+int lan937x_pwrite32(struct ksz_device *dev, int port,
 		      int offset, u32 data)
 {
-	ksz_write32(dev, PORT_CTRL_ADDR(port, offset), data);
+	return ksz_write32(dev, PORT_CTRL_ADDR(port, offset), data);
 }
 
-void lan937x_port_cfg32(struct ksz_device *dev, int port, int offset,
+int lan937x_port_cfg32(struct ksz_device *dev, int port, int offset,
 			u32 bits, bool set)
 {
-	regmap_update_bits(dev->regmap[2], PORT_CTRL_ADDR(port, offset),
+	return regmap_update_bits(dev->regmap[2], PORT_CTRL_ADDR(port, offset),
 			   bits, set ? bits : 0);
 }
 
@@ -127,28 +133,50 @@ static void lan937x_flush_dyn_mac_table(struct ksz_device *dev, int port)
 {
 	unsigned int value;
 	u8 data;
+	int rc;
 
-	regmap_update_bits(dev->regmap[0], REG_SW_LUE_CTRL_2,
+	rc = regmap_update_bits(dev->regmap[0], REG_SW_LUE_CTRL_2,
 			   SW_FLUSH_OPTION_M << SW_FLUSH_OPTION_S,
 			   SW_FLUSH_OPTION_DYN_MAC << SW_FLUSH_OPTION_S);
+	
+	if (rc < 0)
+		goto exit;
 
 	if (port < dev->port_cnt) {
 		/* flush individual port */
-		lan937x_pread8(dev, port, P_STP_CTRL, &data);
-		if (!(data & PORT_LEARN_DISABLE))
-			lan937x_pwrite8(dev, port, P_STP_CTRL,
-					data | PORT_LEARN_DISABLE);
-		lan937x_cfg(dev, S_FLUSH_TABLE_CTRL, SW_FLUSH_DYN_MAC_TABLE, true);
+		rc = lan937x_pread8(dev, port, P_STP_CTRL, &data);
 
-		regmap_read_poll_timeout(dev->regmap[0],
+		if (rc < 0)
+			goto exit;
+
+		if (!(data & PORT_LEARN_DISABLE)) {
+			rc = lan937x_pwrite8(dev, port, P_STP_CTRL,
+					data | PORT_LEARN_DISABLE);
+			if (rc < 0)
+				goto exit;		
+		}
+		
+		rc = lan937x_cfg(dev, S_FLUSH_TABLE_CTRL, SW_FLUSH_DYN_MAC_TABLE, true);
+
+		if (rc < 0)
+			goto exit;
+
+		rc = regmap_read_poll_timeout(dev->regmap[0],
 					 S_FLUSH_TABLE_CTRL,
 				value, !(value & SW_FLUSH_DYN_MAC_TABLE), 10, 1000);
+		
+		if (rc < 0)	
+			goto exit;
 
-		lan937x_pwrite8(dev, port, P_STP_CTRL, data);
+		rc = lan937x_pwrite8(dev, port, P_STP_CTRL, data);
 	} else {
 		/* flush all */
-		lan937x_cfg(dev, S_FLUSH_TABLE_CTRL, SW_FLUSH_STP_TABLE, true);
+		rc = lan937x_cfg(dev, S_FLUSH_TABLE_CTRL, SW_FLUSH_STP_TABLE, true);
 	}
+
+exit:
+	if (rc < 0)
+		dev_err(dev->dev, "Failed to flush dynamic mac table\n");
 }
 
 static void lan937x_r_mib_cnt(struct ksz_device *dev, int port, u16 addr,
@@ -156,26 +184,36 @@ static void lan937x_r_mib_cnt(struct ksz_device *dev, int port, u16 addr,
 {
 	unsigned int val;
 	u32 data;
-	int ret;
+	int rc;
 
 	/* Enable MIB Counter read*/
 	data = MIB_COUNTER_READ;
 	data |= (addr << MIB_COUNTER_INDEX_S);
-	lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4, data);
+	rc = lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4, data);
 
-	ret = regmap_read_poll_timeout(dev->regmap[2],
+	if (rc < 0)
+		goto exit;
+
+	rc = regmap_read_poll_timeout(dev->regmap[2],
 				       PORT_CTRL_ADDR(port,
 						      REG_PORT_MIB_CTRL_STAT__4),
 					   val, !(val & MIB_COUNTER_READ), 10, 1000);
+
 	/* failed to read MIB. get out of loop */
-	if (ret) {
-		dev_err(dev->dev, "Failed to get MIB\n");
-		return;
-	}
+	if (rc < 0)
+		goto exit;
 
 	/* count resets upon read */
-	lan937x_pread32(dev, port, REG_PORT_MIB_DATA, &data);
+	rc = lan937x_pread32(dev, port, REG_PORT_MIB_DATA, &data);
+
+	if (rc < 0)
+		goto exit;
+
 	*cnt += data;
+
+exit:
+	if (rc < 0)
+		dev_err(dev->dev, "Failed to get MIB\n");
 }
 
 static void lan937x_r_mib_pkt(struct ksz_device *dev, int port, u16 addr,
@@ -188,14 +226,28 @@ static void lan937x_r_mib_pkt(struct ksz_device *dev, int port, u16 addr,
 static void lan937x_port_init_cnt(struct ksz_device *dev, int port)
 {
 	struct ksz_port_mib *mib = &dev->ports[port].mib;
+	int rc;
 
 	/* flush all enabled port MIB counters */
 	mutex_lock(&mib->cnt_mutex);
-	lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4,
+	rc = lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4,
 			 MIB_COUNTER_FLUSH_FREEZE);
-	ksz_write8(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FLUSH);
-	lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4, 0);
+	if (rc < 0)
+		goto exit;
+
+	rc = ksz_write8(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FLUSH);
+	if (rc < 0)
+		goto exit;
+
+	rc = lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4, 0);
+	if (rc < 0)
+		goto exit;
+
+exit:
 	mutex_unlock(&mib->cnt_mutex);
+
+	if (rc < 0)
+		dev_err(dev->dev, "Failed to initialize MIB counter\n");
 
 	mib->cnt_ptr = 0;
 	memset(mib->counters, 0, dev->mib_cnt * sizeof(u64));
@@ -205,28 +257,51 @@ int lan937x_reset_switch(struct ksz_device *dev)
 {
 	u32 data32;
 	u8 data8;
+	int rc;
 
 	/* reset switch */
-	lan937x_cfg(dev, REG_SW_OPERATION, SW_RESET, true);
+	rc = lan937x_cfg(dev, REG_SW_OPERATION, SW_RESET, true);
+
+	if (rc < 0)
+		return rc;
 
 	/* default configuration */
-	ksz_read8(dev, REG_SW_LUE_CTRL_1, &data8);
+	rc = ksz_read8(dev, REG_SW_LUE_CTRL_1, &data8);
+	
+	if (rc < 0)
+		return rc;
+
 	data8 = SW_AGING_ENABLE | SW_LINK_AUTO_AGING |
 	      SW_SRC_ADDR_FILTER;
-	ksz_write8(dev, REG_SW_LUE_CTRL_1, data8);
+	
+	rc = ksz_write8(dev, REG_SW_LUE_CTRL_1, data8);
+
+	if (rc < 0)
+		return rc;
 
 	/* disable interrupts */
-	ksz_write32(dev, REG_SW_INT_MASK__4, SWITCH_INT_MASK);
-	ksz_write32(dev, REG_SW_PORT_INT_MASK__4, 0xFF);
-	ksz_read32(dev, REG_SW_PORT_INT_STATUS__4, &data32);
+	rc = ksz_write32(dev, REG_SW_INT_MASK__4, SWITCH_INT_MASK);
+
+	if (rc < 0)
+		return rc;
+
+	rc = ksz_write32(dev, REG_SW_PORT_INT_MASK__4, 0xFF);
+
+	if (rc < 0)
+		return rc;
+
+	rc = ksz_read32(dev, REG_SW_PORT_INT_STATUS__4, &data32);
+
+	if (rc < 0)
+		return rc;
 
 	/* set broadcast storm protection 10% rate */
-	regmap_update_bits(dev->regmap[1], REG_SW_MAC_CTRL_2,
+	rc = regmap_update_bits(dev->regmap[1], REG_SW_MAC_CTRL_2,
 			   BROADCAST_STORM_RATE,
 			   (BROADCAST_STORM_VALUE *
 			   BROADCAST_STORM_PROT_RATE) / 100);
 
-	return 0;
+	return rc;
 }
 
 static int lan937x_switch_detect(struct ksz_device *dev)
@@ -255,27 +330,39 @@ static void lan937x_switch_exit(struct ksz_device *dev)
 	lan937x_reset_switch(dev);
 }
 
-void lan937x_enable_spi_indirect_access(struct ksz_device *dev)
+int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
 {
 	u16 data16;
 	u8 data8;
+	int rc;
 
-	ksz_read8(dev, REG_GLOBAL_CTRL_0, &data8);
+	rc = ksz_read8(dev, REG_GLOBAL_CTRL_0, &data8);
+	
+	if (rc < 0)
+		return rc;
 
 	/* Check if PHY register is blocked */
 	if (data8 & SW_PHY_REG_BLOCK) {
 		/* Enable Phy access through SPI*/
 		data8 &= ~SW_PHY_REG_BLOCK;
-		ksz_write8(dev, REG_GLOBAL_CTRL_0, data8);
+		rc = ksz_write8(dev, REG_GLOBAL_CTRL_0, data8);
+	
+		if (rc < 0)
+			return rc;
 	}
 
-	ksz_read16(dev, REG_VPHY_SPECIAL_CTRL__2, &data16);
+	rc = ksz_read16(dev, REG_VPHY_SPECIAL_CTRL__2, &data16);
+
+	if (rc < 0)
+		return rc;
 
 	/* If already the access is not enabled go ahead and allow SPI access */
 	if (!(data16 & VPHY_SPI_INDIRECT_ENABLE)) {
 		data16 |= VPHY_SPI_INDIRECT_ENABLE;
-		ksz_write16(dev, REG_VPHY_SPECIAL_CTRL__2, data16);
+		rc = ksz_write16(dev, REG_VPHY_SPECIAL_CTRL__2, data16);
 	}
+
+	return rc;
 }
 
 bool lan937x_is_internal_phy_port(struct ksz_device *dev, int port)
@@ -323,7 +410,7 @@ int lan937x_internal_phy_write(struct ksz_device *dev, int addr,
 {
 	u16 temp, addr_base;
 	unsigned int value;
-	int ret;
+	int rc;
 
 	/* Check for internal phy port */
 	if (!lan937x_is_internal_phy_port(dev, addr))
@@ -336,23 +423,32 @@ int lan937x_internal_phy_write(struct ksz_device *dev, int addr,
 
 	temp = PORT_CTRL_ADDR(addr, (addr_base + (reg << 2)));
 
-	ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
+	rc = ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
+
+	if (rc < 0)
+		return rc;
 
 	/* Write the data to be written to the VPHY reg */
-	ksz_write16(dev, REG_VPHY_IND_DATA__2, val);
+	rc = ksz_write16(dev, REG_VPHY_IND_DATA__2, val);
+
+	if (rc < 0)
+		return rc;
 
 	/* Write the Write En and Busy bit */
-	ksz_write16(dev, REG_VPHY_IND_CTRL__2, (VPHY_IND_WRITE
+	rc = ksz_write16(dev, REG_VPHY_IND_CTRL__2, (VPHY_IND_WRITE
 				| VPHY_IND_BUSY));
 
-	ret = regmap_read_poll_timeout(dev->regmap[1],
+	if (rc < 0)
+		return rc;
+
+	rc = regmap_read_poll_timeout(dev->regmap[1],
 				       REG_VPHY_IND_CTRL__2,
 				value, !(value & VPHY_IND_BUSY), 10, 1000);
 
 	/* failed to write phy register. get out of loop */
-	if (ret) {
+	if (rc < 0 ) {
 		dev_err(dev->dev, "Failed to write phy register\n");
-		return ret;
+		return rc;
 	}
 
 	return 0;
@@ -363,7 +459,7 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr,
 {
 	u16 temp, addr_base;
 	unsigned int value;
-	int ret;
+	int rc;
 
 	/* Check for internal phy port */
 	if (!lan937x_is_internal_phy_port(dev, addr))
@@ -377,23 +473,30 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr,
 	/* get register address based on the logical port */
 	temp = PORT_CTRL_ADDR(addr, (addr_base + (reg << 2)));
 
-	ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
-	/* Write Read and Busy bit to start the transaction*/
-	ksz_write16(dev, REG_VPHY_IND_CTRL__2, VPHY_IND_BUSY);
+	rc = ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
 
-	ret = regmap_read_poll_timeout(dev->regmap[1],
+	if (rc < 0)
+		return rc;
+
+	/* Write Read and Busy bit to start the transaction*/
+	rc = ksz_write16(dev, REG_VPHY_IND_CTRL__2, VPHY_IND_BUSY);
+
+	if (rc < 0)
+		return rc;
+
+	rc = regmap_read_poll_timeout(dev->regmap[1],
 						REG_VPHY_IND_CTRL__2,
 				value, !(value & VPHY_IND_BUSY), 10, 1000);
 
 	/*  failed to read phy register. get out of loop */
-	if (ret) {
+	if (rc < 0) {
 		dev_err(dev->dev, "Failed to read phy register\n");
-		return ret;
+		return rc;
 	}
 	/* Read the VPHY register which has the PHY data*/
-	ksz_read16(dev, REG_VPHY_IND_DATA__2, val);
-
-	return 0;
+	rc = ksz_read16(dev, REG_VPHY_IND_DATA__2, val);
+	
+	return rc;
 }
 
 static void lan937x_set_gbit(struct ksz_device *dev, bool gbit, u8 *data)
@@ -408,49 +511,70 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 {
 	struct ksz_port *p = &dev->ports[port];
 	u8 data8, member;
+	int rc, i;
+
+	struct prt_init p_init[] = {
+		{REG_PORT_MAC_CTRL_0, PORT_FR_CHK_LENGTH, false},
+		{REG_PORT_CTRL_0, PORT_MAC_LOOPBACK, false},
+		/* set back pressure */
+		{REG_PORT_MAC_CTRL_1, PORT_BACK_PRESSURE, true},
+		/* enable broadcast storm limit */
+		{P_BCAST_STORM_CTRL, PORT_BROADCAST_STORM, true},
+		/* disable DiffServ priority */
+		{P_PRIO_CTRL, PORT_DIFFSERV_PRIO_ENABLE, false},
+		/* replace priority */
+		{REG_PORT_MRI_MAC_CTRL, PORT_USER_PRIO_CEILING,false},
+		{P_PRIO_CTRL, PORT_802_1P_PRIO_ENABLE, true}
+	};
 
 	/* enable tag tail for host port */
 	if (cpu_port) {
-		lan937x_port_cfg(dev, port, REG_PORT_CTRL_0, PORT_TAIL_TAG_ENABLE,
+		rc = lan937x_port_cfg(dev, port, REG_PORT_CTRL_0, PORT_TAIL_TAG_ENABLE,
 				 true);
+		if (rc < 0)
+			goto exit;
 		/* Enable jumbo packet in host port so that frames are not
 		 * counted as oversized.
 		 */
-		lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_JUMBO_PACKET,
+		rc = lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_JUMBO_PACKET,
 				 true);
-		lan937x_pwrite16(dev, port, REG_PORT_MTU__2, FR_SIZE_CPU_PORT);
+		
+		if (rc < 0)
+			goto exit;
+
+		rc = lan937x_pwrite16(dev, port, REG_PORT_MTU__2, FR_SIZE_CPU_PORT);
+
+		if (rc < 0)
+			goto exit;
 	}
 
-	lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_FR_CHK_LENGTH,
-			 false);
+	for (i = 0; i < ARRAY_SIZE(p_init); i++) {
 
-	lan937x_port_cfg(dev, port, REG_PORT_CTRL_0, PORT_MAC_LOOPBACK, false);
+		rc = lan937x_port_cfg(dev, port, p_init[i].addr, p_init[i].mask, p_init[i].is_set);
 
-	/* set back pressure */
-	lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_1, PORT_BACK_PRESSURE, true);
+		if (rc < 0)
+			goto exit;
+	}
 
-	/* enable broadcast storm limit */
-	lan937x_port_cfg(dev, port, P_BCAST_STORM_CTRL, PORT_BROADCAST_STORM, true);
 
-	/* disable DiffServ priority */
-	lan937x_port_cfg(dev, port, P_PRIO_CTRL, PORT_DIFFSERV_PRIO_ENABLE, false);
-
-	/* replace priority */
-	lan937x_port_cfg(dev, port, REG_PORT_MRI_MAC_CTRL, PORT_USER_PRIO_CEILING,
-			 false);
-	lan937x_port_cfg32(dev, port, REG_PORT_MTI_QUEUE_CTRL_0__4,
+	rc = lan937x_port_cfg32(dev, port, REG_PORT_MTI_QUEUE_CTRL_0__4,
 			   MTI_PVID_REPLACE, false);
-
-	/* enable 802.1p priority */
-	lan937x_port_cfg(dev, port, P_PRIO_CTRL, PORT_802_1P_PRIO_ENABLE, true);
+	
+	if (rc < 0)
+		goto exit;
 
 	if (!lan937x_is_internal_phy_port(dev, port)) {
 		/* force flow control off*/
-		lan937x_port_cfg(dev, port, REG_PORT_XMII_CTRL_0,
+		rc = lan937x_port_cfg(dev, port, REG_PORT_XMII_CTRL_0,
 				 PORT_FORCE_TX_FLOW_CTRL | PORT_FORCE_RX_FLOW_CTRL,
 			     false);
+		if (rc < 0)
+			goto exit;
 
-		lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
+		rc = lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
+	
+		if (rc < 0)
+			goto exit;
 
 		/* clear MII selection & set it based on interface later */
 		data8 &= ~PORT_MII_SEL_M;
@@ -481,7 +605,10 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 				data8 |= PORT_RGMII_ID_EG_ENABLE;
 			break;
 		}
-		lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, data8);
+		rc = lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, data8);
+		
+		if (rc < 0)
+			goto exit;
 	}
 
 	if (cpu_port)
@@ -490,18 +617,23 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 		member = dev->host_mask | p->vid_member;
 
 	lan937x_cfg_port_member(dev, port, member);
+
+exit:
+	if(rc < 0)
+		dev_err(dev->dev, "failed to setup the port\n");
+	
 }
 
 static int lan937x_sw_mdio_read(struct mii_bus *bus, int addr, int regnum)
 {
 	struct ksz_device *dev = bus->priv;
 	u16 val;
-	int ret;
+	int rc;
 
-	ret = lan937x_internal_phy_read(dev, addr, regnum, &val);
+	rc = lan937x_internal_phy_read(dev, addr, regnum, &val);
 
-	if(ret)
-		return ret;
+	if(rc < 0)
+		return rc;
 
 	return val;
 }
@@ -528,7 +660,6 @@ static int lan937x_mdio_register(struct dsa_switch *ds)
 	ds->slave_mii_bus = devm_mdiobus_alloc(ds->dev);
 
 	if (!ds->slave_mii_bus){
-		pr_info("alloc failed");
 		return -ENOMEM;
 	}
 	
@@ -595,23 +726,28 @@ static int lan937x_switch_init(struct ksz_device *dev)
 
 static int lan937x_init(struct ksz_device *dev)
 {
-	int ret;
+	int rc;
 	
-	ret = lan937x_switch_init(dev);
+	rc = lan937x_switch_init(dev);
 
-	if (ret) {
+	if (rc < 0) {
 		dev_err(dev->dev, "failed to initialize the switch");
-		return ret;
+		return rc;
 	}
 		
 	/* enable Indirect Access from SPI to the VPHY registers */
-	lan937x_enable_spi_indirect_access(dev);
+	rc = lan937x_enable_spi_indirect_access(dev);
 
-	ret = lan937x_mdio_register(dev->ds);
+	if (rc < 0) {
+		dev_err(dev->dev, "failed to enable spi indirect access");
+		return rc;
+	}
+	
+	rc = lan937x_mdio_register(dev->ds);
 
-	if (ret) {
+	if (rc < 0) {
 		dev_err(dev->dev, "failed to register the mdio");
-		return ret;
+		return rc;
 	}
 
 	return 0;
