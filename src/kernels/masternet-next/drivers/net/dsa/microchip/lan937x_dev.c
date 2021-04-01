@@ -647,8 +647,6 @@ static int lan937x_switch_init(struct ksz_device *dev)
 		return ret;
 	}
 
-	for (i = 0; i < ARRAY_SIZE(lan937x_switch_chips); i++) {
-		const struct lan937x_chip_data *chip = &lan937x_switch_chips[i];
 	/* Check device tree */
 	ret = lan937x_check_device_id(dev);
 
