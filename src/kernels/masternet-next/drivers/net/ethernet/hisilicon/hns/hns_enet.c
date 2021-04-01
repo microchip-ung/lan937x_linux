@@ -872,7 +872,7 @@ out:
 static bool hns_nic_rx_fini_pro(struct hns_nic_ring_data *ring_data)
 {
 	struct hnae_ring *ring = ring_data->ring;
-	int num = 0;
+	int num;
 	bool rx_stopped;
 
 	hns_update_rx_rate(ring);
@@ -1502,7 +1502,7 @@ static netdev_tx_t hns_nic_net_xmit(struct sk_buff *skb,
 {
 	struct hns_nic_priv *priv = netdev_priv(ndev);
 
-	assert(skb->queue_mapping < ndev->ae_handle->q_num);
+	assert(skb->queue_mapping < priv->ae_handle->q_num);
 
 	return hns_nic_net_xmit_hw(ndev, skb,
 				   &tx_ring_data(priv, skb->queue_mapping));
@@ -1663,8 +1663,10 @@ static int hns_nic_clear_all_rx_fetch(struct net_device *ndev)
 			for (j = 0; j < fetch_num; j++) {
 				/* alloc one skb and init */
 				skb = hns_assemble_skb(ndev);
-				if (!skb)
+				if (!skb) {
+					ret = -ENOMEM;
 					goto out;
+				}
 				rd = &tx_ring_data(priv, skb->queue_mapping);
 				hns_nic_net_xmit_hw(ndev, skb, rd);
 
@@ -1879,7 +1881,7 @@ static void hns_nic_set_rx_mode(struct net_device *ndev)
 static void hns_nic_get_stats64(struct net_device *ndev,
 				struct rtnl_link_stats64 *stats)
 {
-	int idx = 0;
+	int idx;
 	u64 tx_bytes = 0;
 	u64 rx_bytes = 0;
 	u64 tx_pkts = 0;

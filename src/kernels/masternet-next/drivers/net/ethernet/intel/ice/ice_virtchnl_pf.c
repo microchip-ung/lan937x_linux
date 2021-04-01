@@ -202,6 +202,25 @@ static void ice_vf_vsi_release(struct ice_vf *vf)
 }
 
 /**
+ * ice_vf_ctrl_invalidate_vsi - invalidate ctrl_vsi_idx to remove VSI access
+ * @vf: VF that control VSI is being invalidated on
+ */
+static void ice_vf_ctrl_invalidate_vsi(struct ice_vf *vf)
+{
+	vf->ctrl_vsi_idx = ICE_NO_VSI;
+}
+
+/**
+ * ice_vf_ctrl_vsi_release - invalidate the VF's control VSI after freeing it
+ * @vf: VF that control VSI is being released on
+ */
+static void ice_vf_ctrl_vsi_release(struct ice_vf *vf)
+{
+	ice_vsi_release(vf->pf->vsi[vf->ctrl_vsi_idx]);
+	ice_vf_ctrl_invalidate_vsi(vf);
+}
+
+/**
  * ice_free_vf_res - Free a VF's resources
  * @vf: pointer to the VF info
  */
@@ -214,6 +233,10 @@ static void ice_free_vf_res(struct ice_vf *vf)
 	 * accessing the VF's VSI after it's freed or invalidated.
 	 */
 	clear_bit(ICE_VF_STATE_INIT, vf->vf_states);
+	ice_vf_fdir_exit(vf);
+	/* free VF control VSI */
+	if (vf->ctrl_vsi_idx != ICE_NO_VSI)
+		ice_vf_ctrl_vsi_release(vf);
 
 	/* free VSI and disconnect it from the parent uplink */
 	if (vf->lan_vsi_idx != ICE_NO_VSI) {
@@ -555,6 +578,28 @@ static struct ice_vsi *ice_vf_vsi_setup(struct ice_vf *vf)
 
 	vf->lan_vsi_idx = vsi->idx;
 	vf->lan_vsi_num = vsi->vsi_num;
+
+	return vsi;
+}
+
+/**
+ * ice_vf_ctrl_vsi_setup - Set up a VF control VSI
+ * @vf: VF to setup control VSI for
+ *
+ * Returns pointer to the successfully allocated VSI struct on success,
+ * otherwise returns NULL on failure.
+ */
+struct ice_vsi *ice_vf_ctrl_vsi_setup(struct ice_vf *vf)
+{
+	struct ice_port_info *pi = ice_vf_get_port_info(vf);
+	struct ice_pf *pf = vf->pf;
+	struct ice_vsi *vsi;
+
+	vsi = ice_vsi_setup(pf, pi, ICE_VSI_CTRL, vf->vf_id);
+	if (!vsi) {
+		dev_err(ice_pf_to_dev(pf), "Failed to create VF control VSI\n");
+		ice_vf_ctrl_invalidate_vsi(vf);
+	}
 
 	return vsi;
 }
@@ -1057,11 +1102,45 @@ static void ice_vf_pre_vsi_rebuild(struct ice_vf *vf)
 }
 
 /**
+ * ice_vf_rebuild_aggregator_node_cfg - rebuild aggregator node config
+ * @vsi: Pointer to VSI
+ *
+ * This function moves VSI into corresponding scheduler aggregator node
+ * based on cached value of "aggregator node info" per VSI
+ */
+static void ice_vf_rebuild_aggregator_node_cfg(struct ice_vsi *vsi)
+{
+	struct ice_pf *pf = vsi->back;
+	enum ice_status status;
+	struct device *dev;
+
+	if (!vsi->agg_node)
+		return;
+
+	dev = ice_pf_to_dev(pf);
+	if (vsi->agg_node->num_vsis == ICE_MAX_VSIS_IN_AGG_NODE) {
+		dev_dbg(dev,
+			"agg_id %u already has reached max_num_vsis %u\n",
+			vsi->agg_node->agg_id, vsi->agg_node->num_vsis);
+		return;
+	}
+
+	status = ice_move_vsi_to_agg(pf->hw.port_info, vsi->agg_node->agg_id,
+				     vsi->idx, vsi->tc_cfg.ena_tc);
+	if (status)
+		dev_dbg(dev, "unable to move VSI idx %u into aggregator %u node",
+			vsi->idx, vsi->agg_node->agg_id);
+	else
+		vsi->agg_node->num_vsis++;
+}
+
+/**
  * ice_vf_rebuild_host_cfg - host admin configuration is persistent across reset
  * @vf: VF to rebuild host configuration on
  */
 static void ice_vf_rebuild_host_cfg(struct ice_vf *vf)
 {
+	struct ice_vsi *vsi = vf->pf->vsi[vf->lan_vsi_idx];
 	struct device *dev = ice_pf_to_dev(vf->pf);
 
 	ice_vf_set_host_trust_cfg(vf);
@@ -1073,6 +1152,8 @@ static void ice_vf_rebuild_host_cfg(struct ice_vf *vf)
 	if (ice_vf_rebuild_host_vlan_cfg(vf))
 		dev_err(dev, "failed to rebuild VLAN configuration for VF %u\n",
 			vf->vf_id);
+	/* rebuild aggregator node config for main VF VSI */
+	ice_vf_rebuild_aggregator_node_cfg(vsi);
 }
 
 /**
@@ -1220,6 +1301,13 @@ bool ice_reset_all_vfs(struct ice_pf *pf, bool is_vflr)
 	ice_for_each_vf(pf, v) {
 		vf = &pf->vf[v];
 
+		ice_vf_fdir_exit(vf);
+		/* clean VF control VSI when resetting VFs since it should be
+		 * setup only when VF creates its first FDIR rule.
+		 */
+		if (vf->ctrl_vsi_idx != ICE_NO_VSI)
+			ice_vf_ctrl_invalidate_vsi(vf);
+
 		ice_vf_pre_vsi_rebuild(vf);
 		ice_vf_rebuild_vsi(vf);
 		ice_vf_post_vsi_rebuild(vf);
@@ -1337,6 +1425,13 @@ bool ice_reset_vf(struct ice_vf *vf, bool is_vflr)
 		if (ice_vf_set_vsi_promisc(vf, vsi, promisc_m, true))
 			dev_err(dev, "disabling promiscuous mode failed\n");
 	}
+
+	ice_vf_fdir_exit(vf);
+	/* clean VF control VSI when resetting VF since it should be setup
+	 * only when VF creates its first FDIR rule.
+	 */
+	if (vf->ctrl_vsi_idx != ICE_NO_VSI)
+		ice_vf_ctrl_vsi_release(vf);
 
 	ice_vf_pre_vsi_rebuild(vf);
 	ice_vf_rebuild_vsi_with_release(vf);
@@ -1496,7 +1591,7 @@ teardown:
 }
 
 /**
- * ice_set_dflt_settings - set VF defaults during initialization/creation
+ * ice_set_dflt_settings_vfs - set VF defaults during initialization/creation
  * @pf: PF holding reference to all VFs for default configuration
  */
 static void ice_set_dflt_settings_vfs(struct ice_pf *pf)
@@ -1513,6 +1608,12 @@ static void ice_set_dflt_settings_vfs(struct ice_pf *pf)
 		set_bit(ICE_VIRTCHNL_VF_CAP_L2, &vf->vf_caps);
 		vf->spoofchk = true;
 		vf->num_vf_qs = pf->num_qps_per_vf;
+
+		/* ctrl_vsi_idx will be set to a valid value only when VF
+		 * creates its first fdir rule.
+		 */
+		ice_vf_ctrl_invalidate_vsi(vf);
+		ice_vf_fdir_init(vf);
 	}
 }
 
@@ -1677,6 +1778,8 @@ int ice_sriov_configure(struct pci_dev *pdev, int num_vfs)
 	if (!num_vfs) {
 		if (!pci_vfs_assigned(pdev)) {
 			ice_free_vfs(pf);
+			if (pf->lag)
+				ice_enable_lag(pf->lag);
 			return 0;
 		}
 
@@ -1688,6 +1791,8 @@ int ice_sriov_configure(struct pci_dev *pdev, int num_vfs)
 	if (err)
 		return err;
 
+	if (pf->lag)
+		ice_disable_lag(pf->lag);
 	return num_vfs;
 }
 
@@ -1808,7 +1913,7 @@ ice_vf_lan_overflow_event(struct ice_pf *pf, struct ice_rq_event_info *event)
  *
  * send msg to VF
  */
-static int
+int
 ice_vc_send_msg_to_vf(struct ice_vf *vf, u32 v_opcode,
 		      enum virtchnl_status_code v_retval, u8 *msg, u16 msglen)
 {
@@ -1879,6 +1984,29 @@ static int ice_vc_get_ver_msg(struct ice_vf *vf, u8 *msg)
 }
 
 /**
+ * ice_vc_get_max_frame_size - get max frame size allowed for VF
+ * @vf: VF used to determine max frame size
+ *
+ * Max frame size is determined based on the current port's max frame size and
+ * whether a port VLAN is configured on this VF. The VF is not aware whether
+ * it's in a port VLAN so the PF needs to account for this in max frame size
+ * checks and sending the max frame size to the VF.
+ */
+static u16 ice_vc_get_max_frame_size(struct ice_vf *vf)
+{
+	struct ice_vsi *vsi = vf->pf->vsi[vf->lan_vsi_idx];
+	struct ice_port_info *pi = vsi->port_info;
+	u16 max_frame_size;
+
+	max_frame_size = pi->phy.link_info.max_frame_size;
+
+	if (vf->port_vlan_info)
+		max_frame_size -= VLAN_HLEN;
+
+	return max_frame_size;
+}
+
+/**
  * ice_vc_get_vf_res_msg
  * @vf: pointer to the VF info
  * @msg: pointer to the msg buffer
@@ -1933,6 +2061,9 @@ static int ice_vc_get_vf_res_msg(struct ice_vf *vf, u8 *msg)
 			vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_RSS_REG;
 	}
 
+	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_FDIR_PF)
+		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_FDIR_PF;
+
 	if (vf->driver_caps & VIRTCHNL_VF_OFFLOAD_RSS_PCTYPE_V2)
 		vfres->vf_cap_flags |= VIRTCHNL_VF_OFFLOAD_RSS_PCTYPE_V2;
 
@@ -1960,6 +2091,7 @@ static int ice_vc_get_vf_res_msg(struct ice_vf *vf, u8 *msg)
 	vfres->max_vectors = pf->num_msix_per_vf;
 	vfres->rss_key_size = ICE_VSIQF_HKEY_ARRAY_SIZE;
 	vfres->rss_lut_size = ICE_VSIQF_HLUT_ARRAY_SIZE;
+	vfres->max_mtu = ice_vc_get_max_frame_size(vf);
 
 	vfres->vsi_res[0].vsi_id = vf->lan_vsi_num;
 	vfres->vsi_res[0].vsi_type = VIRTCHNL_VSI_SRIOV;
@@ -2020,7 +2152,7 @@ static struct ice_vsi *ice_find_vsi_from_id(struct ice_pf *pf, u16 id)
  *
  * check for the valid VSI ID
  */
-static bool ice_vc_isvalid_vsi_id(struct ice_vf *vf, u16 vsi_id)
+bool ice_vc_isvalid_vsi_id(struct ice_vf *vf, u16 vsi_id)
 {
 	struct ice_pf *pf = vf->pf;
 	struct ice_vsi *vsi;
@@ -2312,12 +2444,12 @@ bool ice_is_any_vf_in_promisc(struct ice_pf *pf)
 static int ice_vc_cfg_promiscuous_mode_msg(struct ice_vf *vf, u8 *msg)
 {
 	enum virtchnl_status_code v_ret = VIRTCHNL_STATUS_SUCCESS;
+	bool rm_promisc, alluni = false, allmulti = false;
 	struct virtchnl_promisc_info *info =
 	    (struct virtchnl_promisc_info *)msg;
 	struct ice_pf *pf = vf->pf;
 	struct ice_vsi *vsi;
 	struct device *dev;
-	bool rm_promisc;
 	int ret = 0;
 
 	if (!test_bit(ICE_VF_STATE_ACTIVE, vf->vf_states)) {
@@ -2344,8 +2476,13 @@ static int ice_vc_cfg_promiscuous_mode_msg(struct ice_vf *vf, u8 *msg)
 		goto error_param;
 	}
 
-	rm_promisc = !(info->flags & FLAG_VF_UNICAST_PROMISC) &&
-		!(info->flags & FLAG_VF_MULTICAST_PROMISC);
+	if (info->flags & FLAG_VF_UNICAST_PROMISC)
+		alluni = true;
+
+	if (info->flags & FLAG_VF_MULTICAST_PROMISC)
+		allmulti = true;
+
+	rm_promisc = !allmulti && !alluni;
 
 	if (vsi->num_vlan || vf->port_vlan_info) {
 		struct ice_vsi *pf_vsi = ice_get_main_vsi(pf);
@@ -2375,7 +2512,7 @@ static int ice_vc_cfg_promiscuous_mode_msg(struct ice_vf *vf, u8 *msg)
 	}
 
 	if (!test_bit(ICE_FLAG_VF_TRUE_PROMISC_ENA, pf->flags)) {
-		bool set_dflt_vsi = !!(info->flags & FLAG_VF_UNICAST_PROMISC);
+		bool set_dflt_vsi = alluni || allmulti;
 
 		if (set_dflt_vsi && !ice_is_dflt_vsi_in_use(pf->first_sw))
 			/* only attempt to set the default forwarding VSI if
@@ -2399,12 +2536,12 @@ static int ice_vc_cfg_promiscuous_mode_msg(struct ice_vf *vf, u8 *msg)
 		enum ice_status status;
 		u8 promisc_m;
 
-		if (info->flags & FLAG_VF_UNICAST_PROMISC) {
+		if (alluni) {
 			if (vf->port_vlan_info || vsi->num_vlan)
 				promisc_m = ICE_UCAST_VLAN_PROMISC_BITS;
 			else
 				promisc_m = ICE_UCAST_PROMISC_BITS;
-		} else if (info->flags & FLAG_VF_MULTICAST_PROMISC) {
+		} else if (allmulti) {
 			if (vf->port_vlan_info || vsi->num_vlan)
 				promisc_m = ICE_MCAST_VLAN_PROMISC_BITS;
 			else
@@ -2432,15 +2569,16 @@ static int ice_vc_cfg_promiscuous_mode_msg(struct ice_vf *vf, u8 *msg)
 		}
 	}
 
-	if (info->flags & FLAG_VF_MULTICAST_PROMISC)
-		set_bit(ICE_VF_STATE_MC_PROMISC, vf->vf_states);
-	else
-		clear_bit(ICE_VF_STATE_MC_PROMISC, vf->vf_states);
+	if (allmulti &&
+	    !test_and_set_bit(ICE_VF_STATE_MC_PROMISC, vf->vf_states))
+		dev_info(dev, "VF %u successfully set multicast promiscuous mode\n", vf->vf_id);
+	else if (!allmulti && test_and_clear_bit(ICE_VF_STATE_MC_PROMISC, vf->vf_states))
+		dev_info(dev, "VF %u successfully unset multicast promiscuous mode\n", vf->vf_id);
 
-	if (info->flags & FLAG_VF_UNICAST_PROMISC)
-		set_bit(ICE_VF_STATE_UC_PROMISC, vf->vf_states);
-	else
-		clear_bit(ICE_VF_STATE_UC_PROMISC, vf->vf_states);
+	if (alluni && !test_and_set_bit(ICE_VF_STATE_UC_PROMISC, vf->vf_states))
+		dev_info(dev, "VF %u successfully set unicast promiscuous mode\n", vf->vf_id);
+	else if (!alluni && test_and_clear_bit(ICE_VF_STATE_UC_PROMISC, vf->vf_states))
+		dev_info(dev, "VF %u successfully unset unicast promiscuous mode\n", vf->vf_id);
 
 error_param:
 	return ice_vc_send_msg_to_vf(vf, VIRTCHNL_OP_CONFIG_PROMISCUOUS_MODE,
@@ -2952,6 +3090,8 @@ static int ice_vc_cfg_qs_msg(struct ice_vf *vf, u8 *msg)
 
 		/* copy Rx queue info from VF into VSI */
 		if (qpi->rxq.ring_len > 0) {
+			u16 max_frame_size = ice_vc_get_max_frame_size(vf);
+
 			num_rxq++;
 			vsi->rx_rings[i]->dma = qpi->rxq.dma_ring_addr;
 			vsi->rx_rings[i]->count = qpi->rxq.ring_len;
@@ -2964,7 +3104,7 @@ static int ice_vc_cfg_qs_msg(struct ice_vf *vf, u8 *msg)
 			}
 			vsi->rx_buf_len = qpi->rxq.databuffer_size;
 			vsi->rx_rings[i]->rx_buf_len = vsi->rx_buf_len;
-			if (qpi->rxq.max_pkt_size >= (16 * 1024) ||
+			if (qpi->rxq.max_pkt_size > max_frame_size ||
 			    qpi->rxq.max_pkt_size < 64) {
 				v_ret = VIRTCHNL_STATUS_ERR_PARAM;
 				goto error_param;
@@ -2972,6 +3112,11 @@ static int ice_vc_cfg_qs_msg(struct ice_vf *vf, u8 *msg)
 		}
 
 		vsi->max_frame = qpi->rxq.max_pkt_size;
+		/* add space for the port VLAN since the VF driver is not
+		 * expected to account for it in the MTU calculation
+		 */
+		if (vf->port_vlan_info)
+			vsi->max_frame += VLAN_HLEN;
 	}
 
 	/* VF can request to configure less than allocated queues or default
@@ -3739,6 +3884,12 @@ error_handler:
 	case VIRTCHNL_OP_DISABLE_VLAN_STRIPPING:
 		err = ice_vc_dis_vlan_stripping(vf);
 		break;
+	case VIRTCHNL_OP_ADD_FDIR_FILTER:
+		err = ice_vc_add_fdir_fltr(vf, msg);
+		break;
+	case VIRTCHNL_OP_DEL_FDIR_FILTER:
+		err = ice_vc_del_fdir_fltr(vf, msg);
+		break;
 	case VIRTCHNL_OP_UNKNOWN:
 	default:
 		dev_err(dev, "Unsupported opcode %d from VF %d\n", v_opcode,
@@ -4031,7 +4182,7 @@ void ice_print_vf_rx_mdd_event(struct ice_vf *vf)
 }
 
 /**
- * ice_print_vfs_mdd_event - print VFs malicious driver detect event
+ * ice_print_vfs_mdd_events - print VFs malicious driver detect event
  * @pf: pointer to the PF structure
  *
  * Called from ice_handle_mdd_event to rate limit and print VFs MDD events.

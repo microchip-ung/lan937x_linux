@@ -68,6 +68,8 @@ struct bpf_reg_state {
 			unsigned long raw1;
 			unsigned long raw2;
 		} raw;
+
+		u32 subprogno; /* for PTR_TO_FUNC */
 	};
 	/* For PTR_TO_PACKET, used to find other pointers with the same variable
 	 * offset, so they can share range knowledge.
@@ -195,7 +197,7 @@ struct bpf_func_state {
 	 * 0 = main function, 1 = first callee.
 	 */
 	u32 frameno;
-	/* subprog number == index within subprog_stack_depth
+	/* subprog number == index within subprog_info
 	 * zero == main subprog
 	 */
 	u32 subprogno;
@@ -204,6 +206,7 @@ struct bpf_func_state {
 	int acquired_refs;
 	struct bpf_reference_state *refs;
 	int allocated_stack;
+	bool in_callback_fn;
 	struct bpf_stack_state *stack;
 };
 
@@ -340,6 +343,7 @@ struct bpf_insn_aux_data {
 };
 
 #define MAX_USED_MAPS 64 /* max number of maps accessed by one eBPF program */
+#define MAX_USED_BTFS 64 /* max number of BTFs accessed by one BPF program */
 
 #define BPF_VERIFIER_TMP_LOG_SIZE	1024
 
@@ -398,9 +402,12 @@ struct bpf_verifier_env {
 	struct bpf_verifier_state_list **explored_states; /* search pruning optimization */
 	struct bpf_verifier_state_list *free_list;
 	struct bpf_map *used_maps[MAX_USED_MAPS]; /* array of map's used by eBPF program */
+	struct btf_mod_pair used_btfs[MAX_USED_BTFS]; /* array of BTF's used by BPF program */
 	u32 used_map_cnt;		/* number of used maps */
+	u32 used_btf_cnt;		/* number of used BTF objects */
 	u32 id_gen;			/* used to generate unique reg IDs */
 	bool allow_ptr_leaks;
+	bool allow_uninit_stack;
 	bool allow_ptr_to_map_access;
 	bool bpf_capable;
 	bool bypass_spec_v1;
@@ -467,6 +474,8 @@ bpf_prog_offload_remove_insns(struct bpf_verifier_env *env, u32 off, u32 cnt);
 
 int check_ctx_reg(struct bpf_verifier_env *env,
 		  const struct bpf_reg_state *reg, int regno);
+int check_mem_reg(struct bpf_verifier_env *env, struct bpf_reg_state *reg,
+		   u32 regno, u32 mem_size);
 
 /* this lives here instead of in bpf.h because it needs to dereference tgt_prog */
 static inline u64 bpf_trampoline_compute_key(const struct bpf_prog *tgt_prog,

@@ -190,7 +190,8 @@ static void dsa_loop_port_stp_state_set(struct dsa_switch *ds, int port,
 }
 
 static int dsa_loop_port_vlan_filtering(struct dsa_switch *ds, int port,
-					bool vlan_filtering)
+					bool vlan_filtering,
+					struct netlink_ext_ack *extack)
 {
 	dev_dbg(ds->dev, "%s: port: %d, vlan_filtering: %d\n",
 		__func__, port, vlan_filtering);
@@ -199,7 +200,8 @@ static int dsa_loop_port_vlan_filtering(struct dsa_switch *ds, int port,
 }
 
 static int dsa_loop_port_vlan_add(struct dsa_switch *ds, int port,
-				  const struct switchdev_obj_port_vlan *vlan)
+				  const struct switchdev_obj_port_vlan *vlan,
+				  struct netlink_ext_ack *extack)
 {
 	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
 	bool pvid = vlan->flags & BRIDGE_VLAN_INFO_PVID;
@@ -207,7 +209,7 @@ static int dsa_loop_port_vlan_add(struct dsa_switch *ds, int port,
 	struct mii_bus *bus = ps->bus;
 	struct dsa_loop_vlan *vl;
 
-	if (vlan->vid > ARRAY_SIZE(ps->vlans))
+	if (vlan->vid >= ARRAY_SIZE(ps->vlans))
 		return -ERANGE;
 
 	/* Just do a sleeping operation to make lockdep checks effective */
@@ -323,7 +325,6 @@ static int dsa_loop_drv_probe(struct mdio_device *mdiodev)
 	ds->dev = &mdiodev->dev;
 	ds->ops = &dsa_loop_driver;
 	ds->priv = ps;
-	ds->configure_vlan_while_not_filtering = true;
 	ps->bus = mdiodev->bus;
 
 	dev_set_drvdata(&mdiodev->dev, ds);

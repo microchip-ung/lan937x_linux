@@ -113,7 +113,7 @@ static struct net_device *get_netdev_for_sock(struct sock *sk)
 	struct net_device *netdev = NULL;
 
 	if (likely(dst)) {
-		netdev = dst->dev;
+		netdev = netdev_sk_get_lowest_dev(dst->dev, sk);
 		dev_hold(netdev);
 	}
 
@@ -601,7 +601,7 @@ struct tls_record_info *tls_get_record(struct tls_offload_context_tx *context,
 	if (!info ||
 	    before(seq, info->end_seq - info->len)) {
 		/* if retransmit_hint is irrelevant start
-		 * from the beggining of the list
+		 * from the beginning of the list
 		 */
 		info = list_first_entry_or_null(&context->records_list,
 						struct tls_record_info, list);
@@ -1329,6 +1329,8 @@ static int tls_dev_event(struct notifier_block *this, unsigned long event,
 	switch (event) {
 	case NETDEV_REGISTER:
 	case NETDEV_FEAT_CHANGE:
+		if (netif_is_bond_master(dev))
+			return NOTIFY_DONE;
 		if ((dev->features & NETIF_F_HW_TLS_RX) &&
 		    !dev->tlsdev_ops->tls_dev_resync)
 			return NOTIFY_BAD;

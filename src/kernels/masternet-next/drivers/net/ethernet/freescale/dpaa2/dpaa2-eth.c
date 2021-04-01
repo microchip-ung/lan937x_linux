@@ -350,7 +350,7 @@ static u32 dpaa2_eth_run_xdp(struct dpaa2_eth_priv *priv,
 	struct bpf_prog *xdp_prog;
 	struct xdp_buff xdp;
 	u32 xdp_act = XDP_PASS;
-	int err;
+	int err, offset;
 
 	rcu_read_lock();
 
@@ -358,14 +358,10 @@ static u32 dpaa2_eth_run_xdp(struct dpaa2_eth_priv *priv,
 	if (!xdp_prog)
 		goto out;
 
-	xdp.data = vaddr + dpaa2_fd_get_offset(fd);
-	xdp.data_end = xdp.data + dpaa2_fd_get_len(fd);
-	xdp.data_hard_start = xdp.data - XDP_PACKET_HEADROOM;
-	xdp_set_data_meta_invalid(&xdp);
-	xdp.rxq = &ch->xdp_rxq;
-
-	xdp.frame_sz = DPAA2_ETH_RX_BUF_RAW_SIZE -
-		(dpaa2_fd_get_offset(fd) - XDP_PACKET_HEADROOM);
+	offset = dpaa2_fd_get_offset(fd) - XDP_PACKET_HEADROOM;
+	xdp_init_buff(&xdp, DPAA2_ETH_RX_BUF_RAW_SIZE - offset, &ch->xdp_rxq);
+	xdp_prepare_buff(&xdp, vaddr + offset, XDP_PACKET_HEADROOM,
+			 dpaa2_fd_get_len(fd), false);
 
 	xdp_act = bpf_prog_run_xdp(xdp_prog, &xdp);
 
@@ -399,10 +395,20 @@ static u32 dpaa2_eth_run_xdp(struct dpaa2_eth_priv *priv,
 		xdp.frame_sz = DPAA2_ETH_RX_BUF_RAW_SIZE;
 
 		err = xdp_do_redirect(priv->net_dev, &xdp, xdp_prog);
-		if (unlikely(err))
+		if (unlikely(err)) {
+			addr = dma_map_page(priv->net_dev->dev.parent,
+					    virt_to_page(vaddr), 0,
+					    priv->rx_buf_size, DMA_BIDIRECTIONAL);
+			if (unlikely(dma_mapping_error(priv->net_dev->dev.parent, addr))) {
+				free_pages((unsigned long)vaddr, 0);
+			} else {
+				ch->buf_count++;
+				dpaa2_eth_xdp_release_buf(priv, ch, addr);
+			}
 			ch->stats.xdp_drop++;
-		else
+		} else {
 			ch->stats.xdp_redirect++;
+		}
 		break;
 	}
 
@@ -768,12 +774,11 @@ static int dpaa2_eth_build_sg_fd(struct dpaa2_eth_priv *priv,
 	/* Prepare the HW SGT structure */
 	sgt_buf_size = priv->tx_data_offset +
 		       sizeof(struct dpaa2_sg_entry) *  num_dma_bufs;
-	sgt_buf = napi_alloc_frag(sgt_buf_size + DPAA2_ETH_TX_BUF_ALIGN);
+	sgt_buf = napi_alloc_frag_align(sgt_buf_size, DPAA2_ETH_TX_BUF_ALIGN);
 	if (unlikely(!sgt_buf)) {
 		err = -ENOMEM;
 		goto sgt_buf_alloc_failed;
 	}
-	sgt_buf = PTR_ALIGN(sgt_buf, DPAA2_ETH_TX_BUF_ALIGN);
 	memset(sgt_buf, 0, sgt_buf_size);
 
 	sgt = (struct dpaa2_sg_entry *)(sgt_buf + priv->tx_data_offset);
@@ -1664,7 +1669,7 @@ set_cgtd:
 	 * CG taildrop threshold, so it won't interfere with it; we also
 	 * want frames in non-PFC enabled traffic classes to be kept in check)
 	 */
-	td.enable = !tx_pause || (tx_pause && pfc);
+	td.enable = !tx_pause || pfc;
 	if (priv->rx_cgtd_enabled == td.enable)
 		return;
 

@@ -43,7 +43,7 @@ examples:
     #include <dt-bindings/gpio/gpio.h>
 
     //Ethernet switch connected via spi to the host, CPU port wired to eth1
-    eth1 {
+    &eth1 {
       #address-cells = <1>;
       #size-cells = <0>;
 
@@ -53,12 +53,11 @@ examples:
       };
     };
 
-    spi1 {
+    spi {
       #address-cells = <1>;
       #size-cells = <0>;
       pinctrl-0 = <&pinctrl_spi_ksz>;
       cs-gpios = <0>, <0>, <0>, <&pioC 28 0>;
-      id = <1>;
 
       lan9374: switch@0 {
         compatible = "microchip,lan9374";
@@ -72,37 +71,33 @@ examples:
           port@0 {
             reg = <0>;
             label = "lan1";
+            phy-handle = <&t1phy0>;
           };
           port@1 {
             reg = <1>;
             label = "lan2";
+            phy-handle = <&t1phy1>
           };
           port@2 {
-            reg = <7>;
-            label = "lan3";
-          };
-          port@3 {
             reg = <2>;
             label = "lan4";
+            phy-handle = <&t1phy2>
           };
-          port@4 {
-            reg = <6>;
-            label = "lan5";
-          };
-          port@5 {
+          port@3 {
             reg = <3>;
             label = "lan6";
+            phy-handle = <&t1phy3>
           };
-          port@6 {
+          port@4 {
             reg = <4>;
-            label = "cpu";
-            ethernet = <&eth1>;
+            phy-mode = "rgmii"
+            ethernet = <&ethernet>;
             fixed-link {
               speed = <1000>;
               full-duplex;
             };
           };
-          port@7 {
+          port@5 {
             reg = <5>;
             label = "lan7";
             fixed-link {
@@ -110,6 +105,41 @@ examples:
               full-duplex;
             };
           };
+          port@6 {
+            reg = <6>;
+            label = "lan5";
+            phy-handle = <&t1phy4>
+          };
+          port@7 {
+            reg = <7>;
+            label = "lan3";
+            phy-handle = <&t1phy5>
+          };
         };
+
+        mdio {
+          compatible = "microchip,lan937x-mdio";
+          #address-cells = <1>;
+          #size-cells = <0>;
+
+          t1phy0: ethernet-phy@0{
+            reg = <0x0>;
+          };
+          t1phy1: ethernet-phy@1{
+            reg = <0x1>;
+          };
+          t1phy2: ethernet-phy@2{
+            reg = <0x2>;
+          };
+          t1phy3: ethernet-phy@3{
+            reg = <0x3>;
+          };
+          t1phy4: ethernet-phy@4{
+            reg = <0x6>;
+          };
+          t1phy5: ethernet-phy@5{
+            reg = <0x7>;
+          };
+				};
       };
     };

@@ -631,6 +631,7 @@ static int mv3310_read_status_10gbaser(struct phy_device *phydev)
 	phydev->link = 1;
 	phydev->speed = SPEED_10000;
 	phydev->duplex = DUPLEX_FULL;
+	phydev->port = PORT_FIBRE;
 
 	return 0;
 }
@@ -690,6 +691,7 @@ static int mv3310_read_status_copper(struct phy_device *phydev)
 
 	phydev->duplex = cssr1 & MV_PCS_CSSR1_DUPLEX_FULL ?
 			 DUPLEX_FULL : DUPLEX_HALF;
+	phydev->port = PORT_TP;
 	phydev->mdix = cssr1 & MV_PCS_CSSR1_MDIX ?
 		       ETH_TP_MDI_X : ETH_TP_MDI;
 
@@ -779,6 +781,7 @@ static struct phy_driver mv3310_drivers[] = {
 		.get_tunable	= mv3310_get_tunable,
 		.set_tunable	= mv3310_set_tunable,
 		.remove		= mv3310_remove,
+		.set_loopback	= genphy_c45_loopback,
 	},
 	{
 		.phy_id		= MARVELL_PHY_ID_88E2110,
@@ -794,6 +797,7 @@ static struct phy_driver mv3310_drivers[] = {
 		.get_tunable	= mv3310_get_tunable,
 		.set_tunable	= mv3310_set_tunable,
 		.remove		= mv3310_remove,
+		.set_loopback	= genphy_c45_loopback,
 	},
 };
 

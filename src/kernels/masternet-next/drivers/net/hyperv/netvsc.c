@@ -22,6 +22,7 @@
 #include <linux/prefetch.h>
 
 #include <asm/sync_bitops.h>
+#include <asm/mshyperv.h>
 
 #include "hyperv_net.h"
 #include "netvsc_trace.h"
@@ -131,6 +132,7 @@ static void free_netvsc_device(struct rcu_head *head)
 
 	for (i = 0; i < VRSS_CHANNEL_MAX; i++) {
 		xdp_rxq_info_unreg(&nvdev->chan_table[i].xdp_rxq);
+		kfree(nvdev->chan_table[i].recv_buf);
 		vfree(nvdev->chan_table[i].mrc.slots);
 	}
 
@@ -310,7 +312,7 @@ static int netvsc_init_buf(struct hv_device *device,
 	struct nvsp_message *init_packet;
 	unsigned int buf_size;
 	size_t map_words;
-	int ret = 0;
+	int i, ret = 0;
 
 	/* Get receive buffer area. */
 	buf_size = device_info->recv_sections * device_info->recv_section_size;
@@ -402,6 +404,16 @@ static int netvsc_init_buf(struct hv_device *device,
 			   net_device->recv_section_size);
 		ret = -EINVAL;
 		goto cleanup;
+	}
+
+	for (i = 0; i < VRSS_CHANNEL_MAX; i++) {
+		struct netvsc_channel *nvchan = &net_device->chan_table[i];
+
+		nvchan->recv_buf = kzalloc(net_device->recv_section_size, GFP_KERNEL);
+		if (nvchan->recv_buf == NULL) {
+			ret = -ENOMEM;
+			goto cleanup;
+		}
 	}
 
 	/* Setup receive completion ring.
@@ -551,7 +563,10 @@ static int negotiate_nvsp_ver(struct hv_device *device,
 	init_packet->msg.v2_msg.send_ndis_config.capability.ieee8021q = 1;
 
 	if (nvsp_ver >= NVSP_PROTOCOL_VERSION_5) {
-		init_packet->msg.v2_msg.send_ndis_config.capability.sriov = 1;
+		if (hv_is_isolation_supported())
+			netdev_info(ndev, "SR-IOV not advertised by guests on the host supporting isolation\n");
+		else
+			init_packet->msg.v2_msg.send_ndis_config.capability.sriov = 1;
 
 		/* Teaming bit is needed to receive link speed updates */
 		init_packet->msg.v2_msg.send_ndis_config.capability.teaming = 1;
@@ -594,6 +609,13 @@ static int netvsc_connect_vsp(struct hv_device *device,
 		}
 
 	if (i < 0) {
+		ret = -EPROTO;
+		goto cleanup;
+	}
+
+	if (hv_is_isolation_supported() && net_device->nvsp_version < NVSP_PROTOCOL_VERSION_61) {
+		netdev_err(ndev, "Invalid NVSP version 0x%x (expected >= 0x%x) from the host supporting isolation\n",
+			   net_device->nvsp_version, NVSP_PROTOCOL_VERSION_61);
 		ret = -EPROTO;
 		goto cleanup;
 	}
@@ -918,6 +940,7 @@ static inline int netvsc_send_pkt(
 	int ret;
 	u32 ring_avail = hv_get_avail_to_write_percent(&out_channel->outbound);
 
+	memset(&nvmsg, 0, sizeof(struct nvsp_message));
 	nvmsg.hdr.msg_type = NVSP_MSG1_TYPE_SEND_RNDIS_PKT;
 	if (skb)
 		rpkt->channel_type = 0;		/* 0 is RMC_DATA */
@@ -994,6 +1017,26 @@ static inline void move_pkt_msd(struct hv_netvsc_packet **msd_send,
 }
 
 /* RCU already held by caller */
+/* Batching/bouncing logic is designed to attempt to optimize
+ * performance.
+ *
+ * For small, non-LSO packets we copy the packet to a send buffer
+ * which is pre-registered with the Hyper-V side. This enables the
+ * hypervisor to avoid remapping the aperture to access the packet
+ * descriptor and data.
+ *
+ * If we already started using a buffer and the netdev is transmitting
+ * a burst of packets, keep on copying into the buffer until it is
+ * full or we are done collecting a burst. If there is an existing
+ * buffer with space for the RNDIS descriptor but not the packet, copy
+ * the RNDIS descriptor to the buffer, keeping the packet in place.
+ *
+ * If we do batching and send more than one packet using a single
+ * NetVSC message, free the SKBs of the packets copied, except for the
+ * last packet. This is done to streamline the handling of the case
+ * where the last packet only had the RNDIS descriptor copied to the
+ * send buffer, with the data pointers included in the NetVSC message.
+ */
 int netvsc_send(struct net_device *ndev,
 		struct hv_netvsc_packet *packet,
 		struct rndis_message *rndis_msg,
@@ -1283,6 +1326,19 @@ static int netvsc_receive(struct net_device *ndev,
 			continue;
 		}
 
+		/* We're going to copy (sections of) the packet into nvchan->recv_buf;
+		 * make sure that nvchan->recv_buf is large enough to hold the packet.
+		 */
+		if (unlikely(buflen > net_device->recv_section_size)) {
+			nvchan->rsc.cnt = 0;
+			status = NVSP_STAT_FAIL;
+			netif_err(net_device_ctx, rx_err, ndev,
+				  "Packet too big: buflen=%u recv_section_size=%u\n",
+				  buflen, net_device->recv_section_size);
+
+			continue;
+		}
+
 		data = recv_buf + offset;
 
 		nvchan->rsc.is_last = (i == count - 1);
@@ -1293,8 +1349,11 @@ static int netvsc_receive(struct net_device *ndev,
 		ret = rndis_filter_receive(ndev, net_device,
 					   nvchan, data, buflen);
 
-		if (unlikely(ret != NVSP_STAT_SUCCESS))
+		if (unlikely(ret != NVSP_STAT_SUCCESS)) {
+			/* Drop incomplete packet */
+			nvchan->rsc.cnt = 0;
 			status = NVSP_STAT_FAIL;
+		}
 	}
 
 	enq_receive_complete(ndev, net_device, q_idx,
@@ -1337,7 +1396,7 @@ static void netvsc_send_table(struct net_device *ndev,
 			 sizeof(union nvsp_6_message_uber);
 
 	/* Boundary check for all versions */
-	if (offset > msglen - count * sizeof(u32)) {
+	if (msglen < count * sizeof(u32) || offset > msglen - count * sizeof(u32)) {
 		netdev_err(ndev, "Received send-table offset too big:%u\n",
 			   offset);
 		return;
@@ -1388,7 +1447,10 @@ static void netvsc_receive_inband(struct net_device *ndev,
 		break;
 
 	case NVSP_MSG4_TYPE_SEND_VF_ASSOCIATION:
-		netvsc_send_vf(ndev, nvmsg, msglen);
+		if (hv_is_isolation_supported())
+			netdev_err(ndev, "Ignore VF_ASSOCIATION msg from the host supporting isolation\n");
+		else
+			netvsc_send_vf(ndev, nvmsg, msglen);
 		break;
 	}
 }

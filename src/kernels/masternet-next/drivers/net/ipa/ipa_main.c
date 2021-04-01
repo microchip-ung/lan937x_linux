@@ -15,7 +15,6 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/of_address.h>
-#include <linux/remoteproc.h>
 #include <linux/qcom_scm.h>
 #include <linux/soc/qcom/mdt_loader.h>
 
@@ -228,8 +227,8 @@ static void ipa_hardware_config_comp(struct ipa *ipa)
 {
 	u32 val;
 
-	/* Nothing to configure for IPA v3.5.1 */
-	if (ipa->version == IPA_VERSION_3_5_1)
+	/* Nothing to configure prior to IPA v4.0 */
+	if (ipa->version < IPA_VERSION_4_0)
 		return;
 
 	val = ioread32(ipa->reg_virt + IPA_REG_COMP_CFG_OFFSET);
@@ -250,54 +249,57 @@ static void ipa_hardware_config_comp(struct ipa *ipa)
 	iowrite32(val, ipa->reg_virt + IPA_REG_COMP_CFG_OFFSET);
 }
 
-/* Configure DDR and PCIe max read/write QSB values */
-static void ipa_hardware_config_qsb(struct ipa *ipa)
+/* Configure DDR and (possibly) PCIe max read/write QSB values */
+static void
+ipa_hardware_config_qsb(struct ipa *ipa, const struct ipa_data *data)
 {
-	enum ipa_version version = ipa->version;
-	u32 max0;
-	u32 max1;
+	const struct ipa_qsb_data *data0;
+	const struct ipa_qsb_data *data1;
 	u32 val;
 
-	/* QMB_0 represents DDR; QMB_1 represents PCIe */
-	val = u32_encode_bits(8, GEN_QMB_0_MAX_WRITES_FMASK);
-	switch (version) {
-	case IPA_VERSION_4_2:
-		max1 = 0;		/* PCIe not present */
-		break;
-	case IPA_VERSION_4_5:
-		max1 = 8;
-		break;
-	default:
-		max1 = 4;
-		break;
-	}
-	val |= u32_encode_bits(max1, GEN_QMB_1_MAX_WRITES_FMASK);
+	/* assert(data->qsb_count > 0); */
+	/* assert(data->qsb_count < 3); */
+
+	/* QMB 0 represents DDR; QMB 1 (if present) represents PCIe */
+	data0 = &data->qsb_data[IPA_QSB_MASTER_DDR];
+	if (data->qsb_count > 1)
+		data1 = &data->qsb_data[IPA_QSB_MASTER_PCIE];
+
+	/* Max outstanding write accesses for QSB masters */
+	val = u32_encode_bits(data0->max_writes, GEN_QMB_0_MAX_WRITES_FMASK);
+	if (data->qsb_count > 1)
+		val |= u32_encode_bits(data1->max_writes,
+				       GEN_QMB_1_MAX_WRITES_FMASK);
 	iowrite32(val, ipa->reg_virt + IPA_REG_QSB_MAX_WRITES_OFFSET);
 
-	max1 = 12;
-	switch (version) {
-	case IPA_VERSION_3_5_1:
-		max0 = 8;
-		break;
-	case IPA_VERSION_4_0:
-	case IPA_VERSION_4_1:
-		max0 = 12;
-		break;
-	case IPA_VERSION_4_2:
-		max0 = 12;
-		max1 = 0;		/* PCIe not present */
-		break;
-	case IPA_VERSION_4_5:
-		max0 = 0;		/* No limit (hardware maximum) */
-		break;
-	}
-	val = u32_encode_bits(max0, GEN_QMB_0_MAX_READS_FMASK);
-	val |= u32_encode_bits(max1, GEN_QMB_1_MAX_READS_FMASK);
-	if (version != IPA_VERSION_3_5_1) {
-		/* GEN_QMB_0_MAX_READS_BEATS is 0 */
-		/* GEN_QMB_1_MAX_READS_BEATS is 0 */
+	/* Max outstanding read accesses for QSB masters */
+	val = u32_encode_bits(data0->max_reads, GEN_QMB_0_MAX_READS_FMASK);
+	if (ipa->version >= IPA_VERSION_4_0)
+		val |= u32_encode_bits(data0->max_reads_beats,
+				       GEN_QMB_0_MAX_READS_BEATS_FMASK);
+	if (data->qsb_count > 1) {
+		val |= u32_encode_bits(data1->max_reads,
+				       GEN_QMB_1_MAX_READS_FMASK);
+		if (ipa->version >= IPA_VERSION_4_0)
+			val |= u32_encode_bits(data1->max_reads_beats,
+					       GEN_QMB_1_MAX_READS_BEATS_FMASK);
 	}
 	iowrite32(val, ipa->reg_virt + IPA_REG_QSB_MAX_READS_OFFSET);
+}
+
+/* The internal inactivity timer clock is used for the aggregation timer */
+#define TIMER_FREQUENCY	32000		/* 32 KHz inactivity timer clock */
+
+/* Compute the value to use in the COUNTER_CFG register AGGR_GRANULARITY
+ * field to represent the given number of microseconds.  The value is one
+ * less than the number of timer ticks in the requested period.  0 is not
+ * a valid granularity value.
+ */
+static u32 ipa_aggr_granularity_val(u32 usec)
+{
+	/* assert(usec != 0); */
+
+	return DIV_ROUND_CLOSEST(usec * TIMER_FREQUENCY, USEC_PER_SEC) - 1;
 }
 
 /* IPA uses unified Qtime starting at IPA v4.5, implementing various
@@ -386,8 +388,9 @@ static void ipa_hardware_dcd_deconfig(struct ipa *ipa)
 /**
  * ipa_hardware_config() - Primitive hardware initialization
  * @ipa:	IPA pointer
+ * @data:	IPA configuration data
  */
-static void ipa_hardware_config(struct ipa *ipa)
+static void ipa_hardware_config(struct ipa *ipa, const struct ipa_data *data)
 {
 	enum ipa_version version = ipa->version;
 	u32 granularity;
@@ -400,7 +403,7 @@ static void ipa_hardware_config(struct ipa *ipa)
 	}
 
 	/* Implement some hardware workarounds */
-	if (version != IPA_VERSION_3_5_1 && version < IPA_VERSION_4_5) {
+	if (version >= IPA_VERSION_4_0 && version < IPA_VERSION_4_5) {
 		/* Enable open global clocks (not needed for IPA v4.5) */
 		val = GLOBAL_FMASK;
 		val |= GLOBAL_2X_CLK_FMASK;
@@ -415,7 +418,7 @@ static void ipa_hardware_config(struct ipa *ipa)
 	ipa_hardware_config_comp(ipa);
 
 	/* Configure system bus limits */
-	ipa_hardware_config_qsb(ipa);
+	ipa_hardware_config_qsb(ipa, data);
 
 	if (version < IPA_VERSION_4_5) {
 		/* Configure aggregation timer granularity */
@@ -581,10 +584,10 @@ ipa_resource_config(struct ipa *ipa, const struct ipa_resource_data *data)
 		return -EINVAL;
 
 	for (i = 0; i < data->resource_src_count; i++)
-		ipa_resource_config_src(ipa, data->resource_src);
+		ipa_resource_config_src(ipa, &data->resource_src[i]);
 
 	for (i = 0; i < data->resource_dst_count; i++)
-		ipa_resource_config_dst(ipa, data->resource_dst);
+		ipa_resource_config_dst(ipa, &data->resource_dst[i]);
 
 	return 0;
 }
@@ -611,7 +614,7 @@ static int ipa_config(struct ipa *ipa, const struct ipa_data *data)
 	 */
 	ipa_clock_get(ipa);
 
-	ipa_hardware_config(ipa);
+	ipa_hardware_config(ipa, data);
 
 	ret = ipa_endpoint_config(ipa);
 	if (ret)
@@ -729,19 +732,6 @@ static const struct of_device_id ipa_match[] = {
 };
 MODULE_DEVICE_TABLE(of, ipa_match);
 
-static phandle of_property_read_phandle(const struct device_node *np,
-					const char *name)
-{
-        struct property *prop;
-        int len = 0;
-
-        prop = of_find_property(np, name, &len);
-        if (!prop || len != sizeof(__be32))
-                return 0;
-
-        return be32_to_cpup(prop->value);
-}
-
 /* Check things that can be validated at build time.  This just
  * groups these things BUILD_BUG_ON() calls don't clutter the rest
  * of the code.
@@ -749,8 +739,14 @@ static phandle of_property_read_phandle(const struct device_node *np,
 static void ipa_validate_build(void)
 {
 #ifdef IPA_VALIDATE
-	/* We assume we're working on 64-bit hardware */
-	BUILD_BUG_ON(!IS_ENABLED(CONFIG_64BIT));
+	/* At one time we assumed a 64-bit build, allowing some do_div()
+	 * calls to be replaced by simple division or modulo operations.
+	 * We currently only perform divide and modulo operations on u32,
+	 * u16, or size_t objects, and of those only size_t has any chance
+	 * of being a 64-bit value.  (It should be guaranteed 32 bits wide
+	 * on a 32-bit build, but there is no harm in verifying that.)
+	 */
+	BUILD_BUG_ON(!IS_ENABLED(CONFIG_64BIT) && sizeof(size_t) != 4);
 
 	/* Code assumes the EE ID for the AP is 0 (zeroed structure field) */
 	BUILD_BUG_ON(GSI_EE_AP != 0);
@@ -807,10 +803,8 @@ static int ipa_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	const struct ipa_data *data;
 	struct ipa_clock *clock;
-	struct rproc *rproc;
 	bool modem_init;
 	struct ipa *ipa;
-	phandle ph;
 	int ret;
 
 	ipa_validate_build();
@@ -829,25 +823,12 @@ static int ipa_probe(struct platform_device *pdev)
 		if (!qcom_scm_is_available())
 			return -EPROBE_DEFER;
 
-	/* We rely on remoteproc to tell us about modem state changes */
-	ph = of_property_read_phandle(dev->of_node, "modem-remoteproc");
-	if (!ph) {
-		dev_err(dev, "DT missing \"modem-remoteproc\" property\n");
-		return -EINVAL;
-	}
-
-	rproc = rproc_get_by_phandle(ph);
-	if (!rproc)
-		return -EPROBE_DEFER;
-
 	/* The clock and interconnects might not be ready when we're
 	 * probed, so might return -EPROBE_DEFER.
 	 */
 	clock = ipa_clock_init(dev, data->clock_data);
-	if (IS_ERR(clock)) {
-		ret = PTR_ERR(clock);
-		goto err_rproc_put;
-	}
+	if (IS_ERR(clock))
+		return PTR_ERR(clock);
 
 	/* No more EPROBE_DEFER.  Allocate and initialize the IPA structure */
 	ipa = kzalloc(sizeof(*ipa), GFP_KERNEL);
@@ -858,9 +839,9 @@ static int ipa_probe(struct platform_device *pdev)
 
 	ipa->pdev = pdev;
 	dev_set_drvdata(dev, ipa);
-	ipa->modem_rproc = rproc;
 	ipa->clock = clock;
 	ipa->version = data->version;
+	init_completion(&ipa->completion);
 
 	ret = ipa_reg_init(ipa);
 	if (ret)
@@ -935,8 +916,6 @@ err_kfree_ipa:
 	kfree(ipa);
 err_clock_exit:
 	ipa_clock_exit(clock);
-err_rproc_put:
-	rproc_put(rproc);
 
 	return ret;
 }
@@ -944,7 +923,6 @@ err_rproc_put:
 static int ipa_remove(struct platform_device *pdev)
 {
 	struct ipa *ipa = dev_get_drvdata(&pdev->dev);
-	struct rproc *rproc = ipa->modem_rproc;
 	struct ipa_clock *clock = ipa->clock;
 	int ret;
 
@@ -970,7 +948,6 @@ static int ipa_remove(struct platform_device *pdev)
 	ipa_reg_exit(ipa);
 	kfree(ipa);
 	ipa_clock_exit(clock);
-	rproc_put(rproc);
 
 	return 0;
 }

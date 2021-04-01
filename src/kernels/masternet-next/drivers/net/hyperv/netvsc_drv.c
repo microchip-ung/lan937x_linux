@@ -743,7 +743,8 @@ static netdev_tx_t netvsc_start_xmit(struct sk_buff *skb,
  * netvsc_linkstatus_callback - Link up/down notification
  */
 void netvsc_linkstatus_callback(struct net_device *net,
-				struct rndis_message *resp)
+				struct rndis_message *resp,
+				void *data, u32 data_buflen)
 {
 	struct rndis_indicate_status *indicate = &resp->msg.indicate_status;
 	struct net_device_context *ndev_ctx = netdev_priv(net);
@@ -757,12 +758,29 @@ void netvsc_linkstatus_callback(struct net_device *net,
 		return;
 	}
 
+	/* Copy the RNDIS indicate status into nvchan->recv_buf */
+	memcpy(indicate, data + RNDIS_HEADER_SIZE, sizeof(*indicate));
+
 	/* Update the physical link speed when changing to another vSwitch */
 	if (indicate->status == RNDIS_STATUS_LINK_SPEED_CHANGE) {
 		u32 speed;
 
-		speed = *(u32 *)((void *)indicate
-				 + indicate->status_buf_offset) / 10000;
+		/* Validate status_buf_offset and status_buflen.
+		 *
+		 * Certain (pre-Fe) implementations of Hyper-V's vSwitch didn't account
+		 * for the status buffer field in resp->msg_len; perform the validation
+		 * using data_buflen (>= resp->msg_len).
+		 */
+		if (indicate->status_buflen < sizeof(speed) ||
+		    indicate->status_buf_offset < sizeof(*indicate) ||
+		    data_buflen - RNDIS_HEADER_SIZE < indicate->status_buf_offset ||
+		    data_buflen - RNDIS_HEADER_SIZE - indicate->status_buf_offset
+				< indicate->status_buflen) {
+			netdev_err(net, "invalid rndis_indicate_status packet\n");
+			return;
+		}
+
+		speed = *(u32 *)(data + RNDIS_HEADER_SIZE + indicate->status_buf_offset) / 10000;
 		ndev_ctx->speed = speed;
 		return;
 	}
@@ -817,10 +835,11 @@ static struct sk_buff *netvsc_alloc_recv_skb(struct net_device *net,
 					     struct xdp_buff *xdp)
 {
 	struct napi_struct *napi = &nvchan->napi;
-	const struct ndis_pkt_8021q_info *vlan = nvchan->rsc.vlan;
+	const struct ndis_pkt_8021q_info *vlan = &nvchan->rsc.vlan;
 	const struct ndis_tcp_ip_checksum_info *csum_info =
-						nvchan->rsc.csum_info;
-	const u32 *hash_info = nvchan->rsc.hash_info;
+						&nvchan->rsc.csum_info;
+	const u32 *hash_info = &nvchan->rsc.hash_info;
+	u8 ppi_flags = nvchan->rsc.ppi_flags;
 	struct sk_buff *skb;
 	void *xbuf = xdp->data_hard_start;
 	int i;
@@ -864,22 +883,28 @@ static struct sk_buff *netvsc_alloc_recv_skb(struct net_device *net,
 	 * We compute it here if the flags are set, because on Linux, the IP
 	 * checksum is always checked.
 	 */
-	if (csum_info && csum_info->receive.ip_checksum_value_invalid &&
+	if ((ppi_flags & NVSC_RSC_CSUM_INFO) && csum_info->receive.ip_checksum_value_invalid &&
 	    csum_info->receive.ip_checksum_succeeded &&
-	    skb->protocol == htons(ETH_P_IP))
+	    skb->protocol == htons(ETH_P_IP)) {
+		/* Check that there is enough space to hold the IP header. */
+		if (skb_headlen(skb) < sizeof(struct iphdr)) {
+			kfree_skb(skb);
+			return NULL;
+		}
 		netvsc_comp_ipcsum(skb);
+	}
 
 	/* Do L4 checksum offload if enabled and present. */
-	if (csum_info && (net->features & NETIF_F_RXCSUM)) {
+	if ((ppi_flags & NVSC_RSC_CSUM_INFO) && (net->features & NETIF_F_RXCSUM)) {
 		if (csum_info->receive.tcp_checksum_succeeded ||
 		    csum_info->receive.udp_checksum_succeeded)
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 	}
 
-	if (hash_info && (net->features & NETIF_F_RXHASH))
+	if ((ppi_flags & NVSC_RSC_HASH_INFO) && (net->features & NETIF_F_RXHASH))
 		skb_set_hash(skb, *hash_info, PKT_HASH_TYPE_L4);
 
-	if (vlan) {
+	if (ppi_flags & NVSC_RSC_VLAN) {
 		u16 vlan_tci = vlan->vlanid | (vlan->pri << VLAN_PRIO_SHIFT) |
 			(vlan->cfi ? VLAN_CFI_MASK : 0);
 
@@ -1587,34 +1612,23 @@ static void netvsc_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 
 	switch (stringset) {
 	case ETH_SS_STATS:
-		for (i = 0; i < ARRAY_SIZE(netvsc_stats); i++) {
-			memcpy(p, netvsc_stats[i].name, ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
-		}
+		for (i = 0; i < ARRAY_SIZE(netvsc_stats); i++)
+			ethtool_sprintf(&p, netvsc_stats[i].name);
 
-		for (i = 0; i < ARRAY_SIZE(vf_stats); i++) {
-			memcpy(p, vf_stats[i].name, ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
-		}
+		for (i = 0; i < ARRAY_SIZE(vf_stats); i++)
+			ethtool_sprintf(&p, vf_stats[i].name);
 
 		for (i = 0; i < nvdev->num_chn; i++) {
-			sprintf(p, "tx_queue_%u_packets", i);
-			p += ETH_GSTRING_LEN;
-			sprintf(p, "tx_queue_%u_bytes", i);
-			p += ETH_GSTRING_LEN;
-			sprintf(p, "rx_queue_%u_packets", i);
-			p += ETH_GSTRING_LEN;
-			sprintf(p, "rx_queue_%u_bytes", i);
-			p += ETH_GSTRING_LEN;
-			sprintf(p, "rx_queue_%u_xdp_drop", i);
-			p += ETH_GSTRING_LEN;
+			ethtool_sprintf(&p, "tx_queue_%u_packets", i);
+			ethtool_sprintf(&p, "tx_queue_%u_bytes", i);
+			ethtool_sprintf(&p, "rx_queue_%u_packets", i);
+			ethtool_sprintf(&p, "rx_queue_%u_bytes", i);
+			ethtool_sprintf(&p, "rx_queue_%u_xdp_drop", i);
 		}
 
 		for_each_present_cpu(cpu) {
-			for (i = 0; i < ARRAY_SIZE(pcpu_stats); i++) {
-				sprintf(p, pcpu_stats[i].name, cpu);
-				p += ETH_GSTRING_LEN;
-			}
+			for (i = 0; i < ARRAY_SIZE(pcpu_stats); i++)
+				ethtool_sprintf(&p, pcpu_stats[i].name, cpu);
 		}
 
 		break;

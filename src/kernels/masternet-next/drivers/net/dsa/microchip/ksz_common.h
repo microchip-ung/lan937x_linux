@@ -78,6 +78,8 @@ struct ksz_device {
 
 	struct gpio_desc *reset_gpio;	/* Optional reset GPIO */
 
+	struct device_node *mdio_np;
+
 	/* chip specific data */
 	u32 chip_id;
 	int num_vlans;
@@ -171,6 +173,8 @@ void ksz_switch_remove(struct ksz_device *dev);
 int ksz8795_switch_register(struct ksz_device *dev);
 int ksz9477_switch_register(struct ksz_device *dev);
 int lan937x_switch_register(struct ksz_device *dev);
+
+int lan937x_check_device_id(struct ksz_device *dev);
 
 void ksz_update_port_member(struct ksz_device *dev, int port);
 void ksz_init_mib_timer(struct ksz_device *dev);

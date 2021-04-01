@@ -14,10 +14,10 @@
  * Vitaly Bordug <vbordug@ru.mvista.com>
  */
 
-#include <linux/module.h>
-#include <linux/mdio-bitbang.h>
-#include <linux/types.h>
 #include <linux/delay.h>
+#include <linux/mdio-bitbang.h>
+#include <linux/module.h>
+#include <linux/types.h>
 
 #define MDIO_READ 2
 #define MDIO_WRITE 1
@@ -149,7 +149,7 @@ static int mdiobb_cmd_addr(struct mdiobb_ctrl *ctrl, int phy, u32 addr)
 	return dev_addr;
 }
 
-static int mdiobb_read(struct mii_bus *bus, int phy, int reg)
+int mdiobb_read(struct mii_bus *bus, int phy, int reg)
 {
 	struct mdiobb_ctrl *ctrl = bus->priv;
 	int ret, i;
@@ -180,8 +180,9 @@ static int mdiobb_read(struct mii_bus *bus, int phy, int reg)
 	mdiobb_get_bit(ctrl);
 	return ret;
 }
+EXPORT_SYMBOL(mdiobb_read);
 
-static int mdiobb_write(struct mii_bus *bus, int phy, int reg, u16 val)
+int mdiobb_write(struct mii_bus *bus, int phy, int reg, u16 val)
 {
 	struct mdiobb_ctrl *ctrl = bus->priv;
 
@@ -201,6 +202,7 @@ static int mdiobb_write(struct mii_bus *bus, int phy, int reg, u16 val)
 	mdiobb_get_bit(ctrl);
 	return 0;
 }
+EXPORT_SYMBOL(mdiobb_write);
 
 struct mii_bus *alloc_mdio_bitbang(struct mdiobb_ctrl *ctrl)
 {

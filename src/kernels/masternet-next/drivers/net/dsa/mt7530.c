@@ -18,6 +18,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 #include <linux/gpio/consumer.h>
+#include <linux/gpio/driver.h>
 #include <net/dsa.h>
 
 #include "mt7530.h"
@@ -998,8 +999,9 @@ mt753x_cpu_port_enable(struct dsa_switch *ds, int port)
 	mt7530_write(priv, MT7530_PVC_P(port),
 		     PORT_SPEC_TAG);
 
-	/* Unknown multicast frame forwarding to the cpu port */
-	mt7530_rmw(priv, MT7530_MFC, UNM_FFP_MASK, UNM_FFP(BIT(port)));
+	/* Disable flooding by default */
+	mt7530_rmw(priv, MT7530_MFC, BC_FFP_MASK | UNM_FFP_MASK | UNU_FFP_MASK,
+		   BC_FFP(BIT(port)) | UNM_FFP(BIT(port)) | UNU_FFP(BIT(port)));
 
 	/* Set CPU port number */
 	if (priv->id == ID_MT7621)
@@ -1134,6 +1136,56 @@ mt7530_stp_state_set(struct dsa_switch *ds, int port, u8 state)
 	}
 
 	mt7530_rmw(priv, MT7530_SSP_P(port), FID_PST_MASK, stp_state);
+}
+
+static int
+mt7530_port_pre_bridge_flags(struct dsa_switch *ds, int port,
+			     struct switchdev_brport_flags flags,
+			     struct netlink_ext_ack *extack)
+{
+	if (flags.mask & ~(BR_LEARNING | BR_FLOOD | BR_MCAST_FLOOD |
+			   BR_BCAST_FLOOD))
+		return -EINVAL;
+
+	return 0;
+}
+
+static int
+mt7530_port_bridge_flags(struct dsa_switch *ds, int port,
+			 struct switchdev_brport_flags flags,
+			 struct netlink_ext_ack *extack)
+{
+	struct mt7530_priv *priv = ds->priv;
+
+	if (flags.mask & BR_LEARNING)
+		mt7530_rmw(priv, MT7530_PSC_P(port), SA_DIS,
+			   flags.val & BR_LEARNING ? 0 : SA_DIS);
+
+	if (flags.mask & BR_FLOOD)
+		mt7530_rmw(priv, MT7530_MFC, UNU_FFP(BIT(port)),
+			   flags.val & BR_FLOOD ? UNU_FFP(BIT(port)) : 0);
+
+	if (flags.mask & BR_MCAST_FLOOD)
+		mt7530_rmw(priv, MT7530_MFC, UNM_FFP(BIT(port)),
+			   flags.val & BR_MCAST_FLOOD ? UNM_FFP(BIT(port)) : 0);
+
+	if (flags.mask & BR_BCAST_FLOOD)
+		mt7530_rmw(priv, MT7530_MFC, BC_FFP(BIT(port)),
+			   flags.val & BR_BCAST_FLOOD ? BC_FFP(BIT(port)) : 0);
+
+	return 0;
+}
+
+static int
+mt7530_port_set_mrouter(struct dsa_switch *ds, int port, bool mrouter,
+			struct netlink_ext_ack *extack)
+{
+	struct mt7530_priv *priv = ds->priv;
+
+	mt7530_rmw(priv, MT7530_MFC, UNM_FFP(BIT(port)),
+		   mrouter ? UNM_FFP(BIT(port)) : 0);
+
+	return 0;
 }
 
 static int
@@ -1348,6 +1400,59 @@ err:
 }
 
 static int
+mt7530_port_mdb_add(struct dsa_switch *ds, int port,
+		    const struct switchdev_obj_port_mdb *mdb)
+{
+	struct mt7530_priv *priv = ds->priv;
+	const u8 *addr = mdb->addr;
+	u16 vid = mdb->vid;
+	u8 port_mask = 0;
+	int ret;
+
+	mutex_lock(&priv->reg_mutex);
+
+	mt7530_fdb_write(priv, vid, 0, addr, 0, STATIC_EMP);
+	if (!mt7530_fdb_cmd(priv, MT7530_FDB_READ, NULL))
+		port_mask = (mt7530_read(priv, MT7530_ATRD) >> PORT_MAP)
+			    & PORT_MAP_MASK;
+
+	port_mask |= BIT(port);
+	mt7530_fdb_write(priv, vid, port_mask, addr, -1, STATIC_ENT);
+	ret = mt7530_fdb_cmd(priv, MT7530_FDB_WRITE, NULL);
+
+	mutex_unlock(&priv->reg_mutex);
+
+	return ret;
+}
+
+static int
+mt7530_port_mdb_del(struct dsa_switch *ds, int port,
+		    const struct switchdev_obj_port_mdb *mdb)
+{
+	struct mt7530_priv *priv = ds->priv;
+	const u8 *addr = mdb->addr;
+	u16 vid = mdb->vid;
+	u8 port_mask = 0;
+	int ret;
+
+	mutex_lock(&priv->reg_mutex);
+
+	mt7530_fdb_write(priv, vid, 0, addr, 0, STATIC_EMP);
+	if (!mt7530_fdb_cmd(priv, MT7530_FDB_READ, NULL))
+		port_mask = (mt7530_read(priv, MT7530_ATRD) >> PORT_MAP)
+			    & PORT_MAP_MASK;
+
+	port_mask &= ~BIT(port);
+	mt7530_fdb_write(priv, vid, port_mask, addr, -1,
+			 port_mask ? STATIC_ENT : STATIC_EMP);
+	ret = mt7530_fdb_cmd(priv, MT7530_FDB_WRITE, NULL);
+
+	mutex_unlock(&priv->reg_mutex);
+
+	return ret;
+}
+
+static int
 mt7530_vlan_cmd(struct mt7530_priv *priv, enum mt7530_vlan_cmd cmd, u16 vid)
 {
 	struct mt7530_dummy_poll p;
@@ -1375,8 +1480,8 @@ mt7530_vlan_cmd(struct mt7530_priv *priv, enum mt7530_vlan_cmd cmd, u16 vid)
 }
 
 static int
-mt7530_port_vlan_filtering(struct dsa_switch *ds, int port,
-			   bool vlan_filtering)
+mt7530_port_vlan_filtering(struct dsa_switch *ds, int port, bool vlan_filtering,
+			   struct netlink_ext_ack *extack)
 {
 	if (vlan_filtering) {
 		/* The port is being kept as VLAN-unaware port when bridge is
@@ -1482,7 +1587,8 @@ mt7530_hw_vlan_update(struct mt7530_priv *priv, u16 vid,
 
 static int
 mt7530_port_vlan_add(struct dsa_switch *ds, int port,
-		     const struct switchdev_obj_port_vlan *vlan)
+		     const struct switchdev_obj_port_vlan *vlan,
+		     struct netlink_ext_ack *extack)
 {
 	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
 	bool pvid = vlan->flags & BRIDGE_VLAN_INFO_PVID;
@@ -1622,6 +1728,111 @@ mtk_get_tag_protocol(struct dsa_switch *ds, int port,
 	}
 }
 
+#ifdef CONFIG_GPIOLIB
+static inline u32
+mt7530_gpio_to_bit(unsigned int offset)
+{
+	/* Map GPIO offset to register bit
+	 * [ 2: 0]  port 0 LED 0..2 as GPIO 0..2
+	 * [ 6: 4]  port 1 LED 0..2 as GPIO 3..5
+	 * [10: 8]  port 2 LED 0..2 as GPIO 6..8
+	 * [14:12]  port 3 LED 0..2 as GPIO 9..11
+	 * [18:16]  port 4 LED 0..2 as GPIO 12..14
+	 */
+	return BIT(offset + offset / 3);
+}
+
+static int
+mt7530_gpio_get(struct gpio_chip *gc, unsigned int offset)
+{
+	struct mt7530_priv *priv = gpiochip_get_data(gc);
+	u32 bit = mt7530_gpio_to_bit(offset);
+
+	return !!(mt7530_read(priv, MT7530_LED_GPIO_DATA) & bit);
+}
+
+static void
+mt7530_gpio_set(struct gpio_chip *gc, unsigned int offset, int value)
+{
+	struct mt7530_priv *priv = gpiochip_get_data(gc);
+	u32 bit = mt7530_gpio_to_bit(offset);
+
+	if (value)
+		mt7530_set(priv, MT7530_LED_GPIO_DATA, bit);
+	else
+		mt7530_clear(priv, MT7530_LED_GPIO_DATA, bit);
+}
+
+static int
+mt7530_gpio_get_direction(struct gpio_chip *gc, unsigned int offset)
+{
+	struct mt7530_priv *priv = gpiochip_get_data(gc);
+	u32 bit = mt7530_gpio_to_bit(offset);
+
+	return (mt7530_read(priv, MT7530_LED_GPIO_DIR) & bit) ?
+		GPIO_LINE_DIRECTION_OUT : GPIO_LINE_DIRECTION_IN;
+}
+
+static int
+mt7530_gpio_direction_input(struct gpio_chip *gc, unsigned int offset)
+{
+	struct mt7530_priv *priv = gpiochip_get_data(gc);
+	u32 bit = mt7530_gpio_to_bit(offset);
+
+	mt7530_clear(priv, MT7530_LED_GPIO_OE, bit);
+	mt7530_clear(priv, MT7530_LED_GPIO_DIR, bit);
+
+	return 0;
+}
+
+static int
+mt7530_gpio_direction_output(struct gpio_chip *gc, unsigned int offset, int value)
+{
+	struct mt7530_priv *priv = gpiochip_get_data(gc);
+	u32 bit = mt7530_gpio_to_bit(offset);
+
+	mt7530_set(priv, MT7530_LED_GPIO_DIR, bit);
+
+	if (value)
+		mt7530_set(priv, MT7530_LED_GPIO_DATA, bit);
+	else
+		mt7530_clear(priv, MT7530_LED_GPIO_DATA, bit);
+
+	mt7530_set(priv, MT7530_LED_GPIO_OE, bit);
+
+	return 0;
+}
+
+static int
+mt7530_setup_gpio(struct mt7530_priv *priv)
+{
+	struct device *dev = priv->dev;
+	struct gpio_chip *gc;
+
+	gc = devm_kzalloc(dev, sizeof(*gc), GFP_KERNEL);
+	if (!gc)
+		return -ENOMEM;
+
+	mt7530_write(priv, MT7530_LED_GPIO_OE, 0);
+	mt7530_write(priv, MT7530_LED_GPIO_DIR, 0);
+	mt7530_write(priv, MT7530_LED_IO_MODE, 0);
+
+	gc->label = "mt7530";
+	gc->parent = dev;
+	gc->owner = THIS_MODULE;
+	gc->get_direction = mt7530_gpio_get_direction;
+	gc->direction_input = mt7530_gpio_direction_input;
+	gc->direction_output = mt7530_gpio_direction_output;
+	gc->get = mt7530_gpio_get;
+	gc->set = mt7530_gpio_set;
+	gc->base = -1;
+	gc->ngpio = 15;
+	gc->can_sleep = true;
+
+	return devm_gpiochip_add_data(dev, gc, priv);
+}
+#endif /* CONFIG_GPIOLIB */
+
 static int
 mt7530_setup(struct dsa_switch *ds)
 {
@@ -1639,7 +1850,6 @@ mt7530_setup(struct dsa_switch *ds)
 	 * as two netdev instances.
 	 */
 	dn = dsa_to_port(ds, MT7530_CPU_PORT)->master->dev.of_node->parent;
-	ds->configure_vlan_while_not_filtering = true;
 	ds->mtu_enforcement_ingress = true;
 
 	if (priv->id == ID_MT7530) {
@@ -1714,9 +1924,12 @@ mt7530_setup(struct dsa_switch *ds)
 			ret = mt753x_cpu_port_enable(ds, i);
 			if (ret)
 				return ret;
-		} else
+		} else {
 			mt7530_port_disable(ds, i);
 
+			/* Disable learning by default on all user ports */
+			mt7530_set(priv, MT7530_PSC_P(i), SA_DIS);
+		}
 		/* Enable consistent egress tag */
 		mt7530_rmw(priv, MT7530_PVC_P(i), PVC_EG_TAG_MASK,
 			   PVC_EG_TAG(MT7530_VLAN_EG_CONSISTENT));
@@ -1763,6 +1976,14 @@ mt7530_setup(struct dsa_switch *ds)
 			break;
 		}
 	}
+
+#ifdef CONFIG_GPIOLIB
+	if (of_property_read_bool(priv->dev->of_node, "gpio-controller")) {
+		ret = mt7530_setup_gpio(priv);
+		if (ret)
+			return ret;
+	}
+#endif /* CONFIG_GPIOLIB */
 
 	mt7530_setup_port5(ds, interface);
 
@@ -1870,15 +2091,18 @@ mt7531_setup(struct dsa_switch *ds)
 			ret = mt753x_cpu_port_enable(ds, i);
 			if (ret)
 				return ret;
-		} else
+		} else {
 			mt7530_port_disable(ds, i);
+
+			/* Disable learning by default on all user ports */
+			mt7530_set(priv, MT7530_PSC_P(i), SA_DIS);
+		}
 
 		/* Enable consistent egress tag */
 		mt7530_rmw(priv, MT7530_PVC_P(i), PVC_EG_TAG_MASK,
 			   PVC_EG_TAG(MT7530_VLAN_EG_CONSISTENT));
 	}
 
-	ds->configure_vlan_while_not_filtering = true;
 	ds->mtu_enforcement_ingress = true;
 
 	/* Flush the FDB table */
@@ -2595,11 +2819,16 @@ static const struct dsa_switch_ops mt7530_switch_ops = {
 	.port_change_mtu	= mt7530_port_change_mtu,
 	.port_max_mtu		= mt7530_port_max_mtu,
 	.port_stp_state_set	= mt7530_stp_state_set,
+	.port_pre_bridge_flags	= mt7530_port_pre_bridge_flags,
+	.port_bridge_flags	= mt7530_port_bridge_flags,
+	.port_set_mrouter	= mt7530_port_set_mrouter,
 	.port_bridge_join	= mt7530_port_bridge_join,
 	.port_bridge_leave	= mt7530_port_bridge_leave,
 	.port_fdb_add		= mt7530_port_fdb_add,
 	.port_fdb_del		= mt7530_port_fdb_del,
 	.port_fdb_dump		= mt7530_port_fdb_dump,
+	.port_mdb_add		= mt7530_port_mdb_add,
+	.port_mdb_del		= mt7530_port_mdb_del,
 	.port_vlan_filtering	= mt7530_port_vlan_filtering,
 	.port_vlan_add		= mt7530_port_vlan_add,
 	.port_vlan_del		= mt7530_port_vlan_del,

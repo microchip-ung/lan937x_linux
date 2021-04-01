@@ -74,7 +74,7 @@ static int can_rx_state_to_frame(struct net_device *dev, enum can_state state)
 	}
 }
 
-static const char *can_get_state_str(const enum can_state state)
+const char *can_get_state_str(const enum can_state state)
 {
 	switch (state) {
 	case CAN_STATE_ERROR_ACTIVE:
@@ -95,6 +95,7 @@ static const char *can_get_state_str(const enum can_state state)
 
 	return "<unknown>";
 }
+EXPORT_SYMBOL_GPL(can_get_state_str);
 
 void can_change_state(struct net_device *dev, struct can_frame *cf,
 		      enum can_state tx_state, enum can_state rx_state)
@@ -153,10 +154,10 @@ static void can_restart(struct net_device *dev)
 
 	cf->can_id |= CAN_ERR_RESTARTED;
 
-	netif_rx_ni(skb);
-
 	stats->rx_packets++;
 	stats->rx_bytes += cf->len;
+
+	netif_rx_ni(skb);
 
 restart:
 	netdev_dbg(dev, "restarted\n");
@@ -238,6 +239,7 @@ void can_setup(struct net_device *dev)
 struct net_device *alloc_candev_mqs(int sizeof_priv, unsigned int echo_skb_max,
 				    unsigned int txqs, unsigned int rxqs)
 {
+	struct can_ml_priv *can_ml;
 	struct net_device *dev;
 	struct can_priv *priv;
 	int size;
@@ -269,7 +271,8 @@ struct net_device *alloc_candev_mqs(int sizeof_priv, unsigned int echo_skb_max,
 	priv = netdev_priv(dev);
 	priv->dev = dev;
 
-	dev->ml_priv = (void *)priv + ALIGN(sizeof_priv, NETDEV_ALIGN);
+	can_ml = (void *)priv + ALIGN(sizeof_priv, NETDEV_ALIGN);
+	can_set_ml_priv(dev, can_ml);
 
 	if (echo_skb_max) {
 		priv->echo_skb_max = echo_skb_max;

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
 /* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018-2020 Linaro Ltd.
+ * Copyright (C) 2018-2021 Linaro Ltd.
  */
 #ifndef _IPA_REG_H_
 #define _IPA_REG_H_
@@ -217,8 +217,18 @@ static inline u32 ipa_reg_bcr_val(enum ipa_version version)
 	return 0x00000000;
 }
 
-/* The value of the next register must be a multiple of 8 */
-#define IPA_REG_LOCAL_PKT_PROC_CNTXT_BASE_OFFSET	0x000001e8
+/* The value of the next register must be a multiple of 8 (bottom 3 bits 0) */
+#define IPA_REG_LOCAL_PKT_PROC_CNTXT_OFFSET		0x000001e8
+
+/* Encoded value for LOCAL_PKT_PROC_CNTXT register BASE_ADDR field */
+static inline u32 proc_cntxt_base_addr_encoded(enum ipa_version version,
+					       u32 addr)
+{
+	if (version < IPA_VERSION_4_5)
+		return u32_encode_bits(addr, GENMASK(16, 0));
+
+	return u32_encode_bits(addr, GENMASK(17, 0));
+}
 
 /* ipa->available defines the valid bits in the AGGR_FORCE_CLOSE register */
 #define IPA_REG_AGGR_FORCE_CLOSE_OFFSET			0x000001ec
@@ -226,18 +236,6 @@ static inline u32 ipa_reg_bcr_val(enum ipa_version version)
 /* The next register is not present for IPA v4.5 */
 #define IPA_REG_COUNTER_CFG_OFFSET			0x000001f0
 #define AGGR_GRANULARITY_FMASK			GENMASK(8, 4)
-
-/* The internal inactivity timer clock is used for the aggregation timer */
-#define TIMER_FREQUENCY	32000		/* 32 KHz inactivity timer clock */
-
-/* Compute the value to use in the AGGR_GRANULARITY field representing the
- * given number of microseconds.  The value is one less than the number of
- * timer ticks in the requested period.  0 not a valid granularity value.
- */
-static inline u32 ipa_aggr_granularity_val(u32 usec)
-{
-	return DIV_ROUND_CLOSEST(usec * TIMER_FREQUENCY, USEC_PER_SEC) - 1;
-}
 
 /* The next register is not present for IPA v4.5 */
 #define IPA_REG_TX_CFG_OFFSET				0x000001fc
@@ -388,6 +386,18 @@ enum ipa_cs_offload_en {
 	IPA_CS_OFFLOAD_DL		= 0x2,
 };
 
+/* Valid only for TX (IPA consumer) endpoints */
+#define IPA_REG_ENDP_INIT_NAT_N_OFFSET(ep) \
+					(0x0000080c + 0x0070 * (ep))
+#define NAT_EN_FMASK				GENMASK(1, 0)
+
+/** enum ipa_nat_en - ENDP_INIT_NAT register NAT_EN field value */
+enum ipa_nat_en {
+	IPA_NAT_BYPASS			= 0x0,
+	IPA_NAT_SRC			= 0x1,
+	IPA_NAT_DST			= 0x2,
+};
+
 #define IPA_REG_ENDP_INIT_HDR_N_OFFSET(ep) \
 					(0x00000810 + 0x0070 * (ep))
 #define HDR_LEN_FMASK				GENMASK(5, 0)
@@ -408,15 +418,18 @@ enum ipa_cs_offload_en {
 static inline u32 ipa_header_size_encoded(enum ipa_version version,
 					  u32 header_size)
 {
+	u32 size = header_size & field_mask(HDR_LEN_FMASK);
 	u32 val;
 
-	val = u32_encode_bits(header_size, HDR_LEN_FMASK);
-	if (version < IPA_VERSION_4_5)
+	val = u32_encode_bits(size, HDR_LEN_FMASK);
+	if (version < IPA_VERSION_4_5) {
+		/* ipa_assert(header_size == size); */
 		return val;
+	}
 
 	/* IPA v4.5 adds a few more most-significant bits */
-	header_size >>= hweight32(HDR_LEN_FMASK);
-	val |= u32_encode_bits(header_size, HDR_LEN_MSB_FMASK);
+	size = header_size >> hweight32(HDR_LEN_FMASK);
+	val |= u32_encode_bits(size, HDR_LEN_MSB_FMASK);
 
 	return val;
 }
@@ -425,15 +438,18 @@ static inline u32 ipa_header_size_encoded(enum ipa_version version,
 static inline u32 ipa_metadata_offset_encoded(enum ipa_version version,
 					      u32 offset)
 {
+	u32 off = offset & field_mask(HDR_OFST_METADATA_FMASK);
 	u32 val;
 
-	val = u32_encode_bits(offset, HDR_OFST_METADATA_FMASK);
-	if (version < IPA_VERSION_4_5)
+	val = u32_encode_bits(off, HDR_OFST_METADATA_FMASK);
+	if (version < IPA_VERSION_4_5) {
+		/* ipa_assert(offset == off); */
 		return val;
+	}
 
 	/* IPA v4.5 adds a few more most-significant bits */
-	offset >>= hweight32(HDR_OFST_METADATA_FMASK);
-	val |= u32_encode_bits(offset, HDR_OFST_METADATA_MSB_FMASK);
+	off = offset >> hweight32(HDR_OFST_METADATA_FMASK);
+	val |= u32_encode_bits(off, HDR_OFST_METADATA_MSB_FMASK);
 
 	return val;
 }
@@ -574,28 +590,40 @@ static inline u32 rsrc_grp_encoded(enum ipa_version version, u32 rsrc_grp)
 /* Valid only for TX (IPA consumer) endpoints */
 #define IPA_REG_ENDP_INIT_SEQ_N_OFFSET(txep) \
 					(0x0000083c + 0x0070 * (txep))
-#define HPS_SEQ_TYPE_FMASK			GENMASK(3, 0)
-#define DPS_SEQ_TYPE_FMASK			GENMASK(7, 4)
-#define HPS_REP_SEQ_TYPE_FMASK			GENMASK(11, 8)
-#define DPS_REP_SEQ_TYPE_FMASK			GENMASK(15, 12)
+#define SEQ_TYPE_FMASK				GENMASK(7, 0)
+#define SEQ_REP_TYPE_FMASK			GENMASK(15, 8)
 
 /**
- * enum ipa_seq_type - HPS and DPS sequencer type fields in ENDP_INIT_SEQ_N
- * @IPA_SEQ_DMA_ONLY:		only DMA is performed
- * @IPA_SEQ_2ND_PKT_PROCESS_PASS_NO_DEC_UCP:
- *	second packet processing pass + no decipher + microcontroller
- * @IPA_SEQ_PKT_PROCESS_NO_DEC_NO_UCP_DMAP:
- *	packet processing + no decipher + no uCP + HPS REP DMA parser
- * @IPA_SEQ_INVALID:		invalid sequencer type
+ * enum ipa_seq_type - HPS and DPS sequencer type
  *
- * The values defined here are broken into 4-bit nibbles that are written
- * into fields of the ENDP_INIT_SEQ registers.
+ * The low-order byte of the sequencer type register defines the number of
+ * passes a packet takes through the IPA pipeline.  The last pass through can
+ * optionally skip the microprocessor.  Deciphering is optional for all types;
+ * if enabled, an additional mask (two bits) is added to the type value.
+ *
+ * Note: not all combinations of ipa_seq_type and ipa_seq_rep_type are
+ * supported (or meaningful).
  */
+#define IPA_SEQ_DECIPHER			0x11
 enum ipa_seq_type {
-	IPA_SEQ_DMA_ONLY			= 0x0000,
-	IPA_SEQ_2ND_PKT_PROCESS_PASS_NO_DEC_UCP	= 0x0004,
-	IPA_SEQ_PKT_PROCESS_NO_DEC_NO_UCP_DMAP	= 0x0806,
-	IPA_SEQ_INVALID				= 0xffff,
+	IPA_SEQ_DMA				= 0x00,
+	IPA_SEQ_1_PASS				= 0x02,
+	IPA_SEQ_2_PASS_SKIP_LAST_UC		= 0x04,
+	IPA_SEQ_1_PASS_SKIP_LAST_UC		= 0x06,
+	IPA_SEQ_2_PASS				= 0x0a,
+	IPA_SEQ_3_PASS_SKIP_LAST_UC		= 0x0c,
+};
+
+/**
+ * enum ipa_seq_rep_type - replicated packet sequencer type
+ *
+ * This goes in the second byte of the endpoint sequencer type register.
+ *
+ * Note: not all combinations of ipa_seq_type and ipa_seq_rep_type are
+ * supported (or meaningful).
+ */
+enum ipa_seq_rep_type {
+	IPA_SEQ_REP_DMA_PARSER			= 0x08,
 };
 
 #define IPA_REG_ENDP_STATUS_N_OFFSET(ep) \

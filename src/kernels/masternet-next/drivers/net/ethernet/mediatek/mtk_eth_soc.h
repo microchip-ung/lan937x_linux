@@ -15,14 +15,17 @@
 #include <linux/u64_stats_sync.h>
 #include <linux/refcount.h>
 #include <linux/phylink.h>
+#include <linux/rhashtable.h>
+#include "mtk_ppe.h"
 
 #define MTK_QDMA_PAGE_SIZE	2048
-#define	MTK_MAX_RX_LENGTH	1536
+#define MTK_MAX_RX_LENGTH	1536
+#define MTK_MAX_RX_LENGTH_2K	2048
 #define MTK_TX_DMA_BUF_LEN	0x3fff
 #define MTK_DMA_SIZE		256
 #define MTK_NAPI_WEIGHT		64
 #define MTK_MAC_COUNT		2
-#define MTK_RX_ETH_HLEN		(VLAN_ETH_HLEN + VLAN_HLEN + ETH_FCS_LEN)
+#define MTK_RX_ETH_HLEN		(ETH_HLEN + ETH_FCS_LEN)
 #define MTK_RX_HLEN		(NET_SKB_PAD + MTK_RX_ETH_HLEN + NET_IP_ALIGN)
 #define MTK_DMA_DUMMY_DESC	0xffffffff
 #define MTK_DEFAULT_MSG_ENABLE	(NETIF_MSG_DRV | \
@@ -39,7 +42,8 @@
 				 NETIF_F_HW_VLAN_CTAG_RX | \
 				 NETIF_F_SG | NETIF_F_TSO | \
 				 NETIF_F_TSO6 | \
-				 NETIF_F_IPV6_CSUM)
+				 NETIF_F_IPV6_CSUM |\
+				 NETIF_F_HW_TC)
 #define MTK_HW_FEATURES_MT7628	(NETIF_F_SG | NETIF_F_RXCSUM)
 #define NEXT_DESP_IDX(X, Y)	(((X) + 1) & ((Y) - 1))
 
@@ -81,10 +85,12 @@
 
 /* GDM Exgress Control Register */
 #define MTK_GDMA_FWD_CFG(x)	(0x500 + (x * 0x1000))
+#define MTK_GDMA_SPECIAL_TAG	BIT(24)
 #define MTK_GDMA_ICS_EN		BIT(22)
 #define MTK_GDMA_TCS_EN		BIT(21)
 #define MTK_GDMA_UCS_EN		BIT(20)
 #define MTK_GDMA_TO_PDMA	0x0
+#define MTK_GDMA_TO_PPE		0x4444
 #define MTK_GDMA_DROP_ALL       0x7777
 
 /* Unicast Filter MAC Address Register - Low */
@@ -300,10 +306,17 @@
 #define RX_DMA_VID(_x)		((_x) & 0xfff)
 
 /* QDMA descriptor rxd4 */
+#define MTK_RXD4_FOE_ENTRY	GENMASK(13, 0)
+#define MTK_RXD4_PPE_CPU_REASON	GENMASK(18, 14)
+#define MTK_RXD4_SRC_PORT	GENMASK(21, 19)
+#define MTK_RXD4_ALG		GENMASK(31, 22)
+
+/* QDMA descriptor rxd4 */
 #define RX_DMA_L4_VALID		BIT(24)
 #define RX_DMA_L4_VALID_PDMA	BIT(30)		/* when PDMA is used */
 #define RX_DMA_FPORT_SHIFT	19
 #define RX_DMA_FPORT_MASK	0x7
+#define RX_DMA_SPECIAL_TAG	BIT(22)
 
 /* PHY Indirect Access Control registers */
 #define MTK_PHY_IAC		0x10004
@@ -320,7 +333,12 @@
 
 /* Mac control registers */
 #define MTK_MAC_MCR(x)		(0x10100 + (x * 0x100))
-#define MAC_MCR_MAX_RX_1536	BIT(24)
+#define MAC_MCR_MAX_RX_MASK	GENMASK(25, 24)
+#define MAC_MCR_MAX_RX(_x)	(MAC_MCR_MAX_RX_MASK & ((_x) << 24))
+#define MAC_MCR_MAX_RX_1518	0x0
+#define MAC_MCR_MAX_RX_1536	0x1
+#define MAC_MCR_MAX_RX_1552	0x2
+#define MAC_MCR_MAX_RX_2048	0x3
 #define MAC_MCR_IPG_CFG		(BIT(18) | BIT(16))
 #define MAC_MCR_FORCE_MODE	BIT(15)
 #define MAC_MCR_TX_EN		BIT(14)
@@ -796,6 +814,7 @@ struct mtk_soc_data {
 	u32		caps;
 	u32		required_clks;
 	bool		required_pctl;
+	u8		offload_version;
 	netdev_features_t hw_features;
 };
 
@@ -895,6 +914,9 @@ struct mtk_eth {
 	u32				tx_int_status_reg;
 	u32				rx_dma_l4_valid;
 	int				ip_align;
+
+	struct mtk_ppe			ppe;
+	struct rhashtable		flow_table;
 };
 
 /* struct mtk_mac -	the structure that holds the info about the MACs of the
@@ -938,5 +960,10 @@ void mtk_sgmii_restart_an(struct mtk_eth *eth, int mac_id);
 int mtk_gmac_sgmii_path_setup(struct mtk_eth *eth, int mac_id);
 int mtk_gmac_gephy_path_setup(struct mtk_eth *eth, int mac_id);
 int mtk_gmac_rgmii_path_setup(struct mtk_eth *eth, int mac_id);
+
+int mtk_eth_offload_init(struct mtk_eth *eth);
+int mtk_eth_setup_tc(struct net_device *dev, enum tc_setup_type type,
+		     void *type_data);
+
 
 #endif /* MTK_ETH_H */

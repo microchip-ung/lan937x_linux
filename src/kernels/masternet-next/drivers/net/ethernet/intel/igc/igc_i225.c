@@ -6,7 +6,7 @@
 #include "igc_hw.h"
 
 /**
- * igc_get_hw_semaphore_i225 - Acquire hardware semaphore
+ * igc_acquire_nvm_i225 - Acquire exclusive access to EEPROM
  * @hw: pointer to the HW structure
  *
  * Acquire the necessary semaphores for exclusive access to the EEPROM.
@@ -219,9 +219,9 @@ static s32 igc_write_nvm_srwr(struct igc_hw *hw, u16 offset, u16 words,
 			      u16 *data)
 {
 	struct igc_nvm_info *nvm = &hw->nvm;
+	s32 ret_val = -IGC_ERR_NVM;
 	u32 attempts = 100000;
 	u32 i, k, eewr = 0;
-	s32 ret_val = 0;
 
 	/* A check for invalid values:  offset too large, too many words,
 	 * too many words for the offset, and not enough words.
@@ -229,7 +229,6 @@ static s32 igc_write_nvm_srwr(struct igc_hw *hw, u16 offset, u16 words,
 	if (offset >= nvm->word_size || (words > (nvm->word_size - offset)) ||
 	    words == 0) {
 		hw_dbg("nvm parameter(s) out of bounds\n");
-		ret_val = -IGC_ERR_NVM;
 		goto out;
 	}
 

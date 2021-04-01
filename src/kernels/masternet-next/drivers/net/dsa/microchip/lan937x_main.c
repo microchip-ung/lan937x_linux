@@ -125,42 +125,16 @@ static enum dsa_tag_protocol lan937x_get_tag_protocol(struct dsa_switch *ds,
 	return DSA_TAG_PROTO_LAN937X_VALUE;
 }
 
-static int lan937x_get_link_status(struct ksz_device *dev, int port)
-{
-	u16 val1, val2;
-
-	lan937x_t1_tx_phy_read(dev, port, REG_PORT_T1_PHY_M_STATUS,
-			       &val1);
-
-	lan937x_t1_tx_phy_read(dev, port, REG_PORT_T1_MODE_STAT, &val2);
-
-	if (val1 & (PORT_T1_LOCAL_RX_OK | PORT_T1_REMOTE_RX_OK) &&
-	    val2 & (T1_PORT_DSCR_LOCK_STATUS_MSK | T1_PORT_LINK_UP_MSK))
-		return PHY_LINK_UP;
-
-	return PHY_LINK_DOWN;
-}
-
 static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
 {
 	struct ksz_device *dev = ds->priv;
 	u16 val;
+	int ret;
 
-	lan937x_t1_tx_phy_read(dev, addr, reg, &val);
+	ret = lan937x_internal_phy_read(dev, addr, reg, &val);
 
-	if (reg == MII_BMSR && lan937x_is_internal_t1_phy_port(dev, addr)) {
-		/* T1 PHY supports only 100 Mb FD, report through BMSR_100FULL bit*/
-		val |= BMSR_100FULL;
-
-		/* T1 Phy link is based on REG_PORT_T1_PHY_M_STATUS & REG_PORT_T1
-		 * _MODE_STAT registers for LAN937x, get the link status
-		 * and report through BMSR_LSTATUS bit
-		 */
-		if (lan937x_get_link_status(dev, addr) == PHY_LINK_UP)
-			val |= BMSR_LSTATUS;
-		else
-			val &= ~BMSR_LSTATUS;
-	}
+	if (ret)
+		return ret;
 
 	return val;
 }
@@ -170,7 +144,7 @@ static int lan937x_phy_write16(struct dsa_switch *ds, int addr, int reg,
 {
 	struct ksz_device *dev = ds->priv;
 
-	return lan937x_t1_tx_phy_write(dev, addr, reg, val);
+	return lan937x_internal_phy_write(dev, addr, reg, val);
 }
 
 static void lan937x_get_strings(struct dsa_switch *ds, int port,
@@ -203,13 +177,10 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 	switch (state) {
 	case BR_STATE_DISABLED:
 		data |= PORT_LEARN_DISABLE;
-		if (port != dev->cpu_port)
-			member = 0;
 		break;
 	case BR_STATE_LISTENING:
 		data |= (PORT_RX_ENABLE | PORT_LEARN_DISABLE);
-		if (port != dev->cpu_port &&
-		    p->stp_state == BR_STATE_DISABLED)
+		if (p->stp_state == BR_STATE_DISABLED)
 			member = dev->host_mask | p->vid_member;
 		break;
 	case BR_STATE_LEARNING:
@@ -217,10 +188,6 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 		break;
 	case BR_STATE_FORWARDING:
 		data |= (PORT_TX_ENABLE | PORT_RX_ENABLE);
-
-		/* This function is also used internally. */
-		if (port == dev->cpu_port)
-			break;
 
 		member = dev->host_mask | p->vid_member;
 		mutex_lock(&dev->dev_mutex);
@@ -234,8 +201,7 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 		break;
 	case BR_STATE_BLOCKING:
 		data |= PORT_LEARN_DISABLE;
-		if (port != dev->cpu_port &&
-		    p->stp_state == BR_STATE_DISABLED)
+		if (p->stp_state == BR_STATE_DISABLED)
 			member = dev->host_mask | p->vid_member;
 		break;
 	default:
@@ -267,7 +233,8 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 }
 
 static int lan937x_port_vlan_filtering(struct dsa_switch *ds, int port,
-				       bool flag)
+				       bool flag,
+				       struct netlink_ext_ack *extack)
 {
 	struct ksz_device *dev = ds->priv;
 
@@ -285,7 +252,8 @@ static int lan937x_port_vlan_filtering(struct dsa_switch *ds, int port,
 }
 
 static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
-				  const struct switchdev_obj_port_vlan *vlan)
+				 const struct switchdev_obj_port_vlan *vlan,
+				 struct netlink_ext_ack *extack)
 {
 	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
 	struct ksz_device *dev = ds->priv;
@@ -300,9 +268,7 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 
 	vlan_table[0] = VLAN_VALID | (vlan->vid & VLAN_FID_M);
 
-	/* set/clear switch port when updating vlan table
-	* registers
-	*/
+	/* set/clear switch port when updating vlan table registers */
 	if (untagged)
 		vlan_table[1] |= BIT(port);
 	else
@@ -321,7 +287,7 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 	/* change PVID */
 	if (vlan->flags & BRIDGE_VLAN_INFO_PVID)
 		lan937x_pwrite16(dev, port, REG_PORT_DEFAULT_VID, vlan->vid);
-	
+
 	return 0;
 }
 
@@ -591,7 +557,7 @@ exit:
 }
 
 static int lan937x_port_mdb_add(struct dsa_switch *ds, int port,
-				 const struct switchdev_obj_port_mdb *mdb)
+				const struct switchdev_obj_port_mdb *mdb)
 {
 	struct ksz_device *dev = ds->priv;
 	u8 fid = lan937x_get_fid(mdb->vid);
@@ -785,7 +751,6 @@ static void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
 static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 {
 	phy_interface_t interface;
-	bool gbit;
 	u8 data8;
 
 	if (lan937x_is_internal_phy_port(dev, port))
@@ -793,9 +758,6 @@ static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 
 	/* read interface from REG_PORT_XMII_CTRL_1 register */
 	lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
-
-	/* get interface speed */
-	gbit = !(data8 & PORT_MII_NOT_1GBIT);
 
 	switch (data8 & PORT_MII_SEL_M) {
 	case PORT_RMII_SEL:
@@ -846,9 +808,6 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 			interface = lan937x_get_interface(dev, i);
 			if (!p->interface) {
 				if (dev->compat_interface) {
-					dev_warn(dev->dev,
-						 "Using legacy switch \"phy-mode\" property, because it is missing on port %d node. Please update your device tree.\n",
-						 i);
 					p->interface = dev->compat_interface;
 				} else {
 					p->interface = interface;
@@ -998,7 +957,7 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 	}
 	/* For T1 PHY */
 	if (lan937x_is_internal_t1_phy_port(dev, port)) {
-		phylink_set(mask, 100baseT_Full);
+		phylink_set(mask, 100baseT1_Full);
 		phylink_set_port_modes(mask);
 	}
 
@@ -1008,6 +967,19 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 		   __ETHTOOL_LINK_MODE_MASK_NBITS);
 }
 
+int	lan937x_port_pre_bridge_flags(struct dsa_switch *ds, int port,
+					 struct switchdev_brport_flags flags,
+					 struct netlink_ext_ack *extack)
+{
+	return 0;
+}
+
+int	lan937x_port_bridge_flags(struct dsa_switch *ds, int port,
+					 struct switchdev_brport_flags flags,
+					 struct netlink_ext_ack *extack)
+{
+	return 0;
+}
 
 const struct dsa_switch_ops lan937x_switch_ops = {
 	.get_tag_protocol	= lan937x_get_tag_protocol,
@@ -1020,6 +992,8 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.get_sset_count		= ksz_sset_count,
 	.port_bridge_join	= ksz_port_bridge_join,
 	.port_bridge_leave	= ksz_port_bridge_leave,
+	.port_pre_bridge_flags	= lan937x_port_pre_bridge_flags,
+	.port_bridge_flags	= lan937x_port_bridge_flags,
 	.port_stp_state_set	= lan937x_port_stp_state_set,
 	.port_fast_age		= ksz_port_fast_age,
 	.port_vlan_filtering	= lan937x_port_vlan_filtering,
@@ -1048,11 +1022,22 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 
 int lan937x_switch_register(struct ksz_device *dev)
 {
-	return ksz_switch_register(dev, &lan937x_dev_ops);
+	int ret;
+
+	ret = ksz_switch_register(dev, &lan937x_dev_ops);
+
+	if (ret) {
+		if (dev->mdio_np) {
+			mdiobus_unregister(dev->ds->slave_mii_bus);
+			of_node_put(dev->mdio_np);
+		}
+
+	}
+
+	return ret;
 }
 EXPORT_SYMBOL(lan937x_switch_register);
 
-MODULE_AUTHOR("Prasanna Vengateshan Varadharajan " \
-			  "Prasanna.Vengateshan@microchip.com>");
+MODULE_AUTHOR("Prasanna Vengateshan Varadharajan <Prasanna.Vengateshan@microchip.com>");
 MODULE_DESCRIPTION("Microchip LAN937x Series Switch DSA Driver");
 MODULE_LICENSE("GPL");
