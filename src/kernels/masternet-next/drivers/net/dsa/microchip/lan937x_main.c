@@ -1031,7 +1031,7 @@ static int lan937x_setup(struct dsa_switch *ds)
 	/* queue based egress rate limit */
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_5, SW_OUT_RATE_LIMIT_QUEUE_BASED, true);
 
-	lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_RESV_MCAST_ENABLE, true);
+	//lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_RESV_MCAST_ENABLE, true);
 
 	/* enable global MIB counter freeze function */
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FREEZE, true);
@@ -1120,17 +1120,104 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 		   __ETHTOOL_LINK_MODE_MASK_NBITS);
 }
 
-int	lan937x_port_pre_bridge_flags(struct dsa_switch *ds, int port,
+static int	lan937x_port_pre_bridge_flags(struct dsa_switch *ds, int port,
 					 struct switchdev_brport_flags flags,
 					 struct netlink_ext_ack *extack)
 {
+	pr_info("pre-bridge:%d",port);
+	if (flags.mask & ~(BR_LEARNING | BR_FLOOD | BR_MCAST_FLOOD))
+		return -EINVAL;
+
 	return 0;
+}
+
+static void lan937x_port_set_learning (struct ksz_device *dev, int port, bool learning)
+{
+	u8 data;
+
+	pr_info("learn:%d,set:%d",port,learning);
+	lan937x_pread8(dev, port, P_STP_CTRL, &data);
+
+	if (learning)
+		data &= ~PORT_LEARN_DISABLE;
+	else
+		data |= PORT_LEARN_DISABLE;
+
+	lan937x_pwrite8(dev, port, P_STP_CTRL, data);
+}
+
+static u16 lan937x_port_get_port_fwd_map(struct ksz_device *dev, int port, bool set)
+{
+	u16 port_mask;
+	u16 data;
+
+	/* update forwarding map with port mask */
+	port_mask = PORT_UCAST_MCAST_MASK;
+
+	/* Exclude current port, so that the flooding is on/off for all other ports */
+	port_mask &=~ BIT(port);
+
+	/* clear existing port forwarding map */
+	data &=~ PORT_UCAST_MCAST_MASK;
+
+	if (set) {
+		/* Set Unknown multicast forwarding port map */
+		data |= port_mask;
+
+		/* Set Enable Mask */
+		data |= PORT_UNK_UCAST_MCAST_ENABLE;
+	}
+	else {
+		/* Clear Unknown multicast forwarding port map */
+		data &=~ port_mask;
+
+		/* Clear Enable Mask */
+		data &=~ PORT_UNK_UCAST_MCAST_ENABLE;
+	}
+
+	return data;
+}
+
+static void lan937x_port_set_mcast_flood (struct ksz_device *dev, int port, bool mcast_flood)
+{
+	u16 data;
+	
+	pr_info("mcast:%d,set:%d",port,mcast_flood);
+
+	data = lan937x_port_get_port_fwd_map(dev, port, mcast_flood);
+	
+	/* Update port forwarding map */
+	lan937x_pwrite8(dev, port, REG_PORT_LUE_UNK_CTL1, data);
+}
+
+static void lan937x_port_set_ucast_flood (struct ksz_device *dev, int port, bool ucast_flood)
+{
+	u16 data;
+
+	pr_info("ucast:%d,set:%d",port,ucast_flood);
+
+	data = lan937x_port_get_port_fwd_map(dev, port, ucast_flood);
+	
+	/* Update port forwarding map */
+	lan937x_pwrite8(dev, port, REG_PORT_LUE_UNK_CTL0, data);
 }
 
 int	lan937x_port_bridge_flags(struct dsa_switch *ds, int port,
 					 struct switchdev_brport_flags flags,
 					 struct netlink_ext_ack *extack)
 {
+	if (flags.mask & BR_FLOOD)
+		lan937x_port_set_ucast_flood(ds->priv, port,
+					 !!(flags.val & BR_FLOOD));
+
+	if (flags.mask & BR_MCAST_FLOOD)
+		lan937x_port_set_mcast_flood(ds->priv, port,
+					 !!(flags.val & BR_MCAST_FLOOD));
+
+	if (flags.mask & BR_LEARNING)
+		lan937x_port_set_learning(ds->priv, port,
+				      !!(flags.val & BR_LEARNING));
+
 	return 0;
 }
 

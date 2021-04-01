@@ -221,11 +221,8 @@ static int access_ereg_clr_poll_timeout(struct phy_device *phydev, u8 bank,
 static int mchp_t1_phy_init(struct phy_device *phydev)
 {
 	static const struct access_ereg_val init[] = {
-		/* TXPD/TXAMP6 Configs*/
+		/* TXPD/TXAMP6 and HW_Init Hi and Force_ED*/
 		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_AFE, 0x0B, 0x002D,
-		  0 },
-		/* HW_Init Hi and Force_ED */
-		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI, 0x1A, 0x0308,
 		  0 },
 		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x18, 0x0D53,
 		  0 },
@@ -330,15 +327,27 @@ static int mchp_t1_phy_init(struct phy_device *phydev)
 		  0 },
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_AFE, 0x0B, 0x000C,
 		  0 },
-		/* Read INTERRUPT_SOURCE Register */
+		/*Read INTERRUPT_SOURCE Register*/
 		{ PHYACC_ATTR_MODE_READ, PHYACC_ATTR_BANK_SMI, 0x18, 0, 0 },
-		/* Read INTERRUPT_SOURCE Register */
+		/*Read INTERRUPT_SOURCE Register*/
 		{ PHYACC_ATTR_MODE_READ, PHYACC_ATTR_BANK_MISC, 0x08, 0, 0 },
-		/* HW_Init Hi */
-		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI, 0x1A, 0x0300,
-		  0 },
 	};
 	int rc, i;
+
+	/* Power down the PHY */
+	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI,
+					REG_PORT_T1_PHY_BASIC_CTRL,
+					PORT_T1_POWER_DOWN, PORT_T1_POWER_DOWN);
+
+	if (rc < 0)
+		return rc;
+	/* Clear HW_INIT */
+	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI,
+					REG_PORT_T1_POWER_DOWN_CTRL, 0x0000,
+					T1_HW_INIT_SEQ_ENABLE);
+
+	if (rc < 0)
+		return rc;
 
 	/* Set Master Mode */
 	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI,
@@ -373,6 +382,21 @@ static int mchp_t1_phy_init(struct phy_device *phydev)
 		if (rc < 0)
 			return rc;
 	}
+	/* Set HW_INIT */
+	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI,
+					REG_PORT_T1_POWER_DOWN_CTRL,
+					T1_HW_INIT_SEQ_ENABLE,
+					T1_HW_INIT_SEQ_ENABLE);
+
+	if (rc < 0)
+		return rc;
+
+	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI,
+					REG_PORT_T1_PHY_BASIC_CTRL, 0x0000,
+					PORT_T1_POWER_DOWN);
+
+	if (rc < 0)
+		return rc;
 
 	return 0;
 }
