@@ -1031,10 +1031,12 @@ static int lan937x_setup(struct dsa_switch *ds)
 	/* queue based egress rate limit */
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_5, SW_OUT_RATE_LIMIT_QUEUE_BASED, true);
 
-	//lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_RESV_MCAST_ENABLE, true);
+	lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_RESV_MCAST_ENABLE, true);
 
 	/* enable global MIB counter freeze function */
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FREEZE, true);
+
+	lan937x_enable_spi_indirect_access(dev);
 
 	/* start switch */
 	lan937x_cfg(dev, REG_SW_OPERATION, SW_START, true);
@@ -1124,9 +1126,9 @@ static int	lan937x_port_pre_bridge_flags(struct dsa_switch *ds, int port,
 					 struct switchdev_brport_flags flags,
 					 struct netlink_ext_ack *extack)
 {
-	pr_info("pre-bridge:%d",port);
-	if (flags.mask & ~(BR_LEARNING | BR_FLOOD | BR_MCAST_FLOOD))
-		return -EINVAL;
+	// pr_info("pre-bridge:%d",port);
+	// if (flags.mask & ~(BR_LEARNING | BR_FLOOD | BR_MCAST_FLOOD))
+	// 	return -EINVAL;
 
 	return 0;
 }
@@ -1206,17 +1208,17 @@ int	lan937x_port_bridge_flags(struct dsa_switch *ds, int port,
 					 struct switchdev_brport_flags flags,
 					 struct netlink_ext_ack *extack)
 {
-	if (flags.mask & BR_FLOOD)
-		lan937x_port_set_ucast_flood(ds->priv, port,
-					 !!(flags.val & BR_FLOOD));
+	// if (flags.mask & BR_FLOOD)
+	// 	lan937x_port_set_ucast_flood(ds->priv, port,
+	// 				 !!(flags.val & BR_FLOOD));
 
-	if (flags.mask & BR_MCAST_FLOOD)
-		lan937x_port_set_mcast_flood(ds->priv, port,
-					 !!(flags.val & BR_MCAST_FLOOD));
+	// if (flags.mask & BR_MCAST_FLOOD)
+	// 	lan937x_port_set_mcast_flood(ds->priv, port,
+	// 				 !!(flags.val & BR_MCAST_FLOOD));
 
-	if (flags.mask & BR_LEARNING)
-		lan937x_port_set_learning(ds->priv, port,
-				      !!(flags.val & BR_LEARNING));
+	// if (flags.mask & BR_LEARNING)
+	// 	lan937x_port_set_learning(ds->priv, port,
+	// 			      !!(flags.val & BR_LEARNING));
 
 	return 0;
 }
