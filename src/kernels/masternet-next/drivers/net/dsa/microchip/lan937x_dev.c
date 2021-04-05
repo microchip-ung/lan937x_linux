@@ -133,50 +133,28 @@ static void lan937x_flush_dyn_mac_table(struct ksz_device *dev, int port)
 {
 	unsigned int value;
 	u8 data;
-	int rc;
 
-	rc = regmap_update_bits(dev->regmap[0], REG_SW_LUE_CTRL_2,
+	regmap_update_bits(dev->regmap[0], REG_SW_LUE_CTRL_2,
 			   SW_FLUSH_OPTION_M << SW_FLUSH_OPTION_S,
 			   SW_FLUSH_OPTION_DYN_MAC << SW_FLUSH_OPTION_S);
-	
-	if (rc < 0)
-		goto exit;
 
 	if (port < dev->port_cnt) {
 		/* flush individual port */
-		rc = lan937x_pread8(dev, port, P_STP_CTRL, &data);
-
-		if (rc < 0)
-			goto exit;
-
-		if (!(data & PORT_LEARN_DISABLE)) {
-			rc = lan937x_pwrite8(dev, port, P_STP_CTRL,
+		lan937x_pread8(dev, port, P_STP_CTRL, &data);
+		if (!(data & PORT_LEARN_DISABLE))
+			lan937x_pwrite8(dev, port, P_STP_CTRL,
 					data | PORT_LEARN_DISABLE);
-			if (rc < 0)
-				goto exit;		
-		}
-		
-		rc = lan937x_cfg(dev, S_FLUSH_TABLE_CTRL, SW_FLUSH_DYN_MAC_TABLE, true);
+		lan937x_cfg(dev, S_FLUSH_TABLE_CTRL, SW_FLUSH_DYN_MAC_TABLE, true);
 
-		if (rc < 0)
-			goto exit;
-
-		rc = regmap_read_poll_timeout(dev->regmap[0],
+		regmap_read_poll_timeout(dev->regmap[0],
 					 S_FLUSH_TABLE_CTRL,
 				value, !(value & SW_FLUSH_DYN_MAC_TABLE), 10, 1000);
-		
-		if (rc < 0)	
-			goto exit;
 
-		rc = lan937x_pwrite8(dev, port, P_STP_CTRL, data);
+		lan937x_pwrite8(dev, port, P_STP_CTRL, data);
 	} else {
 		/* flush all */
-		rc = lan937x_cfg(dev, S_FLUSH_TABLE_CTRL, SW_FLUSH_STP_TABLE, true);
+		lan937x_cfg(dev, S_FLUSH_TABLE_CTRL, SW_FLUSH_STP_TABLE, true);
 	}
-
-exit:
-	if (rc < 0)
-		dev_err(dev->dev, "Failed to flush dynamic mac table\n");
 }
 
 static void lan937x_r_mib_cnt(struct ksz_device *dev, int port, u16 addr,
@@ -184,36 +162,26 @@ static void lan937x_r_mib_cnt(struct ksz_device *dev, int port, u16 addr,
 {
 	unsigned int val;
 	u32 data;
-	int rc;
+	int ret;
 
 	/* Enable MIB Counter read*/
 	data = MIB_COUNTER_READ;
 	data |= (addr << MIB_COUNTER_INDEX_S);
-	rc = lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4, data);
+	lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4, data);
 
-	if (rc < 0)
-		goto exit;
-
-	rc = regmap_read_poll_timeout(dev->regmap[2],
+	ret = regmap_read_poll_timeout(dev->regmap[2],
 				       PORT_CTRL_ADDR(port,
 						      REG_PORT_MIB_CTRL_STAT__4),
 					   val, !(val & MIB_COUNTER_READ), 10, 1000);
-
 	/* failed to read MIB. get out of loop */
-	if (rc < 0)
-		goto exit;
+	if (ret) {
+		dev_err(dev->dev, "Failed to get MIB\n");
+		return;
+	}
 
 	/* count resets upon read */
-	rc = lan937x_pread32(dev, port, REG_PORT_MIB_DATA, &data);
-
-	if (rc < 0)
-		goto exit;
-
+	lan937x_pread32(dev, port, REG_PORT_MIB_DATA, &data);
 	*cnt += data;
-
-exit:
-	if (rc < 0)
-		dev_err(dev->dev, "Failed to get MIB\n");
 }
 
 static void lan937x_r_mib_pkt(struct ksz_device *dev, int port, u16 addr,
@@ -226,28 +194,14 @@ static void lan937x_r_mib_pkt(struct ksz_device *dev, int port, u16 addr,
 static void lan937x_port_init_cnt(struct ksz_device *dev, int port)
 {
 	struct ksz_port_mib *mib = &dev->ports[port].mib;
-	int rc;
 
 	/* flush all enabled port MIB counters */
 	mutex_lock(&mib->cnt_mutex);
-	rc = lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4,
+	lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4,
 			 MIB_COUNTER_FLUSH_FREEZE);
-	if (rc < 0)
-		goto exit;
-
-	rc = ksz_write8(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FLUSH);
-	if (rc < 0)
-		goto exit;
-
-	rc = lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4, 0);
-	if (rc < 0)
-		goto exit;
-
-exit:
+	ksz_write8(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FLUSH);
+	lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4, 0);
 	mutex_unlock(&mib->cnt_mutex);
-
-	if (rc < 0)
-		dev_err(dev->dev, "Failed to initialize MIB counter\n");
 
 	mib->cnt_ptr = 0;
 	memset(mib->counters, 0, dev->mib_cnt * sizeof(u64));
@@ -384,7 +338,7 @@ static u32 lan937x_get_port_addr(int port, int offset)
 	return PORT_CTRL_ADDR(port, offset);
 }
 
-bool lan937x_is_internal_tx_phy_port(struct ksz_device *dev, int port)
+bool lan937x_is_internal_100BTX_phy_port(struct ksz_device *dev, int port)
 {
 	/* Check if the port is internal tx phy port */
 	if (lan937x_is_internal_phy_port(dev, port) && port == LAN937X_TXPHY_PORT)
@@ -399,7 +353,7 @@ bool lan937x_is_internal_t1_phy_port(struct ksz_device *dev, int port)
 {
 	/* Check if the port is internal t1 phy port */
 	if (lan937x_is_internal_phy_port(dev, port) &&
-	    !lan937x_is_internal_tx_phy_port(dev, port))
+	    !lan937x_is_internal_100BTX_phy_port(dev, port))
 		return true;
 
 	return false;
@@ -416,7 +370,7 @@ int lan937x_internal_phy_write(struct ksz_device *dev, int addr,
 	if (!lan937x_is_internal_phy_port(dev, addr))
 		return 0;
 
-	if (lan937x_is_internal_tx_phy_port(dev, addr))
+	if (lan937x_is_internal_100BTX_phy_port(dev, addr))
 		addr_base = REG_PORT_TX_PHY_CTRL_BASE;
 	else
 		addr_base = REG_PORT_T1_PHY_CTRL_BASE;
@@ -465,7 +419,7 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr,
 	if (!lan937x_is_internal_phy_port(dev, addr))
 		return 0;
 
-	if (lan937x_is_internal_tx_phy_port(dev, addr))
+	if (lan937x_is_internal_100BTX_phy_port(dev, addr))
 		addr_base = REG_PORT_TX_PHY_CTRL_BASE;
 	else
 		addr_base = REG_PORT_T1_PHY_CTRL_BASE;
@@ -511,70 +465,49 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 {
 	struct ksz_port *p = &dev->ports[port];
 	u8 data8, member;
-	int rc, i;
-
-	struct prt_init p_init[] = {
-		{REG_PORT_MAC_CTRL_0, PORT_FR_CHK_LENGTH, false},
-		{REG_PORT_CTRL_0, PORT_MAC_LOOPBACK, false},
-		/* set back pressure */
-		{REG_PORT_MAC_CTRL_1, PORT_BACK_PRESSURE, true},
-		/* enable broadcast storm limit */
-		{P_BCAST_STORM_CTRL, PORT_BROADCAST_STORM, true},
-		/* disable DiffServ priority */
-		{P_PRIO_CTRL, PORT_DIFFSERV_PRIO_ENABLE, false},
-		/* replace priority */
-		{REG_PORT_MRI_MAC_CTRL, PORT_USER_PRIO_CEILING,false},
-		{P_PRIO_CTRL, PORT_802_1P_PRIO_ENABLE, true}
-	};
 
 	/* enable tag tail for host port */
 	if (cpu_port) {
-		rc = lan937x_port_cfg(dev, port, REG_PORT_CTRL_0, PORT_TAIL_TAG_ENABLE,
+		lan937x_port_cfg(dev, port, REG_PORT_CTRL_0, PORT_TAIL_TAG_ENABLE,
 				 true);
-		if (rc < 0)
-			goto exit;
 		/* Enable jumbo packet in host port so that frames are not
 		 * counted as oversized.
 		 */
-		rc = lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_JUMBO_PACKET,
+		lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_JUMBO_PACKET,
 				 true);
-		
-		if (rc < 0)
-			goto exit;
-
-		rc = lan937x_pwrite16(dev, port, REG_PORT_MTU__2, FR_SIZE_CPU_PORT);
-
-		if (rc < 0)
-			goto exit;
+		lan937x_pwrite16(dev, port, REG_PORT_MTU__2, FR_SIZE_CPU_PORT);
 	}
 
-	for (i = 0; i < ARRAY_SIZE(p_init); i++) {
+	lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_FR_CHK_LENGTH,
+			 false);
 
-		rc = lan937x_port_cfg(dev, port, p_init[i].addr, p_init[i].mask, p_init[i].is_set);
+	lan937x_port_cfg(dev, port, REG_PORT_CTRL_0, PORT_MAC_LOOPBACK, false);
 
-		if (rc < 0)
-			goto exit;
-	}
+	/* set back pressure */
+	lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_1, PORT_BACK_PRESSURE, true);
 
+	/* enable broadcast storm limit */
+	lan937x_port_cfg(dev, port, P_BCAST_STORM_CTRL, PORT_BROADCAST_STORM, true);
 
-	rc = lan937x_port_cfg32(dev, port, REG_PORT_MTI_QUEUE_CTRL_0__4,
+	/* disable DiffServ priority */
+	lan937x_port_cfg(dev, port, P_PRIO_CTRL, PORT_DIFFSERV_PRIO_ENABLE, false);
+
+	/* replace priority */
+	lan937x_port_cfg(dev, port, REG_PORT_MRI_MAC_CTRL, PORT_USER_PRIO_CEILING,
+			 false);
+	lan937x_port_cfg32(dev, port, REG_PORT_MTI_QUEUE_CTRL_0__4,
 			   MTI_PVID_REPLACE, false);
-	
-	if (rc < 0)
-		goto exit;
+
+	/* enable 802.1p priority */
+	lan937x_port_cfg(dev, port, P_PRIO_CTRL, PORT_802_1P_PRIO_ENABLE, true);
 
 	if (!lan937x_is_internal_phy_port(dev, port)) {
 		/* force flow control off*/
-		rc = lan937x_port_cfg(dev, port, REG_PORT_XMII_CTRL_0,
+		lan937x_port_cfg(dev, port, REG_PORT_XMII_CTRL_0,
 				 PORT_FORCE_TX_FLOW_CTRL | PORT_FORCE_RX_FLOW_CTRL,
 			     false);
-		if (rc < 0)
-			goto exit;
 
-		rc = lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
-	
-		if (rc < 0)
-			goto exit;
+		lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
 
 		/* clear MII selection & set it based on interface later */
 		data8 &= ~PORT_MII_SEL_M;
@@ -605,10 +538,7 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 				data8 |= PORT_RGMII_ID_EG_ENABLE;
 			break;
 		}
-		rc = lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, data8);
-		
-		if (rc < 0)
-			goto exit;
+		lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, data8);
 	}
 
 	if (cpu_port)
@@ -617,11 +547,6 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 		member = dev->host_mask | p->vid_member;
 
 	lan937x_cfg_port_member(dev, port, member);
-
-exit:
-	if(rc < 0)
-		dev_err(dev->dev, "failed to setup the port\n");
-	
 }
 
 static int lan937x_sw_mdio_read(struct mii_bus *bus, int addr, int regnum)
