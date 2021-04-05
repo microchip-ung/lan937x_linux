@@ -467,7 +467,7 @@ static struct phy_driver microchip_t1_phy_driver[] = {
 	.handle_interrupt = lan87xx_handle_interrupt,
 	.suspend        = genphy_suspend,
 	.resume         = genphy_resume,
-},{
+}, {
 	.phy_id		= LAN937X_T1_PHY_ID,
 	.phy_id_mask	= LAN937X_PHY_ID_MASK,
 	.name			= "LAN937x T1",
