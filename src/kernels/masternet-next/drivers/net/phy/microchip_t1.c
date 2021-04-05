@@ -30,13 +30,13 @@
 #define	PHYACC_ATTR_MODE_READ		0
 #define	PHYACC_ATTR_MODE_WRITE		1
 #define	PHYACC_ATTR_MODE_MODIFY		2
-#define PHYACC_ATTR_MODE_POLL 		3
+#define PHYACC_ATTR_MODE_POLL		3
 
 #define	PHYACC_ATTR_BANK_SMI		0
 #define	PHYACC_ATTR_BANK_MISC		1
 #define	PHYACC_ATTR_BANK_PCS		2
 #define	PHYACC_ATTR_BANK_AFE		3
-#define PHYACC_ATTR_BANK_DSP 		4
+#define PHYACC_ATTR_BANK_DSP		4
 #define	PHYACC_ATTR_BANK_MAX		7
 
 #define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
@@ -44,18 +44,18 @@
 
 #define REG_PORT_T1_PHY_BASIC_CTRL 0x00
 
-#define PORT_T1_PHY_RESET 	BIT(15)
-#define PORT_T1_PHY_LOOPBACK 	BIT(14)
-#define PORT_T1_SPEED_100MBIT 	BIT(13)
-#define PORT_T1_POWER_DOWN 	BIT(11)
-#define PORT_T1_ISOLATE 	BIT(10)
-#define PORT_T1_FULL_DUPLEX 	BIT(8)
+#define PORT_T1_PHY_RESET	BIT(15)
+#define PORT_T1_PHY_LOOPBACK	BIT(14)
+#define PORT_T1_SPEED_100MBIT	BIT(13)
+#define PORT_T1_POWER_DOWN	BIT(11)
+#define PORT_T1_ISOLATE	BIT(10)
+#define PORT_T1_FULL_DUPLEX	BIT(8)
 
 #define REG_PORT_T1_PHY_BASIC_STATUS 0x01
 
-#define PORT_T1_MII_SUPPRESS_CAPABLE 	BIT(6)
-#define PORT_T1_LINK_STATUS 		BIT(2)
-#define PORT_T1_EXTENDED_CAPABILITY 	BIT(0)
+#define PORT_T1_MII_SUPPRESS_CAPABLE	BIT(6)
+#define PORT_T1_LINK_STATUS		BIT(2)
+#define PORT_T1_EXTENDED_CAPABILITY	BIT(0)
 
 #define REG_PORT_T1_PHY_ID_HI 0x02
 #define REG_PORT_T1_PHY_ID_LO 0x03
@@ -65,14 +65,14 @@
 
 #define REG_PORT_T1_PHY_M_CTRL 0x09
 
-#define PORT_T1_MANUAL_CFG 	BIT(12)
-#define PORT_T1_M_CFG 		BIT(11)
+#define PORT_T1_MANUAL_CFG	BIT(12)
+#define PORT_T1_M_CFG		BIT(11)
 
 #define REG_PORT_T1_PHY_M_STATUS 0x0A
 
-#define REG_PORT_T1_MODE_STAT 			0x11
-#define T1_PORT_DSCR_LOCK_STATUS_MSK 		BIT(3)
-#define T1_PORT_LINK_UP_MSK 			BIT(0)
+#define REG_PORT_T1_MODE_STAT			0x11
+#define T1_PORT_DSCR_LOCK_STATUS_MSK		BIT(3)
+#define T1_PORT_LINK_UP_MSK			BIT(0)
 
 #define REG_PORT_T1_LOOPBACK_CTRL 0x12
 
@@ -82,12 +82,12 @@
 
 #define REG_PORT_T1_EXT_REG_CTRL 0x14
 
-#define T1_PCS_STS_CNT_RESET 		BIT(15)
-#define T1_IND_DATA_READ 		BIT(12)
-#define T1_IND_DATA_WRITE 		BIT(11)
-#define T1_REG_BANK_SEL_M 		0x7
-#define T1_REG_BANK_SEL_S 		8
-#define T1_REG_ADDR_M 			0xFF
+#define T1_PCS_STS_CNT_RESET		BIT(15)
+#define T1_IND_DATA_READ		BIT(12)
+#define T1_IND_DATA_WRITE		BIT(11)
+#define T1_REG_BANK_SEL_M		0x7
+#define T1_REG_BANK_SEL_S		8
+#define T1_REG_ADDR_M			0xFF
 
 #define REG_PORT_T1_EXT_REG_RD_DATA 0x15
 #define REG_PORT_T1_EXT_REG_WR_DATA 0x16
@@ -95,8 +95,8 @@
 #define REG_PORT_T1_PHY_INT_STATUS 0x18
 #define REG_PORT_T1_PHY_INT_ENABLE 0x19
 
-#define T1_LINK_UP_INT 		BIT(2)
-#define T1_LINK_DOWN_INT 	BIT(1)
+#define T1_LINK_UP_INT		BIT(2)
+#define T1_LINK_DOWN_INT	BIT(1)
 
 #define REG_PORT_T1_POWER_DOWN_CTRL 0x1A
 
@@ -104,11 +104,11 @@
 
 #define REG_PORT_T1_PHY_M_STATUS 0x0A
 
-#define PORT_T1_LOCAL_RX_OK 	BIT(13)
-#define PORT_T1_REMOTE_RX_OK 	BIT(12)
+#define PORT_T1_LOCAL_RX_OK	BIT(13)
+#define PORT_T1_REMOTE_RX_OK	BIT(12)
 
-#define LAN87XX_PHY_ID 		0x0007c150
-#define LAN937X_T1_PHY_ID 	0x0007c181
+#define LAN87XX_PHY_ID		0x0007c150
+#define LAN937X_T1_PHY_ID	0x0007c181
 #define LAN87XX_PHY_ID_MASK 0xfffffff0
 #define LAN937X_PHY_ID_MASK 0xfffffff0
 
@@ -450,13 +450,14 @@ static int lan937x_read_status(struct phy_device *phydev)
 
 	phydev->duplex = DUPLEX_FULL;
 	phydev->speed = SPEED_100;
-	phydev->pause = phydev->asym_pause = 0;
+	phydev->pause = 0;
+	phydev->asym_pause = 0;
 
 	return 0;
 }
 
 static struct phy_driver microchip_t1_phy_driver[] = {
-/*{
+{
 	.phy_id         = LAN87XX_PHY_ID,
 	.phy_id_mask    = LAN87XX_PHY_ID_MASK,
 	.name           = "LAN87xx T1",
@@ -466,24 +467,22 @@ static struct phy_driver microchip_t1_phy_driver[] = {
 	.handle_interrupt = lan87xx_handle_interrupt,
 	.suspend        = genphy_suspend,
 	.resume         = genphy_resume,
-}, */{
-	/*.phy_id 		= LAN937X_T1_PHY_ID,*/
-	.phy_id			= LAN87XX_PHY_ID,
-	.phy_id_mask 	= LAN937X_PHY_ID_MASK,
-	.name 			= "LAN937x T1",
-	.read_status 	= lan937x_read_status,
-	.features 		= PHY_BASIC_T1_FEATURES,
-	.config_init 	= mchp_t1_phy_config_init,
-	.suspend 		= genphy_suspend,
-	.resume 		= genphy_resume,
+},{
+	.phy_id		= LAN937X_T1_PHY_ID,
+	.phy_id_mask	= LAN937X_PHY_ID_MASK,
+	.name			= "LAN937x T1",
+	.read_status	= lan937x_read_status,
+	.features		= PHY_BASIC_T1_FEATURES,
+	.config_init	= mchp_t1_phy_config_init,
+	.suspend		= genphy_suspend,
+	.resume		= genphy_resume,
 } };
 
 module_phy_driver(microchip_t1_phy_driver);
 
 static struct mdio_device_id __maybe_unused microchip_t1_tbl[] = {
-/*	{ LAN87XX_PHY_ID, LAN87XX_PHY_ID_MASK },*/
-/*	{ LAN937X_T1_PHY_ID, LAN937X_PHY_ID_MASK },*/
 	{ LAN87XX_PHY_ID, LAN87XX_PHY_ID_MASK },
+	{ LAN937X_T1_PHY_ID, LAN937X_PHY_ID_MASK },
 	{ }
 };
 

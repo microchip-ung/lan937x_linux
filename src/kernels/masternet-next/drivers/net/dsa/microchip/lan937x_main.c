@@ -128,13 +128,13 @@ static int lan937x_read_table(struct ksz_device *dev, u32 *table)
 		return rc;
 
 	rc = ksz_read32(dev, REG_SW_ALU_VAL_D, &table[3]);
-	
+
 	return rc;
 }
 
 static int lan937x_write_table(struct ksz_device *dev, u32 *table)
 {
-	int rc; 
+	int rc;
 	/* write alu table */
 	rc = ksz_write32(dev, REG_SW_ALU_VAL_A, table[0]);
 	if (rc < 0)
@@ -294,7 +294,7 @@ static int lan937x_port_vlan_filtering(struct dsa_switch *ds, int port,
 
 	if (flag) {
 		rc = lan937x_port_cfg(dev, port, REG_PORT_LUE_CTRL,
-				 PORT_VLAN_LOOKUP_VID_0, true);
+				      PORT_VLAN_LOOKUP_VID_0, true);
 		if (rc < 0)
 			return rc;
 
@@ -305,7 +305,7 @@ static int lan937x_port_vlan_filtering(struct dsa_switch *ds, int port,
 			return rc;
 
 		rc = lan937x_port_cfg(dev, port, REG_PORT_LUE_CTRL,
-				 PORT_VLAN_LOOKUP_VID_0, false);
+				      PORT_VLAN_LOOKUP_VID_0, false);
 	}
 
 	return rc;
@@ -345,13 +345,13 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 	}
 
 	/* change PVID */
-	if (vlan->flags & BRIDGE_VLAN_INFO_PVID){
+	if (vlan->flags & BRIDGE_VLAN_INFO_PVID) {
 		rc = lan937x_pwrite16(dev, port, REG_PORT_DEFAULT_VID, vlan->vid);
 
 		if (rc < 0) {
 			dev_err(dev->dev, "Failed to set pvid\n");
 			return rc;
-		}	
+		}
 	}
 
 	return 0;
@@ -395,7 +395,7 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 	if (rc < 0) {
 		dev_err(dev->dev, "Failed to set pvid\n");
 		return rc;
-	}	
+	}
 
 	return 0;
 }
@@ -426,19 +426,19 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 		data |= ((addr[0] << 8) | addr[1]);
 
 		rc = ksz_write32(dev, REG_SW_ALU_INDEX_0, data);
-		if(rc < 0)
+		if (rc < 0)
 			goto exit;
 
 		data = ((addr[2] << 24) | (addr[3] << 16));
 		data |= ((addr[4] << 8) | addr[5]);
 
 		rc = ksz_write32(dev, REG_SW_ALU_INDEX_1, data);
-		if(rc < 0)
+		if (rc < 0)
 			goto exit;
 
 		/* start read operation */
 		rc = ksz_write32(dev, REG_SW_ALU_CTRL(i), ALU_READ | ALU_START);
-		if(rc < 0)
+		if (rc < 0)
 			goto exit;
 
 		/* wait to be finished */
@@ -479,7 +479,7 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 		/* wait to be finished */
 		rc = lan937x_wait_alu_ready(i, dev);
 
-		if (rc < 0){
+		if (rc < 0) {
 			dev_err(dev->dev, "Failed to write ALU\n");
 			goto exit;
 		}
@@ -637,7 +637,7 @@ static int lan937x_port_fdb_dump(struct dsa_switch *ds, int port,
 			timeout = 1000;
 			do {
 				rc = ksz_read32(dev, REG_SW_ALU_CTRL(i), &lan937x_data);
-				
+
 				if (rc < 0)
 					goto exit;
 
@@ -683,7 +683,7 @@ static int lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 	u8 fid = lan937x_get_fid(mdb->vid);
 	u32 static_table[4];
 	u32 mac_hi, mac_lo;
-	int index,rc;
+	int index, rc;
 	u32 data;
 
 	mac_hi = ((mdb->addr[0] << 8) | mdb->addr[1]);
@@ -699,7 +699,7 @@ static int lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 		rc = ksz_write32(dev, REG_SW_ALU_STAT_CTRL__4, data);
 		if (rc < 0)
 			goto exit;
-			
+
 		/* wait to be finished */
 		rc = lan937x_wait_alu_sta_ready(dev);
 		if (rc < 0) {
@@ -865,7 +865,7 @@ static int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
 
 	/* configure mirror port */
 	rc = lan937x_port_cfg(dev, mirror->to_local_port, P_MIRROR_CTRL,
-			 PORT_MIRROR_SNIFFER, true);	 
+			      PORT_MIRROR_SNIFFER, true);
 	if (rc < 0)
 		return rc;
 
@@ -899,12 +899,12 @@ static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 	int rc;
 
 	if (lan937x_is_internal_phy_port(dev, port))
-		return PHY_INTERFACE_MODE_NA;	
+		return PHY_INTERFACE_MODE_NA;
 
 	/* read interface from REG_PORT_XMII_CTRL_1 register */
 	rc = lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
 
-	if(rc < 0)
+	if (rc < 0)
 		return PHY_INTERFACE_MODE_NA;
 
 	switch (data8 & PORT_MII_SEL_M) {
@@ -955,11 +955,10 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 			 */
 			interface = lan937x_get_interface(dev, i);
 			if (!p->interface) {
-				if (dev->compat_interface) {
+				if (dev->compat_interface)
 					p->interface = dev->compat_interface;
-				} else {
+				else
 					p->interface = interface;
-				}
 			}
 			if (interface && interface != p->interface) {
 				prev_msg = " instead of ";
@@ -1123,14 +1122,14 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 }
 
 static int	lan937x_port_pre_bridge_flags(struct dsa_switch *ds, int port,
-					 struct switchdev_brport_flags flags,
+					      struct switchdev_brport_flags flags,
 					 struct netlink_ext_ack *extack)
 {
 	return -EOPNOTSUPP;
 }
 
 static int	lan937x_port_bridge_flags(struct dsa_switch *ds, int port,
-					 struct switchdev_brport_flags flags,
+					  struct switchdev_brport_flags flags,
 					 struct netlink_ext_ack *extack)
 {
 	return -EOPNOTSUPP;
@@ -1178,7 +1177,6 @@ int lan937x_switch_register(struct ksz_device *dev)
 			mdiobus_unregister(dev->ds->slave_mii_bus);
 			of_node_put(dev->mdio_np);
 		}
-
 	}
 
 	return ret;

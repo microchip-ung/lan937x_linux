@@ -133,7 +133,7 @@ int lan937x_check_device_id(struct ksz_device *dev)
 	const struct lan937x_chip_data *dt_chip_data;
 	const struct of_device_id *match;
 	int i;
-	
+
 	dt_chip_data = of_device_get_match_data(dev->dev);
 
 	if (!dt_chip_data)
@@ -149,7 +149,7 @@ int lan937x_check_device_id(struct ksz_device *dev)
 		/* Check for Device Tree and Chip ID */
 		if (dt_chip_data->chip_id != dev->chip_id) {
 			dev_err(dev->dev, "Device tree specifies chip %s but found %s, please fix it!\n",
-				 dt_chip_data->dev_name, chip_data->dev_name);
+				dt_chip_data->dev_name, chip_data->dev_name);
 			return -ENODEV;
 		}
 
