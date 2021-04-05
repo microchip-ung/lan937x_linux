@@ -11,8 +11,6 @@
 #include "ionic_txrx.h"
 
 
-static bool ionic_tx_service(struct ionic_cq *cq, struct ionic_cq_info *cq_info);
-
 static inline void ionic_txq_post(struct ionic_queue *q, bool ring_dbell,
 				  ionic_desc_cb cb_func, void *cb_arg)
 {
@@ -229,11 +227,13 @@ static void ionic_rx_clean(struct ionic_queue *q,
 			   struct ionic_cq_info *cq_info,
 			   void *cb_arg)
 {
-	struct ionic_rxq_comp *comp = cq_info->rxcq;
 	struct net_device *netdev = q->lif->netdev;
 	struct ionic_qcq *qcq = q_to_qcq(q);
 	struct ionic_rx_stats *stats;
+	struct ionic_rxq_comp *comp;
 	struct sk_buff *skb;
+
+	comp = cq_info->cq_desc + qcq->cq.desc_size - sizeof(*comp);
 
 	stats = q_to_rx_stats(q);
 
@@ -296,17 +296,39 @@ static void ionic_rx_clean(struct ionic_queue *q,
 		stats->vlan_stripped++;
 	}
 
+	if (unlikely(q->features & IONIC_RXQ_F_HWSTAMP)) {
+		__le64 *cq_desc_hwstamp;
+		u64 hwstamp;
+
+		cq_desc_hwstamp =
+			cq_info->cq_desc +
+			qcq->cq.desc_size -
+			sizeof(struct ionic_rxq_comp) -
+			IONIC_HWSTAMP_CQ_NEGOFFSET;
+
+		hwstamp = le64_to_cpu(*cq_desc_hwstamp);
+
+		if (hwstamp != IONIC_HWSTAMP_INVALID) {
+			skb_hwtstamps(skb)->hwtstamp = ionic_lif_phc_ktime(q->lif, hwstamp);
+			stats->hwstamp_valid++;
+		} else {
+			stats->hwstamp_invalid++;
+		}
+	}
+
 	if (le16_to_cpu(comp->len) <= q->lif->rx_copybreak)
 		napi_gro_receive(&qcq->napi, skb);
 	else
 		napi_gro_frags(&qcq->napi);
 }
 
-static bool ionic_rx_service(struct ionic_cq *cq, struct ionic_cq_info *cq_info)
+bool ionic_rx_service(struct ionic_cq *cq, struct ionic_cq_info *cq_info)
 {
-	struct ionic_rxq_comp *comp = cq_info->rxcq;
 	struct ionic_queue *q = cq->bound_q;
 	struct ionic_desc_info *desc_info;
+	struct ionic_rxq_comp *comp;
+
+	comp = cq_info->cq_desc + cq->desc_size - sizeof(*comp);
 
 	if (!color_match(comp->pkt_type_color, cq->done_color))
 		return false;
@@ -609,6 +631,7 @@ static int ionic_tx_map_skb(struct ionic_queue *q, struct sk_buff *skb,
 			    struct ionic_desc_info *desc_info)
 {
 	struct ionic_buf_info *buf_info = desc_info->bufs;
+	struct ionic_tx_stats *stats = q_to_tx_stats(q);
 	struct device *dev = q->dev;
 	dma_addr_t dma_addr;
 	unsigned int nfrags;
@@ -616,8 +639,10 @@ static int ionic_tx_map_skb(struct ionic_queue *q, struct sk_buff *skb,
 	int frag_idx;
 
 	dma_addr = ionic_tx_map_single(q, skb->data, skb_headlen(skb));
-	if (dma_mapping_error(dev, dma_addr))
+	if (dma_mapping_error(dev, dma_addr)) {
+		stats->dma_map_err++;
 		return -EIO;
+	}
 	buf_info->dma_addr = dma_addr;
 	buf_info->len = skb_headlen(skb);
 	buf_info++;
@@ -626,8 +651,10 @@ static int ionic_tx_map_skb(struct ionic_queue *q, struct sk_buff *skb,
 	nfrags = skb_shinfo(skb)->nr_frags;
 	for (frag_idx = 0; frag_idx < nfrags; frag_idx++, frag++) {
 		dma_addr = ionic_tx_map_frag(q, frag, 0, skb_frag_size(frag));
-		if (dma_mapping_error(dev, dma_addr))
+		if (dma_mapping_error(dev, dma_addr)) {
+			stats->dma_map_err++;
 			goto dma_fail;
+		}
 		buf_info->dma_addr = dma_addr;
 		buf_info->len = skb_frag_size(frag);
 		buf_info++;
@@ -656,9 +683,11 @@ static void ionic_tx_clean(struct ionic_queue *q,
 {
 	struct ionic_buf_info *buf_info = desc_info->bufs;
 	struct ionic_tx_stats *stats = q_to_tx_stats(q);
+	struct ionic_qcq *qcq = q_to_qcq(q);
+	struct sk_buff *skb = cb_arg;
 	struct device *dev = q->dev;
-	u16 queue_index;
 	unsigned int i;
+	u16 qi;
 
 	if (desc_info->nbufs) {
 		dma_unmap_single(dev, (dma_addr_t)buf_info->dma_addr,
@@ -669,31 +698,58 @@ static void ionic_tx_clean(struct ionic_queue *q,
 				       buf_info->len, DMA_TO_DEVICE);
 	}
 
-	if (cb_arg) {
-		struct sk_buff *skb = cb_arg;
+	if (!skb)
+		return;
 
-		queue_index = skb_get_queue_mapping(skb);
-		if (unlikely(__netif_subqueue_stopped(q->lif->netdev,
-						      queue_index))) {
-			netif_wake_subqueue(q->lif->netdev, queue_index);
-			q->wake++;
+	qi = skb_get_queue_mapping(skb);
+
+	if (unlikely(q->features & IONIC_TXQ_F_HWSTAMP)) {
+		if (cq_info) {
+			struct skb_shared_hwtstamps hwts = {};
+			__le64 *cq_desc_hwstamp;
+			u64 hwstamp;
+
+			cq_desc_hwstamp =
+				cq_info->cq_desc +
+				qcq->cq.desc_size -
+				sizeof(struct ionic_txq_comp) -
+				IONIC_HWSTAMP_CQ_NEGOFFSET;
+
+			hwstamp = le64_to_cpu(*cq_desc_hwstamp);
+
+			if (hwstamp != IONIC_HWSTAMP_INVALID) {
+				hwts.hwtstamp = ionic_lif_phc_ktime(q->lif, hwstamp);
+
+				skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
+				skb_tstamp_tx(skb, &hwts);
+
+				stats->hwstamp_valid++;
+			} else {
+				stats->hwstamp_invalid++;
+			}
 		}
 
-		desc_info->bytes = skb->len;
-		stats->clean++;
-
-		dev_consume_skb_any(skb);
+	} else if (unlikely(__netif_subqueue_stopped(q->lif->netdev, qi))) {
+		netif_wake_subqueue(q->lif->netdev, qi);
+		q->wake++;
 	}
+
+	desc_info->bytes = skb->len;
+	stats->clean++;
+
+	dev_consume_skb_any(skb);
 }
 
-static bool ionic_tx_service(struct ionic_cq *cq, struct ionic_cq_info *cq_info)
+bool ionic_tx_service(struct ionic_cq *cq, struct ionic_cq_info *cq_info)
 {
-	struct ionic_txq_comp *comp = cq_info->txcq;
 	struct ionic_queue *q = cq->bound_q;
 	struct ionic_desc_info *desc_info;
+	struct ionic_txq_comp *comp;
 	int bytes = 0;
 	int pkts = 0;
 	u16 index;
+
+	comp = cq_info->cq_desc + cq->desc_size - sizeof(*comp);
 
 	if (!color_match(comp->color, cq->done_color))
 		return false;
@@ -715,7 +771,7 @@ static bool ionic_tx_service(struct ionic_cq *cq, struct ionic_cq_info *cq_info)
 		desc_info->cb_arg = NULL;
 	} while (index != le16_to_cpu(comp->comp_index));
 
-	if (pkts && bytes)
+	if (pkts && bytes && !unlikely(q->features & IONIC_TXQ_F_HWSTAMP))
 		netdev_tx_completed_queue(q_to_ndq(q), pkts, bytes);
 
 	return true;
@@ -753,7 +809,7 @@ void ionic_tx_empty(struct ionic_queue *q)
 		desc_info->cb_arg = NULL;
 	}
 
-	if (pkts && bytes)
+	if (pkts && bytes && !unlikely(q->features & IONIC_TXQ_F_HWSTAMP))
 		netdev_tx_completed_queue(q_to_ndq(q), pkts, bytes);
 }
 
@@ -827,7 +883,8 @@ static void ionic_tx_tso_post(struct ionic_queue *q, struct ionic_txq_desc *desc
 
 	if (start) {
 		skb_tx_timestamp(skb);
-		netdev_tx_sent_queue(q_to_ndq(q), skb->len);
+		if (!unlikely(q->features & IONIC_TXQ_F_HWSTAMP))
+			netdev_tx_sent_queue(q_to_ndq(q), skb->len);
 		ionic_txq_post(q, false, ionic_tx_clean, skb);
 	} else {
 		ionic_txq_post(q, done, NULL, NULL);
@@ -1074,7 +1131,8 @@ static int ionic_tx(struct ionic_queue *q, struct sk_buff *skb)
 	stats->pkts++;
 	stats->bytes += skb->len;
 
-	netdev_tx_sent_queue(q_to_ndq(q), skb->len);
+	if (!unlikely(q->features & IONIC_TXQ_F_HWSTAMP))
+		netdev_tx_sent_queue(q_to_ndq(q), skb->len);
 	ionic_txq_post(q, !netdev_xmit_more(), ionic_tx_clean, skb);
 
 	return 0;
@@ -1083,15 +1141,18 @@ static int ionic_tx(struct ionic_queue *q, struct sk_buff *skb)
 static int ionic_tx_descs_needed(struct ionic_queue *q, struct sk_buff *skb)
 {
 	struct ionic_tx_stats *stats = q_to_tx_stats(q);
+	int ndescs;
 	int err;
 
-	/* If TSO, need roundup(skb->len/mss) descs */
+	/* Each desc is mss long max, so a descriptor for each gso_seg */
 	if (skb_is_gso(skb))
-		return (skb->len / skb_shinfo(skb)->gso_size) + 1;
+		ndescs = skb_shinfo(skb)->gso_segs;
+	else
+		ndescs = 1;
 
 	/* If non-TSO, just need 1 desc and nr_frags sg elems */
 	if (skb_shinfo(skb)->nr_frags <= q->max_sg_elems)
-		return 1;
+		return ndescs;
 
 	/* Too many frags, so linearize */
 	err = skb_linearize(skb);
@@ -1100,8 +1161,7 @@ static int ionic_tx_descs_needed(struct ionic_queue *q, struct sk_buff *skb)
 
 	stats->linearize++;
 
-	/* Need 1 desc and zero sg elems */
-	return 1;
+	return ndescs;
 }
 
 static int ionic_maybe_stop_tx(struct ionic_queue *q, int ndescs)
@@ -1124,6 +1184,41 @@ static int ionic_maybe_stop_tx(struct ionic_queue *q, int ndescs)
 	return stopped;
 }
 
+static netdev_tx_t ionic_start_hwstamp_xmit(struct sk_buff *skb,
+					    struct net_device *netdev)
+{
+	struct ionic_lif *lif = netdev_priv(netdev);
+	struct ionic_queue *q = &lif->hwstamp_txq->q;
+	int err, ndescs;
+
+	/* Does not stop/start txq, because we post to a separate tx queue
+	 * for timestamping, and if a packet can't be posted immediately to
+	 * the timestamping queue, it is dropped.
+	 */
+
+	ndescs = ionic_tx_descs_needed(q, skb);
+	if (unlikely(ndescs < 0))
+		goto err_out_drop;
+
+	if (unlikely(!ionic_q_has_space(q, ndescs)))
+		goto err_out_drop;
+
+	if (skb_is_gso(skb))
+		err = ionic_tx_tso(q, skb);
+	else
+		err = ionic_tx(q, skb);
+
+	if (err)
+		goto err_out_drop;
+
+	return NETDEV_TX_OK;
+
+err_out_drop:
+	q->drop++;
+	dev_kfree_skb(skb);
+	return NETDEV_TX_OK;
+}
+
 netdev_tx_t ionic_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 {
 	u16 queue_index = skb_get_queue_mapping(skb);
@@ -1136,6 +1231,10 @@ netdev_tx_t ionic_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
+
+	if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP))
+		if (lif->hwstamp_txq)
+			return ionic_start_hwstamp_xmit(skb, netdev);
 
 	if (unlikely(queue_index >= lif->nxqs))
 		queue_index = 0;

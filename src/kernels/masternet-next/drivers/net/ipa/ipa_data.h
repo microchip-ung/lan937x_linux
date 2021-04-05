@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
 /* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
- * Copyright (C) 2019-2020 Linaro Ltd.
+ * Copyright (C) 2019-2021 Linaro Ltd.
  */
 #ifndef _IPA_DATA_H_
 #define _IPA_DATA_H_
@@ -46,9 +46,8 @@
  * the IPA endpoint.
  */
 
-/* The maximum value returned by ipa_resource_group_{src,dst}_count() */
-#define IPA_RESOURCE_GROUP_SRC_MAX	5
-#define IPA_RESOURCE_GROUP_DST_MAX	5
+/* The maximum possible number of source or destination resource groups */
+#define IPA_RESOURCE_GROUP_MAX	8
 
 /** enum ipa_qsb_master_id - array index for IPA QSB configuration data */
 enum ipa_qsb_master_id {
@@ -91,8 +90,8 @@ struct ipa_qsb_data {
  * that can be included in a single transaction.
  */
 struct gsi_channel_data {
-	u16 tre_count;
-	u16 event_count;
+	u16 tre_count;			/* must be a power of 2 */
+	u16 event_count;		/* must be a power of 2 */
 	u8 tlv_count;
 };
 
@@ -177,12 +176,12 @@ struct ipa_endpoint_data {
 
 /**
  * struct ipa_gsi_endpoint_data - GSI channel/IPA endpoint data
- * ee:		GSI execution environment ID
- * channel_id:	GSI channel ID
- * endpoint_id:	IPA endpoint ID
- * toward_ipa:	direction of data transfer
- * gsi:		GSI channel configuration data (see above)
- * ipa:		IPA endpoint configuration data (see above)
+ * @ee_id:	GSI execution environment ID
+ * @channel_id:	GSI channel ID
+ * @endpoint_id: IPA endpoint ID
+ * @toward_ipa:	direction of data transfer
+ * @channel:	GSI channel configuration data (see above)
+ * @endpoint:	IPA endpoint configuration data (see above)
  */
 struct ipa_gsi_endpoint_data {
 	u8 ee_id;		/* enum gsi_ee_id */
@@ -192,21 +191,6 @@ struct ipa_gsi_endpoint_data {
 
 	struct gsi_channel_data channel;
 	struct ipa_endpoint_data endpoint;
-};
-
-/** enum ipa_resource_type_src - source resource types */
-enum ipa_resource_type_src {
-	IPA_RESOURCE_TYPE_SRC_PKT_CONTEXTS,
-	IPA_RESOURCE_TYPE_SRC_DESCRIPTOR_LISTS,
-	IPA_RESOURCE_TYPE_SRC_DESCRIPTOR_BUFF,
-	IPA_RESOURCE_TYPE_SRC_HPS_DMARS,
-	IPA_RESOURCE_TYPE_SRC_ACK_ENTRIES,
-};
-
-/** enum ipa_resource_type_dst - destination resource types */
-enum ipa_resource_type_dst {
-	IPA_RESOURCE_TYPE_DST_DATA_SECTORS,
-	IPA_RESOURCE_TYPE_DST_DPS_DMARS,
 };
 
 /**
@@ -220,27 +204,17 @@ struct ipa_resource_limits {
 };
 
 /**
- * struct ipa_resource_src - source endpoint group resource usage
- * @type:	source group resource type
- * @limits:	array of limits to use for each resource group
+ * struct ipa_resource - resource group source or destination resource usage
+ * @limits:	array of resource limits, indexed by group
  */
-struct ipa_resource_src {
-	enum ipa_resource_type_src type;
-	struct ipa_resource_limits limits[IPA_RESOURCE_GROUP_SRC_MAX];
-};
-
-/**
- * struct ipa_resource_dst - destination endpoint group resource usage
- * @type:	destination group resource type
- * @limits:	array of limits to use for each resource group
- */
-struct ipa_resource_dst {
-	enum ipa_resource_type_dst type;
-	struct ipa_resource_limits limits[IPA_RESOURCE_GROUP_DST_MAX];
+struct ipa_resource {
+	struct ipa_resource_limits limits[IPA_RESOURCE_GROUP_MAX];
 };
 
 /**
  * struct ipa_resource_data - IPA resource configuration data
+ * @rsrc_group_src_count: number of source resource groups supported
+ * @rsrc_group_dst_count: number of destination resource groups supported
  * @resource_src_count:	number of entries in the resource_src array
  * @resource_src:	source endpoint group resources
  * @resource_dst_count:	number of entries in the resource_dst array
@@ -252,10 +226,12 @@ struct ipa_resource_dst {
  * programming it at initialization time, so we specify it here.
  */
 struct ipa_resource_data {
+	u32 rsrc_group_src_count;
+	u32 rsrc_group_dst_count;
 	u32 resource_src_count;
-	const struct ipa_resource_src *resource_src;
+	const struct ipa_resource *resource_src;
 	u32 resource_dst_count;
-	const struct ipa_resource_dst *resource_dst;
+	const struct ipa_resource *resource_dst;
 };
 
 /**
@@ -303,6 +279,7 @@ struct ipa_clock_data {
 /**
  * struct ipa_data - combined IPA/GSI configuration data
  * @version:		IPA hardware version
+ * @backward_compat:	BCR register value (prior to IPA v4.5 only)
  * @qsb_count:		number of entries in the qsb_data array
  * @qsb_data:		Qualcomm System Bus configuration data
  * @endpoint_count:	number of entries in the endpoint_data array
@@ -313,6 +290,7 @@ struct ipa_clock_data {
  */
 struct ipa_data {
 	enum ipa_version version;
+	u32 backward_compat;
 	u32 qsb_count;		/* number of entries in qsb_data[] */
 	const struct ipa_qsb_data *qsb_data;
 	u32 endpoint_count;	/* number of entries in endpoint_data[] */
@@ -322,7 +300,7 @@ struct ipa_data {
 	const struct ipa_clock_data *clock_data;
 };
 
-extern const struct ipa_data ipa_data_sdm845;
-extern const struct ipa_data ipa_data_sc7180;
+extern const struct ipa_data ipa_data_v3_5_1;
+extern const struct ipa_data ipa_data_v4_2;
 
 #endif /* _IPA_DATA_H_ */

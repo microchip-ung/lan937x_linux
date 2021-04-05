@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
-/* Copyright (C) 2019-2020 Linaro Ltd. */
+/* Copyright (C) 2019-2021 Linaro Ltd. */
 
 #include <linux/log2.h>
 
@@ -9,7 +9,32 @@
 #include "ipa_endpoint.h"
 #include "ipa_mem.h"
 
-/* QSB configuration for the SC7180 SoC. */
+/** enum ipa_resource_type - IPA resource types for an SoC having IPA v4.2 */
+enum ipa_resource_type {
+	/* Source resource types; first must have value 0 */
+	IPA_RESOURCE_TYPE_SRC_PKT_CONTEXTS		= 0,
+	IPA_RESOURCE_TYPE_SRC_DESCRIPTOR_LISTS,
+	IPA_RESOURCE_TYPE_SRC_DESCRIPTOR_BUFF,
+	IPA_RESOURCE_TYPE_SRC_HPS_DMARS,
+	IPA_RESOURCE_TYPE_SRC_ACK_ENTRIES,
+
+	/* Destination resource types; first must have value 0 */
+	IPA_RESOURCE_TYPE_DST_DATA_SECTORS		= 0,
+	IPA_RESOURCE_TYPE_DST_DPS_DMARS,
+};
+
+/* Resource groups used for an SoC having IPA v4.2 */
+enum ipa_rsrc_group_id {
+	/* Source resource group identifiers */
+	IPA_RSRC_GROUP_SRC_UL_DL	= 0,
+	IPA_RSRC_GROUP_SRC_COUNT,	/* Last in set; not a source group */
+
+	/* Destination resource group identifiers */
+	IPA_RSRC_GROUP_DST_UL_DL_DPL	= 0,
+	IPA_RSRC_GROUP_DST_COUNT,	/* Last; not a destination group */
+};
+
+/* QSB configuration data for an SoC having IPA v4.2 */
 static const struct ipa_qsb_data ipa_qsb_data[] = {
 	[IPA_QSB_MASTER_DDR] = {
 		.max_writes	= 8,
@@ -18,7 +43,7 @@ static const struct ipa_qsb_data ipa_qsb_data[] = {
 	},
 };
 
-/* Endpoint configuration for the SC7180 SoC. */
+/* Endpoint configuration data for an SoC having IPA v4.2 */
 static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 	[IPA_ENDPOINT_AP_COMMAND_TX] = {
 		.ee_id		= GSI_EE_AP,
@@ -32,7 +57,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 		},
 		.endpoint = {
 			.config = {
-				.resource_group	= 0,
+				.resource_group	= IPA_RSRC_GROUP_SRC_UL_DL,
 				.dma_mode	= true,
 				.dma_endpoint	= IPA_ENDPOINT_AP_LAN_RX,
 				.tx = {
@@ -53,7 +78,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 		},
 		.endpoint = {
 			.config = {
-				.resource_group	= 0,
+				.resource_group	= IPA_RSRC_GROUP_DST_UL_DL_DPL,
 				.aggregation	= true,
 				.status_enable	= true,
 				.rx = {
@@ -75,7 +100,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 		.endpoint = {
 			.filter_support	= true,
 			.config = {
-				.resource_group	= 0,
+				.resource_group	= IPA_RSRC_GROUP_SRC_UL_DL,
 				.checksum	= true,
 				.qmap		= true,
 				.status_enable	= true,
@@ -100,7 +125,7 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 		},
 		.endpoint = {
 			.config = {
-				.resource_group	= 0,
+				.resource_group	= IPA_RSRC_GROUP_DST_UL_DL_DPL,
 				.checksum	= true,
 				.qmap		= true,
 				.aggregation	= true,
@@ -139,73 +164,60 @@ static const struct ipa_gsi_endpoint_data ipa_gsi_endpoint_data[] = {
 	},
 };
 
-/* For the SC7180, resource groups are allocated this way:
- *   group 0:	UL_DL
- */
-static const struct ipa_resource_src ipa_resource_src[] = {
-	{
-		.type = IPA_RESOURCE_TYPE_SRC_PKT_CONTEXTS,
-		.limits[0] = {
-			.min = 3,
-			.max = 63,
+/* Source resource configuration data for an SoC having IPA v4.2 */
+static const struct ipa_resource ipa_resource_src[] = {
+	[IPA_RESOURCE_TYPE_SRC_PKT_CONTEXTS] = {
+		.limits[IPA_RSRC_GROUP_SRC_UL_DL] = {
+			.min = 3,	.max = 63,
 		},
 	},
-	{
-		.type = IPA_RESOURCE_TYPE_SRC_DESCRIPTOR_LISTS,
-		.limits[0] = {
-			.min = 3,
-			.max = 3,
+	[IPA_RESOURCE_TYPE_SRC_DESCRIPTOR_LISTS] = {
+		.limits[IPA_RSRC_GROUP_SRC_UL_DL] = {
+			.min = 3,	.max = 3,
 		},
 	},
-	{
-		.type = IPA_RESOURCE_TYPE_SRC_DESCRIPTOR_BUFF,
-		.limits[0] = {
-			.min = 10,
-			.max = 10,
+	[IPA_RESOURCE_TYPE_SRC_DESCRIPTOR_BUFF] = {
+		.limits[IPA_RSRC_GROUP_SRC_UL_DL] = {
+			.min = 10,	.max = 10,
 		},
 	},
-	{
-		.type = IPA_RESOURCE_TYPE_SRC_HPS_DMARS,
-		.limits[0] = {
-			.min = 1,
-			.max = 1,
+	[IPA_RESOURCE_TYPE_SRC_HPS_DMARS] = {
+		.limits[IPA_RSRC_GROUP_SRC_UL_DL] = {
+			.min = 1,	.max = 1,
 		},
 	},
-	{
-		.type = IPA_RESOURCE_TYPE_SRC_ACK_ENTRIES,
-		.limits[0] = {
-			.min = 5,
-			.max = 5,
+	[IPA_RESOURCE_TYPE_SRC_ACK_ENTRIES] = {
+		.limits[IPA_RSRC_GROUP_SRC_UL_DL] = {
+			.min = 5,	.max = 5,
 		},
 	},
 };
 
-static const struct ipa_resource_dst ipa_resource_dst[] = {
-	{
-		.type = IPA_RESOURCE_TYPE_DST_DATA_SECTORS,
-		.limits[0] = {
-			.min = 3,
-			.max = 3,
+/* Destination resource configuration data for an SoC having IPA v4.2 */
+static const struct ipa_resource ipa_resource_dst[] = {
+	[IPA_RESOURCE_TYPE_DST_DATA_SECTORS] = {
+		.limits[IPA_RSRC_GROUP_DST_UL_DL_DPL] = {
+			.min = 3,	.max = 3,
 		},
 	},
-	{
-		.type = IPA_RESOURCE_TYPE_DST_DPS_DMARS,
-		.limits[0] = {
-			.min = 1,
-			.max = 63,
+	[IPA_RESOURCE_TYPE_DST_DPS_DMARS] = {
+		.limits[IPA_RSRC_GROUP_DST_UL_DL_DPL] = {
+			.min = 1,	.max = 63,
 		},
 	},
 };
 
-/* Resource configuration for the SC7180 SoC. */
+/* Resource configuration data for an SoC having IPA v4.2 */
 static const struct ipa_resource_data ipa_resource_data = {
+	.rsrc_group_src_count	= IPA_RSRC_GROUP_SRC_COUNT,
+	.rsrc_group_dst_count	= IPA_RSRC_GROUP_DST_COUNT,
 	.resource_src_count	= ARRAY_SIZE(ipa_resource_src),
 	.resource_src		= ipa_resource_src,
 	.resource_dst_count	= ARRAY_SIZE(ipa_resource_dst),
 	.resource_dst		= ipa_resource_dst,
 };
 
-/* IPA-resident memory region configuration for the SC7180 SoC. */
+/* IPA-resident memory region data for an SoC having IPA v4.2 */
 static const struct ipa_mem ipa_mem_local_data[] = {
 	[IPA_MEM_UC_SHARED] = {
 		.offset		= 0x0000,
@@ -299,6 +311,7 @@ static const struct ipa_mem ipa_mem_local_data[] = {
 	},
 };
 
+/* Memory configuration data for an SoC having IPA v4.2 */
 static const struct ipa_mem_data ipa_mem_data = {
 	.local_count	= ARRAY_SIZE(ipa_mem_local_data),
 	.local		= ipa_mem_local_data,
@@ -308,7 +321,7 @@ static const struct ipa_mem_data ipa_mem_data = {
 	.smem_size	= 0x00002000,
 };
 
-/* Interconnect bandwidths are in 1000 byte/second units */
+/* Interconnect rates are in 1000 byte/second units */
 static const struct ipa_interconnect_data ipa_interconnect_data[] = {
 	{
 		.name			= "memory",
@@ -328,15 +341,17 @@ static const struct ipa_interconnect_data ipa_interconnect_data[] = {
 	},
 };
 
+/* Clock and interconnect configuration data for an SoC having IPA v4.2 */
 static const struct ipa_clock_data ipa_clock_data = {
 	.core_clock_rate	= 100 * 1000 * 1000,	/* Hz */
 	.interconnect_count	= ARRAY_SIZE(ipa_interconnect_data),
 	.interconnect_data	= ipa_interconnect_data,
 };
 
-/* Configuration data for the SC7180 SoC. */
-const struct ipa_data ipa_data_sc7180 = {
+/* Configuration data for an SoC having IPA v4.2 */
+const struct ipa_data ipa_data_v4_2 = {
 	.version	= IPA_VERSION_4_2,
+	/* backward_compat value is 0 */
 	.qsb_count	= ARRAY_SIZE(ipa_qsb_data),
 	.qsb_data	= ipa_qsb_data,
 	.endpoint_count	= ARRAY_SIZE(ipa_gsi_endpoint_data),

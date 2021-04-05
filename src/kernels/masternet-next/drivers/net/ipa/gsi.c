@@ -701,7 +701,7 @@ static void gsi_evt_ring_program(struct gsi *gsi, u32 evt_ring_id)
 	val |= u32_encode_bits(GSI_RING_ELEMENT_SIZE, EV_ELEMENT_SIZE_FMASK);
 	iowrite32(val, gsi->virt + GSI_EV_CH_E_CNTXT_0_OFFSET(evt_ring_id));
 
-	val = u32_encode_bits(size, EV_R_LENGTH_FMASK);
+	val = ev_r_length_encoded(gsi->version, size);
 	iowrite32(val, gsi->virt + GSI_EV_CH_E_CNTXT_1_OFFSET(evt_ring_id));
 
 	/* The context 2 and 3 registers store the low-order and
@@ -801,14 +801,14 @@ static void gsi_channel_program(struct gsi_channel *channel, bool doorbell)
 	channel->tre_ring.index = 0;
 
 	/* We program all channels as GPI type/protocol */
-	val = u32_encode_bits(GSI_CHANNEL_TYPE_GPI, CHTYPE_PROTOCOL_FMASK);
+	val = chtype_protocol_encoded(gsi->version, GSI_CHANNEL_TYPE_GPI);
 	if (channel->toward_ipa)
 		val |= CHTYPE_DIR_FMASK;
 	val |= u32_encode_bits(channel->evt_ring_id, ERINDEX_FMASK);
 	val |= u32_encode_bits(GSI_RING_ELEMENT_SIZE, ELEMENT_SIZE_FMASK);
 	iowrite32(val, gsi->virt + GSI_CH_C_CNTXT_0_OFFSET(channel_id));
 
-	val = u32_encode_bits(size, R_LENGTH_FMASK);
+	val = r_length_encoded(gsi->version, size);
 	iowrite32(val, gsi->virt + GSI_CH_C_CNTXT_1_OFFSET(channel_id));
 
 	/* The context 2 and 3 registers store the low-order and
@@ -842,6 +842,9 @@ static void gsi_channel_program(struct gsi_channel *channel, bool doorbell)
 			val |= u32_encode_bits(GSI_ESCAPE_BUF_ONLY,
 					       PREFETCH_MODE_FMASK);
 	}
+	/* All channels set DB_IN_BYTES */
+	if (gsi->version >= IPA_VERSION_4_9)
+		val |= DB_IN_BYTES;
 
 	iowrite32(val, gsi->virt + GSI_CH_C_QOS_OFFSET(channel_id));
 
@@ -1441,18 +1444,13 @@ static int gsi_ring_alloc(struct gsi *gsi, struct gsi_ring *ring, u32 count)
 	dma_addr_t addr;
 
 	/* Hardware requires a 2^n ring size, with alignment equal to size.
-	 * The size is a power of 2, so we can check alignment using just
-	 * the bottom 32 bits for a DMA address of any size.
+	 * The DMA address returned by dma_alloc_coherent() is guaranteed to
+	 * be a power-of-2 number of pages, which satisfies the requirement.
 	 */
 	ring->virt = dma_alloc_coherent(dev, size, &addr, GFP_KERNEL);
-	if (ring->virt && lower_32_bits(addr) % size) {
-		dma_free_coherent(dev, size, ring->virt, addr);
-		dev_err(dev, "unable to alloc 0x%x-aligned ring buffer\n",
-			size);
-		return -EINVAL;	/* Not a good error value, but distinct */
-	} else if (!ring->virt) {
+	if (!ring->virt)
 		return -ENOMEM;
-	}
+
 	ring->addr = addr;
 	ring->count = count;
 
