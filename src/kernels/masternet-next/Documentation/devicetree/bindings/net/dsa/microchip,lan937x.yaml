@@ -91,7 +91,7 @@ examples:
           port@4 {
             reg = <4>;
             phy-mode = "rgmii"
-            ethernet = <&ethernet>;
+            ethernet = <&eth1>;
             fixed-link {
               speed = <1000>;
               full-duplex;
@@ -134,10 +134,10 @@ examples:
           t1phy3: ethernet-phy@3{
             reg = <0x3>;
           };
-          t1phy4: ethernet-phy@4{
+          t1phy4: ethernet-phy@6{
             reg = <0x6>;
           };
-          t1phy5: ethernet-phy@5{
+          t1phy5: ethernet-phy@7{
             reg = <0x7>;
           };
 				};

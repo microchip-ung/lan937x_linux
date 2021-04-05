@@ -99,7 +99,7 @@ config NET_DSA_TAG_KSZ
 	tristate "Tag driver for Microchip 8795/937X/9477/9893 families of switches"
 	help
 	  Say Y if you want to enable support for tagging frames for the
-	  Microchip 8795/9477/9893 families of switches.
+	  Microchip 8795/937X/9477/9893 families of switches.
 
 config NET_DSA_TAG_RTL4_A
 	tristate "Tag driver for Realtek 4 byte protocol A tags"
