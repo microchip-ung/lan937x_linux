@@ -7,7 +7,7 @@
 FILE=/etc/network/interfaces
 
 update_interfaces() {
-    [ -x /sbin/fw_printenv ] || exit 1
+    [ -x /usr/sbin/fw_printenv ] || exit 1
 
     [ -d /sys/class/net/eth0 ] || exit 1
 
