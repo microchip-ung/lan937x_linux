@@ -396,24 +396,24 @@ int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct ifreq *ifr)
 {
 	struct ksz_device *dev	= ds->priv;
 	struct hwtstamp_config config;
-	unsigned long bytes_copied;
-	int err;
+	int ret;
 
 	mutex_lock(&dev->ptp_mutex);
 
-	if (copy_from_user(&config, ifr->ifr_data, sizeof(config)))
-		return -EFAULT;
+	ret = copy_from_user(&config, ifr->ifr_data, sizeof(config));
+        if (ret)
+                goto error_return;
 
-	err = lan937x_set_hwtstamp_config(dev, port, &config);
-	if (err)
-		return err;
+	ret = lan937x_set_hwtstamp_config(dev, port, &config);
+	if (ret)
+                goto error_return;
 
 	/* Save the chosen configuration to be returned later. */
-	bytes_copied = copy_to_user(ifr->ifr_data, &config, sizeof(config));
+	ret = copy_to_user(ifr->ifr_data, &config, sizeof(config));
 
+ error_return:
 	mutex_unlock(&dev->ptp_mutex);
-
-	return bytes_copied ?  -EFAULT : 0;
+        return ret;
 }
 
 bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
