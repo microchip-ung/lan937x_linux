@@ -964,7 +964,7 @@ static bool bond_should_notify_peers(struct bonding *bond)
 }
 
 /**
- * change_active_interface - change the active slave into the specified one
+ * bond_change_active_slave - change the active slave into the specified one
  * @bond: our bonding struct
  * @new_active: the new slave to make the active one
  *
@@ -3978,15 +3978,11 @@ static int bond_neigh_init(struct neighbour *n)
 
 	rcu_read_lock();
 	slave = bond_first_slave_rcu(bond);
-	if (!slave) {
-		ret = -EINVAL;
+	if (!slave)
 		goto out;
-	}
 	slave_ops = slave->dev->netdev_ops;
-	if (!slave_ops->ndo_neigh_setup) {
-		ret = -EINVAL;
+	if (!slave_ops->ndo_neigh_setup)
 		goto out;
-	}
 
 	/* TODO: find another way [1] to implement this.
 	 * Passing a zeroed structure is fragile,

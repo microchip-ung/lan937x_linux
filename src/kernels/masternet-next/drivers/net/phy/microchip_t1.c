@@ -30,13 +30,13 @@
 #define	PHYACC_ATTR_MODE_READ		0
 #define	PHYACC_ATTR_MODE_WRITE		1
 #define	PHYACC_ATTR_MODE_MODIFY		2
-#define PHYACC_ATTR_MODE_POLL 		3
+#define PHYACC_ATTR_MODE_POLL		3
 
 #define	PHYACC_ATTR_BANK_SMI		0
 #define	PHYACC_ATTR_BANK_MISC		1
 #define	PHYACC_ATTR_BANK_PCS		2
 #define	PHYACC_ATTR_BANK_AFE		3
-#define PHYACC_ATTR_BANK_DSP 		4
+#define PHYACC_ATTR_BANK_DSP		4
 #define	PHYACC_ATTR_BANK_MAX		7
 
 #define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
@@ -44,18 +44,18 @@
 
 #define REG_PORT_T1_PHY_BASIC_CTRL 0x00
 
-#define PORT_T1_PHY_RESET 	BIT(15)
-#define PORT_T1_PHY_LOOPBACK 	BIT(14)
-#define PORT_T1_SPEED_100MBIT 	BIT(13)
-#define PORT_T1_POWER_DOWN 	BIT(11)
-#define PORT_T1_ISOLATE 	BIT(10)
-#define PORT_T1_FULL_DUPLEX 	BIT(8)
+#define PORT_T1_PHY_RESET	BIT(15)
+#define PORT_T1_PHY_LOOPBACK	BIT(14)
+#define PORT_T1_SPEED_100MBIT	BIT(13)
+#define PORT_T1_POWER_DOWN	BIT(11)
+#define PORT_T1_ISOLATE	BIT(10)
+#define PORT_T1_FULL_DUPLEX	BIT(8)
 
 #define REG_PORT_T1_PHY_BASIC_STATUS 0x01
 
-#define PORT_T1_MII_SUPPRESS_CAPABLE 	BIT(6)
-#define PORT_T1_LINK_STATUS 		BIT(2)
-#define PORT_T1_EXTENDED_CAPABILITY 	BIT(0)
+#define PORT_T1_MII_SUPPRESS_CAPABLE	BIT(6)
+#define PORT_T1_LINK_STATUS		BIT(2)
+#define PORT_T1_EXTENDED_CAPABILITY	BIT(0)
 
 #define REG_PORT_T1_PHY_ID_HI 0x02
 #define REG_PORT_T1_PHY_ID_LO 0x03
@@ -65,14 +65,14 @@
 
 #define REG_PORT_T1_PHY_M_CTRL 0x09
 
-#define PORT_T1_MANUAL_CFG 	BIT(12)
-#define PORT_T1_M_CFG 		BIT(11)
+#define PORT_T1_MANUAL_CFG	BIT(12)
+#define PORT_T1_M_CFG		BIT(11)
 
 #define REG_PORT_T1_PHY_M_STATUS 0x0A
 
-#define REG_PORT_T1_MODE_STAT 			0x11
-#define T1_PORT_DSCR_LOCK_STATUS_MSK 		BIT(3)
-#define T1_PORT_LINK_UP_MSK 			BIT(0)
+#define REG_PORT_T1_MODE_STAT			0x11
+#define T1_PORT_DSCR_LOCK_STATUS_MSK		BIT(3)
+#define T1_PORT_LINK_UP_MSK			BIT(0)
 
 #define REG_PORT_T1_LOOPBACK_CTRL 0x12
 
@@ -82,17 +82,12 @@
 
 #define REG_PORT_T1_EXT_REG_CTRL 0x14
 
-#define T1_PCS_STS_CNT_RESET 		BIT(15)
-#define T1_IND_DATA_READ 		BIT(12)
-#define T1_IND_DATA_WRITE 		BIT(11)
-#define T1_REG_BANK_SEL_M 		0x7
-#define T1_REG_BANK_SEL_S 		8
-#define T1_REG_BANK_SEL_INST 	5
-#define T1_REG_BANK_SEL_DSP 	4
-#define T1_REG_BANK_SEL_AFE 	3
-#define T1_REG_BANK_SEL_PCS 	2
-#define T1_REG_BANK_SEL_MISC 	1
-#define T1_REG_ADDR_M 			0xFF
+#define T1_PCS_STS_CNT_RESET		BIT(15)
+#define T1_IND_DATA_READ		BIT(12)
+#define T1_IND_DATA_WRITE		BIT(11)
+#define T1_REG_BANK_SEL_M		0x7
+#define T1_REG_BANK_SEL_S		8
+#define T1_REG_ADDR_M			0xFF
 
 #define REG_PORT_T1_EXT_REG_RD_DATA 0x15
 #define REG_PORT_T1_EXT_REG_WR_DATA 0x16
@@ -100,8 +95,8 @@
 #define REG_PORT_T1_PHY_INT_STATUS 0x18
 #define REG_PORT_T1_PHY_INT_ENABLE 0x19
 
-#define T1_LINK_UP_INT 		BIT(2)
-#define T1_LINK_DOWN_INT 	BIT(1)
+#define T1_LINK_UP_INT		BIT(2)
+#define T1_LINK_DOWN_INT	BIT(1)
 
 #define REG_PORT_T1_POWER_DOWN_CTRL 0x1A
 
@@ -109,8 +104,13 @@
 
 #define REG_PORT_T1_PHY_M_STATUS 0x0A
 
-#define PORT_T1_LOCAL_RX_OK 	BIT(13)
-#define PORT_T1_REMOTE_RX_OK 	BIT(12)
+#define PORT_T1_LOCAL_RX_OK	BIT(13)
+#define PORT_T1_REMOTE_RX_OK	BIT(12)
+
+#define LAN87XX_PHY_ID		0x0007c150
+#define LAN937X_T1_PHY_ID	0x0007c181
+#define LAN87XX_PHY_ID_MASK 0xfffffff0
+#define LAN937X_PHY_ID_MASK 0xfffffff0
 
 struct access_ereg_val {
 	u8  mode;
@@ -153,27 +153,29 @@ static int access_ereg(struct phy_device *phydev, u8 mode, u8 bank,
 		ereg = LAN87XX_EXT_REG_CTL_RD_CTL;
 	}
 
-	/* Read previous selected bank */
-	rc = phy_read(phydev, LAN87XX_EXT_REG_CTL);
-
-	if (rc < 0)
-		return rc;
-
-	/* Store the prev_bank */
-	prev_bank = (rc >> T1_REG_BANK_SEL_S) & T1_REG_BANK_SEL_M;
-
-	/* if the bank is DSP need to write twice */
-	if (bank != prev_bank && bank == PHYACC_ATTR_BANK_DSP) {
-		u16 t = ereg & ~T1_REG_ADDR_M;
-
-		t &= ~LAN87XX_EXT_REG_CTL_WR_CTL;
-		t |= LAN87XX_EXT_REG_CTL_RD_CTL;
-
-		/* Need to write twice to access correct register. */
-		rc = phy_write(phydev, LAN87XX_EXT_REG_CTL, t);
+	if (phydev->phy_id == LAN937X_T1_PHY_ID) {
+		/* Read previous selected bank */
+		rc = phy_read(phydev, LAN87XX_EXT_REG_CTL);
 
 		if (rc < 0)
 			return rc;
+
+		/* Store the prev_bank */
+		prev_bank = (rc >> T1_REG_BANK_SEL_S) & T1_REG_BANK_SEL_M;
+
+		/* if the bank is DSP need to write twice */
+		if (bank != prev_bank && bank == PHYACC_ATTR_BANK_DSP) {
+			u16 t = ereg & ~T1_REG_ADDR_M;
+
+			t &= ~LAN87XX_EXT_REG_CTL_WR_CTL;
+			t |= LAN87XX_EXT_REG_CTL_RD_CTL;
+
+			/* Need to write twice to access correct register. */
+			rc = phy_write(phydev, LAN87XX_EXT_REG_CTL, t);
+
+			if (rc < 0)
+				return rc;
+		}
 	}
 
 	ereg |= (bank << 8) | offset;
@@ -221,99 +223,102 @@ static int access_ereg_clr_poll_timeout(struct phy_device *phydev, u8 bank,
 static int mchp_t1_phy_init(struct phy_device *phydev)
 {
 	static const struct access_ereg_val init[] = {
-		/* TXPD/TXAMP6 and HW_Init Hi and Force_ED*/
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_AFE, 0x0B, 0x002D,
+		/* TXPD/TXAMP6 Configs*/
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_AFE, 0x0B, 0x002D,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x18, 0x0D53,
+		/* HW_Init Hi and Force_ED */
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI, 0x1A, 0x0308,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x05, 0x0AB2,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x18, 0x0D53,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x06, 0x0AB3,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x05, 0x0AB2,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x1A, 0x0AEA,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x06, 0x0AB3,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x1B, 0x0AEB,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x1A, 0x0AEA,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x1C, 0x0AEB,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x1B, 0x0AEB,
+		  0 },
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x1C, 0x0AEB,
 		  0 },
 		/* Pointer delay */
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x02, 0x1C00,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x02, 0x1C00,
 		  0 },
 		/* ---- tx iir edits ---- */
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1000,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1000,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1861,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1861,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1061,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1061,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1922,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1922,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1122,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1122,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1983,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1983,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1183,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1183,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1944,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1944,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1144,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1144,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x18c5,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x18c5,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x10c5,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x10c5,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1846,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1846,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1046,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1046,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1807,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1807,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1007,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1007,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1808,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1808,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1008,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1008,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1809,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1809,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1009,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1009,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x180A,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x180A,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x100A,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x100A,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x180B,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x180B,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x100B,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x100B,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x180C,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x180C,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x100C,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x100C,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x180D,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x180D,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x100D,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x100D,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x180E,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x180E,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x100E,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x100E,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x180F,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x180F,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x100F,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x100F,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1810,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1810,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1010,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1010,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1811,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1811,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1011,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1011,
 		  0 },
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x55, 0x1000,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x55, 0x1000,
 		  0 },
 		/* SQI enable */
-		{ PHYACC_ATTR_MODE_WRITE, T1_REG_BANK_SEL_DSP, 0x2E, 0x9572,
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP, 0x2E, 0x9572,
 		  0 },
 		/* Flag LPS and WUR as idle errors */
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI, 0x10, 0x0014,
@@ -327,27 +332,15 @@ static int mchp_t1_phy_init(struct phy_device *phydev)
 		  0 },
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_AFE, 0x0B, 0x000C,
 		  0 },
-		/*Read INTERRUPT_SOURCE Register*/
+		/* Read INTERRUPT_SOURCE Register */
 		{ PHYACC_ATTR_MODE_READ, PHYACC_ATTR_BANK_SMI, 0x18, 0, 0 },
-		/*Read INTERRUPT_SOURCE Register*/
+		/* Read INTERRUPT_SOURCE Register */
 		{ PHYACC_ATTR_MODE_READ, PHYACC_ATTR_BANK_MISC, 0x08, 0, 0 },
+		/* HW_Init Hi */
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI, 0x1A, 0x0300,
+		  0 },
 	};
 	int rc, i;
-
-	/* Power down the PHY */
-	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI,
-					REG_PORT_T1_PHY_BASIC_CTRL,
-					PORT_T1_POWER_DOWN, PORT_T1_POWER_DOWN);
-
-	if (rc < 0)
-		return rc;
-	/* Clear HW_INIT */
-	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI,
-					REG_PORT_T1_POWER_DOWN_CTRL, 0x0000,
-					T1_HW_INIT_SEQ_ENABLE);
-
-	if (rc < 0)
-		return rc;
 
 	/* Set Master Mode */
 	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI,
@@ -382,21 +375,6 @@ static int mchp_t1_phy_init(struct phy_device *phydev)
 		if (rc < 0)
 			return rc;
 	}
-	/* Set HW_INIT */
-	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI,
-					REG_PORT_T1_POWER_DOWN_CTRL,
-					T1_HW_INIT_SEQ_ENABLE,
-					T1_HW_INIT_SEQ_ENABLE);
-
-	if (rc < 0)
-		return rc;
-
-	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI,
-					REG_PORT_T1_PHY_BASIC_CTRL, 0x0000,
-					PORT_T1_POWER_DOWN);
-
-	if (rc < 0)
-		return rc;
 
 	return 0;
 }
@@ -472,15 +450,16 @@ static int lan937x_read_status(struct phy_device *phydev)
 
 	phydev->duplex = DUPLEX_FULL;
 	phydev->speed = SPEED_100;
-	phydev->pause = phydev->asym_pause = 0;
+	phydev->pause = 0;
+	phydev->asym_pause = 0;
 
 	return 0;
 }
 
 static struct phy_driver microchip_t1_phy_driver[] = {
-/*{
-	.phy_id         = 0x0007c150,
-	.phy_id_mask    = 0xfffffff0,
+{
+	.phy_id         = LAN87XX_PHY_ID,
+	.phy_id_mask    = LAN87XX_PHY_ID_MASK,
 	.name           = "LAN87xx T1",
 	.features       = PHY_BASIC_T1_FEATURES,
 	.config_init	= mchp_t1_phy_config_init,
@@ -488,24 +467,22 @@ static struct phy_driver microchip_t1_phy_driver[] = {
 	.handle_interrupt = lan87xx_handle_interrupt,
 	.suspend        = genphy_suspend,
 	.resume         = genphy_resume,
-}, */{
-	/*.phy_id 		= 0x0007c181,*/
-	.phy_id			= 0x0007c150,
-	.phy_id_mask 	= 0xfffffff0,
-	.name 			= "LAN937x T1",
-	.read_status 	= lan937x_read_status,
-	.features 		= PHY_BASIC_T1_FEATURES,
-	.config_init 	= mchp_t1_phy_config_init,
-	.suspend 		= genphy_suspend,
-	.resume 		= genphy_resume,
+}, {
+	.phy_id		= LAN937X_T1_PHY_ID,
+	.phy_id_mask	= LAN937X_PHY_ID_MASK,
+	.name			= "LAN937x T1",
+	.read_status	= lan937x_read_status,
+	.features		= PHY_BASIC_T1_FEATURES,
+	.config_init	= mchp_t1_phy_config_init,
+	.suspend		= genphy_suspend,
+	.resume		= genphy_resume,
 } };
 
 module_phy_driver(microchip_t1_phy_driver);
 
 static struct mdio_device_id __maybe_unused microchip_t1_tbl[] = {
-/*	{ 0x0007c150, 0xfffffff0 },*/
-/*	{ 0x0007c181, 0xfffffff0 },*/
-	{ 0x0007c150, 0xfffffff0 },
+	{ LAN87XX_PHY_ID, LAN87XX_PHY_ID_MASK },
+	{ LAN937X_T1_PHY_ID, LAN937X_PHY_ID_MASK },
 	{ }
 };
 

@@ -2014,7 +2014,7 @@ static bool tipc_node_check_state(struct tipc_node *n, struct sk_buff *skb,
 		return true;
 	}
 
-	/* No synching needed if only one link */
+	/* No syncing needed if only one link */
 	if (!pl || !tipc_link_is_up(pl))
 		return true;
 
@@ -2900,17 +2900,22 @@ int tipc_nl_node_dump_monitor_peer(struct sk_buff *skb,
 
 #ifdef CONFIG_TIPC_CRYPTO
 static int tipc_nl_retrieve_key(struct nlattr **attrs,
-				struct tipc_aead_key **key)
+				struct tipc_aead_key **pkey)
 {
 	struct nlattr *attr = attrs[TIPC_NLA_NODE_KEY];
+	struct tipc_aead_key *key;
 
 	if (!attr)
 		return -ENODATA;
 
-	*key = (struct tipc_aead_key *)nla_data(attr);
-	if (nla_len(attr) < tipc_aead_key_size(*key))
+	if (nla_len(attr) < sizeof(*key))
+		return -EINVAL;
+	key = (struct tipc_aead_key *)nla_data(attr);
+	if (key->keylen > TIPC_AEAD_KEYLEN_MAX ||
+	    nla_len(attr) < tipc_aead_key_size(key))
 		return -EINVAL;
 
+	*pkey = key;
 	return 0;
 }
 

@@ -42,8 +42,8 @@ examples:
   - |
     #include <dt-bindings/gpio/gpio.h>
 
-    //Ethernet switch connected via spi to the host, CPU port wired to eth1
-    &eth1 {
+    //Ethernet switch connected via spi to the host
+    ethernet {
       #address-cells = <1>;
       #size-cells = <0>;
 
@@ -76,21 +76,21 @@ examples:
           port@1 {
             reg = <1>;
             label = "lan2";
-            phy-handle = <&t1phy1>
+            phy-handle = <&t1phy1>;
           };
           port@2 {
             reg = <2>;
             label = "lan4";
-            phy-handle = <&t1phy2>
+            phy-handle = <&t1phy2>;
           };
           port@3 {
             reg = <3>;
             label = "lan6";
-            phy-handle = <&t1phy3>
+            phy-handle = <&t1phy3>;
           };
           port@4 {
             reg = <4>;
-            phy-mode = "rgmii"
+            phy-mode = "rgmii";
             ethernet = <&ethernet>;
             fixed-link {
               speed = <1000>;
@@ -108,12 +108,12 @@ examples:
           port@6 {
             reg = <6>;
             label = "lan5";
-            phy-handle = <&t1phy4>
+            phy-handle = <&t1phy4>;
           };
           port@7 {
             reg = <7>;
             label = "lan3";
-            phy-handle = <&t1phy5>
+            phy-handle = <&t1phy5>;
           };
         };
 
@@ -134,12 +134,12 @@ examples:
           t1phy3: ethernet-phy@3{
             reg = <0x3>;
           };
-          t1phy4: ethernet-phy@4{
+          t1phy4: ethernet-phy@6{
             reg = <0x6>;
           };
-          t1phy5: ethernet-phy@5{
+          t1phy5: ethernet-phy@7{
             reg = <0x7>;
           };
-				};
+        };
       };
     };

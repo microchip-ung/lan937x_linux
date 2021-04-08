@@ -4,6 +4,7 @@
 #ifndef _IONIC_DEV_H_
 #define _IONIC_DEV_H_
 
+#include <linux/atomic.h>
 #include <linux/mutex.h>
 #include <linux/workqueue.h>
 
@@ -58,6 +59,7 @@ static_assert(sizeof(struct ionic_dev_getattr_cmd) == 64);
 static_assert(sizeof(struct ionic_dev_getattr_comp) == 16);
 static_assert(sizeof(struct ionic_dev_setattr_cmd) == 64);
 static_assert(sizeof(struct ionic_dev_setattr_comp) == 16);
+static_assert(sizeof(struct ionic_lif_setphc_cmd) == 64);
 
 /* Port commands */
 static_assert(sizeof(struct ionic_port_identify_cmd) == 64);
@@ -134,10 +136,13 @@ struct ionic_devinfo {
 struct ionic_dev {
 	union ionic_dev_info_regs __iomem *dev_info_regs;
 	union ionic_dev_cmd_regs __iomem *dev_cmd_regs;
+	struct ionic_hwstamp_regs __iomem *hwstamp_regs;
 
+	atomic_long_t last_check_time;
 	unsigned long last_hb_time;
-	u32 last_hb;
-	u8 last_fw_status;
+	u32 last_fw_hb;
+	bool fw_hb_ready;
+	bool fw_status_ready;
 
 	u64 __iomem *db_pages;
 	dma_addr_t phy_db_pages;
@@ -215,6 +220,7 @@ struct ionic_queue {
 	unsigned int index;
 	unsigned int num_descs;
 	unsigned int max_sg_elems;
+	u64 features;
 	u64 dbell_count;
 	u64 stop;
 	u64 wake;

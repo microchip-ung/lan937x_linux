@@ -10,18 +10,21 @@ rm -f ${BINARIES_DIR}/at91-sama5d3_xplained.dtb
 cp -p ${BINARIES_DIR}/$DTB.dtb ${BINARIES_DIR}/at91-sama5d3_xplained.dtb
 
 #!/usr/bin/env bash
-
-#video mode is hard coded video=LVDS-1:800x480-16
-#board name is hard coded
-#apt-get install tcl-vfs
-#and make sure tcl is installed; need both tcl and tcl-vfs
-#ubootEnvtFileNandFlash.bin will be generated where this script is invoked
-
-
+#This script will invoke ./board/atmel/linux/ubootenvGen.sh
+#ubootEnvtFileNandFlash.bin will be generated in output/images directory
 #cd buildroot_home
+
+#For 64 bit - To Program all binaries after image generation enable following line.
+#./board/atmel/linux/flasher_x64.sh ./output/ /dev/ttyACM0 sama5d3_xplained
+
+#For 32 bit
+#./board/atmel/linux/flasher.sh ./output/ /dev/ttyACM0 sama5d3_xplained
+
 export O=output/images/
-tclsh board/atmel/ubootEnvBinGenerate_wsl.tcl - - - sama5d3_xplained at91-sama5d3_xplained.dtb video=LVDS-1:800x480-16
-mv -f ubootEnvtFileNandFlash.bin output/images/ubootEnvtFileNandFlash.bin
+
+####### Not Recommended to enable following lines and test#########
+#tclsh board/atmel/ubootEnvBinGenerate_wsl.tcl - - - sama5d3_xplained at91-sama5d3_xplained.dtb video=LVDS-1:800x480-16
+#mv -f ubootEnvtFileNandFlash.bin output/images/ubootEnvtFileNandFlash.bin
 #Expected output in WSL
 #-I- === Parsing script arguments ===
 #argument 1 is -

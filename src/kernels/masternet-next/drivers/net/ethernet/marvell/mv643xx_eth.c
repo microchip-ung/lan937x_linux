@@ -700,7 +700,8 @@ static int skb_tx_csum(struct mv643xx_eth_private *mp, struct sk_buff *skb,
 			   ip_hdr(skb)->ihl << TX_IHL_SHIFT;
 
 		/* TODO: Revisit this. With the usage of GEN_TCP_UDP_CHK_FULL
-		 * it seems we don't need to pass the initial checksum. */
+		 * it seems we don't need to pass the initial checksum.
+		 */
 		switch (ip_hdr(skb)->protocol) {
 		case IPPROTO_UDP:
 			cmd |= UDP_FRAME;
@@ -790,7 +791,8 @@ txq_put_hdr_tso(struct sk_buff *skb, struct tx_queue *txq, int length,
 		WARN(1, "failed to prepare checksum!");
 
 	/* Should we set this? Can't use the value from skb_tx_csum()
-	 * as it's not the correct initial L4 checksum to use. */
+	 * as it's not the correct initial L4 checksum to use.
+	 */
 	desc->l4i_chk = 0;
 
 	desc->byte_cnt = hdr_len;
@@ -2684,7 +2686,7 @@ static const struct of_device_id mv643xx_eth_shared_ids[] = {
 MODULE_DEVICE_TABLE(of, mv643xx_eth_shared_ids);
 #endif
 
-#if defined(CONFIG_OF_IRQ) && !defined(CONFIG_MV64X60)
+#ifdef CONFIG_OF_IRQ
 #define mv643xx_eth_property(_np, _name, _v)				\
 	do {								\
 		u32 tmp;						\
