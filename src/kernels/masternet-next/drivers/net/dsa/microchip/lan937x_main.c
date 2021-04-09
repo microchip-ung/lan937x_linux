@@ -1035,6 +1035,10 @@ static int lan937x_setup(struct dsa_switch *ds)
 	/* enable global MIB counter freeze function */
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FREEZE, true);
 
+	/* disable CLK125 & CLK25, 1: disable, 0: enable*/
+	lan937x_cfg(dev, REG_SW_GLOBAL_OUTPUT_CTRL__1, (SW_CLK125_ENB |
+						SW_CLK25_ENB), true);
+
 	lan937x_enable_spi_indirect_access(dev);
 
 	/* start switch */

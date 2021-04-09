@@ -31,6 +31,16 @@ get_timestamp() {
 }
 
 update_time() {
+
+	#mount -t debugfs debugfs /sys/kernel/debug
+	#echo "name == 'spi0.0'" > /sys/kernel/debug/tracing/events/regmap/regmap_reg_read/filter 
+	#echo 1 > /sys/kernel/debug/tracing/events/regmap/regmap_reg_read/enable 
+	#echo "name == 'spi0.0'" > /sys/kernel/debug/tracing/events/regmap/regmap_reg_write/filter 
+	#echo 1 > /sys/kernel/debug/tracing/events/regmap/regmap_reg_write/enable 
+	#echo 1 > /sys/kernel/debug/tracing/events/regmap/enable
+	#echo 1 > /sys/kernel/debug/tracing/tracing_on
+	#cat /sys/kernel/debug/tracing/trace
+
 	DEV=$(echo $1 | cut -c-4)
 	if [ $DEV = "/dev" ]; then
 		DATE=$(dumpe2fs -h $1 2> /dev/null | grep "Last write" | cut -c27- | /etc/conv_date)
