@@ -67,7 +67,7 @@ static int lan937x_setup_tc_cbs(struct dsa_switch *ds, int port,
 		return -EINVAL;
 
 	ret = lan937x_pwrite32(dev, port, REG_PORT_MTI_QUEUE_INDEX__4,
-			 qopt->queue);
+			       qopt->queue);
 	if(ret)
 		return ret;
 
@@ -80,31 +80,31 @@ static int lan937x_setup_tc_cbs(struct dsa_switch *ds, int port,
 	bw = cinc_cal(qopt->idleslope, qopt->sendslope);
 
 	ret = lan937x_pwrite8(dev, port, REG_PORT_MTI_QUEUE_CTRL_0,
-			LAN937X_CBS_ENABLE);
+			      LAN937X_CBS_ENABLE);
 	if(ret)
 		return ret;
 
 
 	ret = lan937x_pwrite16(dev, port, REG_PORT_MTI_HI_WATER_MARK,
-			 qopt->hicredit); //high credit
+			       qopt->hicredit); //high credit
 	if(ret)
 		return ret;
 
 
 	ret = lan937x_pwrite16(dev, port, REG_PORT_MTI_LO_WATER_MARK,
-			 qopt->locredit); //low credit
+			       qopt->locredit); //low credit
 	if(ret)
 		return ret;
 
 
 	ret = lan937x_pwrite16(dev, port, REG_PORT_MTI_CREDIT_INCREMENT,
-			 ((bw & 0x00ffff00) >> 8)); //credit incr
+			       ((bw & 0x00ffff00) >> 8)); //credit incr
 	if(ret)
 		return ret;
 
 
 	ret = lan937x_pwrite8(dev, port, (REG_PORT_MTI_CREDIT_INCREMENT + 2),
-			(bw & 0x000000ff)); //credit incr
+			      (bw & 0x000000ff)); //credit incr
 
 	return ret;
 }

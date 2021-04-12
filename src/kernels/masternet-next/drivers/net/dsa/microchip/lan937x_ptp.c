@@ -160,11 +160,13 @@ static int lan937x_ptp_enable_pps(struct ksz_device *dev, int on)
 	u32 data;
 	int ret;
 
-	if (dev->ptp_tou_mode != KSZ_PTP_TOU_PPS && dev->ptp_tou_mode != KSZ_PTP_TOU_IDLE)
+	if (dev->ptp_tou_mode != KSZ_PTP_TOU_PPS && 
+	    dev->ptp_tou_mode != KSZ_PTP_TOU_IDLE)
 		return -EBUSY;
 
 	//get the pps led no, numbering is -1 from dts tree
-	if (of_property_read_u32(dev->dev->of_node, "pps_led_index", &pps_led_index)) {
+	if (of_property_read_u32(dev->dev->of_node, "pps_led_index",
+	    &pps_led_index)) {
 		dev_err(dev->dev, "pps_led_index not defined in dts tree");
 		return -EINVAL;
 	}
@@ -661,7 +663,8 @@ static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 	}
 
 	spin_lock_bh(&ptp_shared->ptp_clock_lock);
-	ptp_shared->ptp_clock_time = timespec64_add(ptp_shared->ptp_clock_time, delta64);
+	ptp_shared->ptp_clock_time = timespec64_add(ptp_shared->ptp_clock_time,
+		        			    delta64);
 	spin_unlock_bh(&ptp_shared->ptp_clock_lock);
 
 error_return:
