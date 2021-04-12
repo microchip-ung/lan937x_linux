@@ -575,11 +575,14 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 	if (ret)
 		return result;
 
-	if(data & 0x2000000)
+	if(data & POR_READY_INT)
 	{
-		ksz_write32(dev, REG_SW_INT_STATUS__4, 0x2000000);
+		ret = ksz_write32(dev, REG_SW_INT_STATUS__4, POR_READY_INT);
+		if (ret)
+			return result;
 	}
 
+	/*Read the Port Interrupt status register */
 	ret = ksz_read32(dev, REG_SW_PORT_INT_STATUS__4, &data);
 	if (ret)
 		return result;
@@ -599,7 +602,7 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 
 			if (data8 & PORT_PTP_INT)
 			{
-				if(lan937x_ptp_port_interrupt(dev, (port )) != IRQ_NONE)
+				if(lan937x_ptp_port_interrupt(dev, port) != IRQ_NONE)
 					result = IRQ_HANDLED;
 			}
 		}
