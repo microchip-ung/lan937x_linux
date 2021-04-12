@@ -611,35 +611,23 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 	return result;
 }
 
-static int lan937x_enable_port_interrupts(struct ksz_device *dev)
+static int lan937x_enable_port_interrupts(struct ksz_device *dev, bool enable)
 {
-	u32 data;
+	u32 data, mask;
 	int ret;
 
 	ret = ksz_read32(dev, REG_SW_PORT_INT_MASK__4, &data);
 	if (ret)
 		return ret;
 
-	/* Enable port interrupts (0 means enabled) */
-	data &= ~((1 << dev->port_cnt) - 1);
-	ret = ksz_write32(dev, REG_SW_PORT_INT_MASK__4, data);
-	if (ret)
-		return ret;
+	/* 0 means enabling the interrupts */
+	mask = ((1 << dev->port_cnt) - 1);
 
-	return 0;
-}
+	if(enable)
+		data &= ~mask;
+	else
+		data |= mask;
 
-static int lan937x_disable_port_interrupts(struct ksz_device *dev)
-{
-	u32 data;
-	int ret;
-
-	ret = ksz_read32(dev, REG_SW_PORT_INT_MASK__4, &data);
-	if (ret)
-		return ret;
-
-	/* Disable port interrupts (1 means disabled) */
-	data |= ((1 << dev->port_cnt) - 1);
 	ret = ksz_write32(dev, REG_SW_PORT_INT_MASK__4, data);
 	if (ret)
 		return ret;
@@ -749,7 +737,7 @@ static int lan937x_switch_init(struct ksz_device *dev)
 			return ret;
 		}
 
-		ret = lan937x_enable_port_interrupts(dev);
+		ret = lan937x_enable_port_interrupts(dev, true);
 		if (ret)
 			return ret;
 	}
@@ -760,7 +748,7 @@ static int lan937x_switch_init(struct ksz_device *dev)
 static void lan937x_switch_exit(struct ksz_device *dev)
 {
 	if (dev->irq > 0)
-		lan937x_disable_port_interrupts(dev);
+		lan937x_enable_port_interrupts(dev, false);
 	lan937x_reset_switch(dev);
 }
 
