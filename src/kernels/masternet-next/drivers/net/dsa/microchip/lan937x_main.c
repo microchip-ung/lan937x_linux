@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Microchip LAN937X switch driver main logic
- * Copyright (C) 2019-2020 Microchip Technology Inc.
+ * Copyright (C) 2019-2021 Microchip Technology Inc.
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -493,8 +493,12 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 			dev_err(dev->dev, "Failed to write ALU\n");
 
 		/* ALU1 write failed and attempt to write ALU2, otherwise exit*/
-		if (val & WRITE_FAIL_INT)
-			val = WRITE_FAIL_INT;
+		if (val & WRITE_FAIL_INT) {
+			/* Write to clear the Write Fail */
+			rc = ksz_write8(dev, REG_SW_LUE_INT_STATUS__1, WRITE_FAIL_INT);
+			if (rc < 0)
+				goto exit;
+		}
 		else
 			goto exit;
 	}

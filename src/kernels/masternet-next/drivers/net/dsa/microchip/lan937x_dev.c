@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Microchip lan937x dev ops functions
- * Copyright (C) 2019-2020 Microchip Technology Inc.
+ * Copyright (C) 2019-2021 Microchip Technology Inc.
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -215,13 +215,11 @@ int lan937x_reset_switch(struct ksz_device *dev)
 
 	/* reset switch */
 	rc = lan937x_cfg(dev, REG_SW_OPERATION, SW_RESET, true);
-
 	if (rc < 0)
 		return rc;
 
 	/* default configuration */
 	rc = ksz_read8(dev, REG_SW_LUE_CTRL_1, &data8);
-
 	if (rc < 0)
 		return rc;
 
@@ -229,23 +227,19 @@ int lan937x_reset_switch(struct ksz_device *dev)
 	      SW_SRC_ADDR_FILTER;
 
 	rc = ksz_write8(dev, REG_SW_LUE_CTRL_1, data8);
-
 	if (rc < 0)
 		return rc;
 
 	/* disable interrupts */
 	rc = ksz_write32(dev, REG_SW_INT_MASK__4, SWITCH_INT_MASK);
-
 	if (rc < 0)
 		return rc;
 
 	rc = ksz_write32(dev, REG_SW_PORT_INT_MASK__4, 0xFF);
-
 	if (rc < 0)
 		return rc;
 
 	rc = ksz_read32(dev, REG_SW_PORT_INT_STATUS__4, &data32);
-
 	if (rc < 0)
 		return rc;
 
@@ -291,7 +285,6 @@ int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
 	int rc;
 
 	rc = ksz_read8(dev, REG_GLOBAL_CTRL_0, &data8);
-
 	if (rc < 0)
 		return rc;
 
@@ -299,14 +292,13 @@ int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
 	if (data8 & SW_PHY_REG_BLOCK) {
 		/* Enable Phy access through SPI*/
 		data8 &= ~SW_PHY_REG_BLOCK;
-		rc = ksz_write8(dev, REG_GLOBAL_CTRL_0, data8);
 
+		rc = ksz_write8(dev, REG_GLOBAL_CTRL_0, data8);
 		if (rc < 0)
 			return rc;
 	}
 
 	rc = ksz_read16(dev, REG_VPHY_SPECIAL_CTRL__2, &data16);
-
 	if (rc < 0)
 		return rc;
 
@@ -378,20 +370,17 @@ int lan937x_internal_phy_write(struct ksz_device *dev, int addr,
 	temp = PORT_CTRL_ADDR(addr, (addr_base + (reg << 2)));
 
 	rc = ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
-
 	if (rc < 0)
 		return rc;
 
 	/* Write the data to be written to the VPHY reg */
 	rc = ksz_write16(dev, REG_VPHY_IND_DATA__2, val);
-
 	if (rc < 0)
 		return rc;
 
 	/* Write the Write En and Busy bit */
 	rc = ksz_write16(dev, REG_VPHY_IND_CTRL__2, (VPHY_IND_WRITE
 				| VPHY_IND_BUSY));
-
 	if (rc < 0)
 		return rc;
 
@@ -428,13 +417,11 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr,
 	temp = PORT_CTRL_ADDR(addr, (addr_base + (reg << 2)));
 
 	rc = ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
-
 	if (rc < 0)
 		return rc;
 
 	/* Write Read and Busy bit to start the transaction*/
 	rc = ksz_write16(dev, REG_VPHY_IND_CTRL__2, VPHY_IND_BUSY);
-
 	if (rc < 0)
 		return rc;
 
@@ -556,7 +543,6 @@ static int lan937x_sw_mdio_read(struct mii_bus *bus, int addr, int regnum)
 	int rc;
 
 	rc = lan937x_internal_phy_read(dev, addr, regnum, &val);
-
 	if (rc < 0)
 		return rc;
 
@@ -652,7 +638,6 @@ static int lan937x_init(struct ksz_device *dev)
 	int rc;
 
 	rc = lan937x_switch_init(dev);
-
 	if (rc < 0) {
 		dev_err(dev->dev, "failed to initialize the switch");
 		return rc;
@@ -660,14 +645,12 @@ static int lan937x_init(struct ksz_device *dev)
 
 	/* enable Indirect Access from SPI to the VPHY registers */
 	rc = lan937x_enable_spi_indirect_access(dev);
-
 	if (rc < 0) {
 		dev_err(dev->dev, "failed to enable spi indirect access");
 		return rc;
 	}
 
 	rc = lan937x_mdio_register(dev->ds);
-
 	if (rc < 0) {
 		dev_err(dev->dev, "failed to register the mdio");
 		return rc;
