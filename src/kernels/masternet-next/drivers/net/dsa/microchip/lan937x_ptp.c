@@ -3,7 +3,10 @@
  * Copyright (C) 2019-2020 Microchip Technology Inc.
  */
 
+#include <linux/kernel.h>
+#include "ksz_common.h"
 #include "lan937x_reg.h"
+#include "lan937x_dev.h"
 #include "ksz_common.h"
 #include <linux/ptp_classify.h>
 #include <linux/ptp_clock_kernel.h>
@@ -35,42 +38,6 @@ static int _lan937x_ptp_gettime(struct ksz_device *dev, struct timespec64 *ts);
 
 #define LAN937x_PPS_TOU 2   /* currently fixed to trigger output unit 2 */
 
-static int ksz_reg_setbits(struct ksz_device *dev, u32 reg, u32 val)
-{
-	u32 data;
-	int ret;
-
-	ret = ksz_read32(dev, reg, &data);
-	if (ret)
-		return ret;
-
-	data |= val;
-
-	ret = ksz_write32(dev, reg, data);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
-static int ksz_reg_clearbits(struct ksz_device *dev, u32 reg, u32 val)
-{
-	u32 data;
-	int ret;
-
-	ret = ksz_read32(dev, reg, &data);
-	if (ret)
-		return ret;
-
-	data &= ~val;
-
-	ret = ksz_write32(dev, reg, data);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
 static int lan937x_ptp_tou_index(struct ksz_device *dev, u8 index,
 				 u32 pps_led_index)
 {
@@ -79,7 +46,7 @@ static int lan937x_ptp_tou_index(struct ksz_device *dev, u8 index,
 
 	data = ((index << PTP_TOU_INDEX_S) | (pps_led_index << PTP_GPIO_INDEX_S));
 
-	ret = ksz_reg_setbits(dev, REG_PTP_UNIT_INDEX__4, data);
+	ret = lan937x_cfg32(dev, REG_PTP_UNIT_INDEX__4, data, true);
 
 	return ret;
 }
@@ -89,12 +56,13 @@ static int lan937x_ptp_tou_reset(struct ksz_device *dev)
 	int ret;
 
 	/* Reset trigger unit */
-	ret = ksz_reg_setbits(dev, REG_PTP_CTRL_STAT__4, TRIG_RESET);
+	ret = lan937x_cfg32(dev, REG_PTP_CTRL_STAT__4, TRIG_RESET, true);
 	if (ret)
 		return ret;
 
 	/* Clear reset */
-	ret = ksz_reg_clearbits(dev, REG_PTP_CTRL_STAT__4, (TRIG_RESET | TRIG_ENABLE));
+	ret = lan937x_cfg32(dev, REG_PTP_CTRL_STAT__4,
+		            (TRIG_RESET | TRIG_ENABLE), false);
 	if (ret)
 		return ret;
 
@@ -254,7 +222,8 @@ static int lan937x_ptp_enable_pps(struct ksz_device *dev, int on)
 		return ret;
 
 	/* Activate trigger unit */
-	ret = ksz_reg_setbits(dev, REG_PTP_CTRL_STAT__4, (GPIO_OUT | TRIG_ENABLE));
+	ret = lan937x_cfg32(dev, REG_PTP_CTRL_STAT__4,
+		            (GPIO_OUT | TRIG_ENABLE), true);
 	if (ret)
 		return ret;
 

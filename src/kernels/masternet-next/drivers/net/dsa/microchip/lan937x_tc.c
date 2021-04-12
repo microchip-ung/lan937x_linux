@@ -60,13 +60,16 @@ static int lan937x_setup_tc_cbs(struct dsa_switch *ds, int port,
 				struct tc_cbs_qopt_offload *qopt)
 {
 	struct ksz_device *dev = ds->priv;
+	int ret;
 	u32 bw;
 
 	if (qopt->queue > LAN937X_NUM_TC)
 		return -EINVAL;
 
-	lan937x_pwrite32(dev, port, REG_PORT_MTI_QUEUE_INDEX__4,
+	ret = lan937x_pwrite32(dev, port, REG_PORT_MTI_QUEUE_INDEX__4,
 			 qopt->queue);
+	if(ret)
+		return ret;
 
 	if (!qopt->enable) {
 		lan937x_pwrite8(dev, port, REG_PORT_MTI_QUEUE_CTRL_0,
@@ -76,22 +79,34 @@ static int lan937x_setup_tc_cbs(struct dsa_switch *ds, int port,
 
 	bw = cinc_cal(qopt->idleslope, qopt->sendslope);
 
-	lan937x_pwrite8(dev, port, REG_PORT_MTI_QUEUE_CTRL_0,
+	ret = lan937x_pwrite8(dev, port, REG_PORT_MTI_QUEUE_CTRL_0,
 			LAN937X_CBS_ENABLE);
+	if(ret)
+		return ret;
 
-	lan937x_pwrite16(dev, port, REG_PORT_MTI_HI_WATER_MARK,
+
+	ret = lan937x_pwrite16(dev, port, REG_PORT_MTI_HI_WATER_MARK,
 			 qopt->hicredit); //high credit
+	if(ret)
+		return ret;
 
-	lan937x_pwrite16(dev, port, REG_PORT_MTI_LO_WATER_MARK,
+
+	ret = lan937x_pwrite16(dev, port, REG_PORT_MTI_LO_WATER_MARK,
 			 qopt->locredit); //low credit
+	if(ret)
+		return ret;
 
-	lan937x_pwrite16(dev, port, REG_PORT_MTI_CREDIT_INCREMENT,
+
+	ret = lan937x_pwrite16(dev, port, REG_PORT_MTI_CREDIT_INCREMENT,
 			 ((bw & 0x00ffff00) >> 8)); //credit incr
+	if(ret)
+		return ret;
 
-	lan937x_pwrite8(dev, port, (REG_PORT_MTI_CREDIT_INCREMENT + 2),
+
+	ret = lan937x_pwrite8(dev, port, (REG_PORT_MTI_CREDIT_INCREMENT + 2),
 			(bw & 0x000000ff)); //credit incr
 
-	return 0;
+	return ret;
 }
 
 int lan937x_setup_tc(struct dsa_switch *ds, int port,
