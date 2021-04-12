@@ -1000,7 +1000,7 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 static int lan937x_setup(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
-	int rc;
+        int ret;
 
 	dev->vlan_cache = devm_kcalloc(dev->dev, sizeof(struct vlan_table),
 				       dev->num_vlans, GFP_KERNEL);
