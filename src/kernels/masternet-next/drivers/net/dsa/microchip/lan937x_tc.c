@@ -90,15 +90,8 @@ static int lan937x_setup_tc_cbs(struct dsa_switch *ds, int port,
 	if(ret)
 		return ret;
 
-
-	ret = lan937x_pwrite16(dev, port, REG_PORT_MTI_CREDIT_INCREMENT,
-			       ((bw & 0x00ffff00) >> 8)); //credit incr
-	if(ret)
-		return ret;
-
-
-	ret = lan937x_pwrite8(dev, port, (REG_PORT_MTI_CREDIT_INCREMENT + 2),
-			      (bw & 0x000000ff)); //credit incr
+	/* Credit Increment Register */
+	ret = lan937x_pwrite32(dev, port, REG_PORT_MTI_CREDIT_INCREMENT, bw);
 
 	return ret;
 }
