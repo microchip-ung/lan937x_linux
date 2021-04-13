@@ -35,10 +35,7 @@ static int cinc_cal(s32 idle_slope, s32 send_slope)
 
 	txrate = idle_slope - send_slope;
 
-	//Scaling factor 1.5 is applicable only for A0 silicon
-	rate = idle_slope * 3;
-
-	txrate *= 2;
+	rate = idle_slope;
 
 	for (i = 0; i < 6; i++) {  //24 bit register
 		rate = rate * 16;
@@ -49,9 +46,6 @@ static int cinc_cal(s32 idle_slope, s32 send_slope)
 
 		cinc = ((cinc << 4) | temp);
 	}
-
-	if (cinc > 0x00ffffff)
-		cinc = 0x00ffffff;
 
 	return cinc;
 }
