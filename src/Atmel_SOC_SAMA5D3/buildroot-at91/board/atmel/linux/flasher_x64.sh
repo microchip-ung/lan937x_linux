@@ -135,7 +135,7 @@ export O=$1/images
 
 #build environment file = "yes" or "no"
 #program = "yes" or "no"
-./sam-ba_cdc_linux/sam-ba_64 $TTY ${!M} $(dirname $0)/nandflash.tcl -- ${!F} ${!D} $video_mode "yes" "yes"
+./$(dirname $0)/sam-ba_cdc_linux/sam-ba_64 $TTY ${!M} $(dirname $0)/nandflash.tcl -- ${!F} ${!D} $video_mode "yes" "yes"
 
 #For just to generate the uboot environment file enable following line and comment out the above line
-#./sam-ba_cdc_linux/sam-ba_64 $TTY ${!M} $(dirname $0)/nandflash.tcl -- ${!F} ${!D} $video_mode "yes" "no"
+#./$(dirname $0)/sam-ba_cdc_linux/sam-ba_64 $TTY ${!M} $(dirname $0)/nandflash.tcl -- ${!F} ${!D} $video_mode "yes" "no"

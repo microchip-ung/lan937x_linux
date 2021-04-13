@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /* Microchip LAN937X switch register definitions
- * Copyright (C) 2019-2020 Microchip Technology Inc.
+ * Copyright (C) 2019-2021 Microchip Technology Inc.
  */
 #ifndef __LAN937X_REG_H
 #define __LAN937X_REG_H
@@ -52,8 +52,8 @@
 #define SPI_CLOCK_OUT_RISING_EDGE	BIT(0)
 
 #define REG_SW_GLOBAL_OUTPUT_CTRL__1	0x0103
-#define SW_ENABLE_REFCLKO		BIT(1)
-#define SW_REFCLKO_IS_125MHZ		BIT(0)
+#define SW_CLK125_ENB			BIT(1)
+#define SW_CLK25_ENB			BIT(0)
 
 #define REG_SW_GLOBAL_LED_OVR__4	0x0120
 #define LED_OVR_2			BIT(1)

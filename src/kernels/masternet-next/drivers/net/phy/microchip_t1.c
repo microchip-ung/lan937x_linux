@@ -156,7 +156,6 @@ static int access_ereg(struct phy_device *phydev, u8 mode, u8 bank,
 	if (phydev->phy_id == LAN937X_T1_PHY_ID) {
 		/* Read previous selected bank */
 		rc = phy_read(phydev, LAN87XX_EXT_REG_CTL);
-
 		if (rc < 0)
 			return rc;
 
@@ -172,7 +171,6 @@ static int access_ereg(struct phy_device *phydev, u8 mode, u8 bank,
 
 			/* Need to write twice to access correct register. */
 			rc = phy_write(phydev, LAN87XX_EXT_REG_CTL, t);
-
 			if (rc < 0)
 				return rc;
 		}
@@ -346,13 +344,11 @@ static int mchp_t1_phy_init(struct phy_device *phydev)
 	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI,
 					REG_PORT_T1_PHY_M_CTRL, PORT_T1_M_CFG,
 					PORT_T1_M_CFG);
-
 	if (rc < 0)
 		return rc;
 
 	/* phy Soft reset */
 	rc = genphy_soft_reset(phydev);
-
 	if (rc < 0)
 		return rc;
 
@@ -418,7 +414,7 @@ static irqreturn_t lan87xx_handle_interrupt(struct phy_device *phydev)
 	return IRQ_HANDLED;
 }
 
-static int mchp_t1_phy_config_init(struct phy_device *phydev)
+static int lan87xx_config_init(struct phy_device *phydev)
 {
 	int rc = mchp_t1_phy_init(phydev);
 
@@ -456,13 +452,23 @@ static int lan937x_read_status(struct phy_device *phydev)
 	return 0;
 }
 
+static int lan937x_config_init(struct phy_device *phydev)
+{
+	int rc = mchp_t1_phy_init(phydev);
+
+	if (rc < 0)
+		phydev_err(phydev, "failed to initialize phy\n");
+
+	return rc < 0 ? rc : 0;
+}
+
 static struct phy_driver microchip_t1_phy_driver[] = {
 {
 	.phy_id         = LAN87XX_PHY_ID,
 	.phy_id_mask    = LAN87XX_PHY_ID_MASK,
 	.name           = "LAN87xx T1",
 	.features       = PHY_BASIC_T1_FEATURES,
-	.config_init	= mchp_t1_phy_config_init,
+	.config_init	= lan87xx_config_init,
 	.config_intr    = lan87xx_phy_config_intr,
 	.handle_interrupt = lan87xx_handle_interrupt,
 	.suspend        = genphy_suspend,
@@ -473,7 +479,7 @@ static struct phy_driver microchip_t1_phy_driver[] = {
 	.name			= "LAN937x T1",
 	.read_status	= lan937x_read_status,
 	.features		= PHY_BASIC_T1_FEATURES,
-	.config_init	= mchp_t1_phy_config_init,
+	.config_init	= lan937x_config_init,
 	.suspend		= genphy_suspend,
 	.resume		= genphy_resume,
 } };

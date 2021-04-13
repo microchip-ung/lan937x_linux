@@ -241,7 +241,7 @@
 						};
 						port@4 {
 							reg = <4>;
-							phy-mode = "rgmii-tx";
+							phy-mode = "rgmii-txid";
 							label = "cpu";
 							ethernet = <&macb0>;
 							fixed-link {
@@ -251,7 +251,7 @@
 						};
 						port@5 {
 							reg = <5>;
-							phy-mode = "rgmii-tx";
+							phy-mode = "rgmii-txid";
 							label = "lan7";
 							fixed-link {
 								speed = <1000>;
