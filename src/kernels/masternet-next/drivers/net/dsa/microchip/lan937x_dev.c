@@ -270,6 +270,7 @@ static int lan937x_switch_detect(struct ksz_device *dev)
 	} else {
 		ret = -EINVAL;
 	}
+
 	return ret;
 }
 
@@ -302,11 +303,10 @@ int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
 	if (rc < 0)
 		return rc;
 
-	/* If already the access is not enabled go ahead and allow SPI access */
-	if (!(data16 & VPHY_SPI_INDIRECT_ENABLE)) {
-		data16 |= VPHY_SPI_INDIRECT_ENABLE;
-		rc = ksz_write16(dev, REG_VPHY_SPECIAL_CTRL__2, data16);
-	}
+	/* Allow SPI access */
+	data16 |= VPHY_SPI_INDIRECT_ENABLE;
+	
+	rc = ksz_write16(dev, REG_VPHY_SPECIAL_CTRL__2, data16);
 
 	return rc;
 }
@@ -434,6 +434,7 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr,
 		dev_err(dev->dev, "Failed to read phy register\n");
 		return rc;
 	}
+
 	/* Read the VPHY register which has the PHY data*/
 	rc = ksz_read16(dev, REG_VPHY_IND_DATA__2, val);
 

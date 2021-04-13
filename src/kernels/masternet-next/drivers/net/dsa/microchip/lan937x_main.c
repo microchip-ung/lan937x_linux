@@ -114,6 +114,7 @@ exit:
 static int lan937x_read_table(struct ksz_device *dev, u32 *table)
 {
 	int rc;
+	
 	/* read alu table */
 	rc = ksz_read32(dev, REG_SW_ALU_VAL_A, &table[0]);
 	if (rc < 0)
@@ -135,6 +136,7 @@ static int lan937x_read_table(struct ksz_device *dev, u32 *table)
 static int lan937x_write_table(struct ksz_device *dev, u32 *table)
 {
 	int rc;
+
 	/* write alu table */
 	rc = ksz_write32(dev, REG_SW_ALU_VAL_A, table[0]);
 	if (rc < 0)
@@ -335,8 +337,7 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 		vlan_table[1] &= ~BIT(port);
 	vlan_table[1] &= ~(BIT(dev->cpu_port));
 
-	vlan_table[2] |= BIT(port) |
-					BIT(dev->cpu_port);
+	vlan_table[2] |= BIT(port) | BIT(dev->cpu_port);
 
 	rc = lan937x_set_vlan_table(dev, vlan->vid, vlan_table);
 	if (rc < 0) {
@@ -367,7 +368,7 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 	int rc;
 
 	lan937x_pread16(dev, port, REG_PORT_DEFAULT_VID, &pvid);
-	pvid = pvid & 0xFFF;
+	pvid &= 0xFFF;
 
 	rc = lan937x_get_vlan_table(dev, vlan->vid, vlan_table);
 
@@ -625,8 +626,8 @@ static int lan937x_port_fdb_dump(struct dsa_switch *ds, int port,
 	struct lan_alu_struct alu;
 	u32 lan937x_data;
 	u32 alu_table[4];
-	int rc, i;
 	int timeout;
+	int rc, i;
 
 	mutex_lock(&dev->alu_mutex);
 
@@ -756,7 +757,8 @@ static int lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 		goto exit;
 
 	/* wait to be finished */
-	if (lan937x_wait_alu_sta_ready(dev))
+	rc = lan937x_wait_alu_sta_ready(dev);
+	if (rc < 0)
 		dev_err(dev->dev, "Failed to read ALU STATIC\n");
 
 exit:
@@ -931,6 +933,7 @@ static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 		interface = PHY_INTERFACE_MODE_MII;
 		break;
 	}
+
 	return interface;
 }
 
@@ -964,6 +967,7 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 				else
 					p->interface = interface;
 			}
+
 			if (interface && interface != p->interface) {
 				prev_msg = " instead of ";
 				prev_mode = phy_modes(interface);
@@ -971,6 +975,7 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 				prev_msg = "";
 				prev_mode = "";
 			}
+
 			dev_info(dev->dev,
 				 "Port%d: using phy mode %s%s%s\n",
 				 i,
@@ -1071,6 +1076,7 @@ static int lan937x_change_mtu(struct dsa_switch *ds, int port, int mtu)
 		dev_err(ds->dev, "failed to enable jumbo\n");
 		return rc;
 	}
+
 	/* Write the frame size in PORT_MAX_FR_SIZE register */
 	rc = lan937x_pwrite16(dev, port, PORT_MAX_FR_SIZE, max_size);
 
@@ -1112,11 +1118,13 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 		phylink_set(mask, Pause);
 		phylink_set(mask, Asym_Pause);
 	}
+
 	/*  For RGMII & SGMII interfaces */
 	if (phy_interface_mode_is_rgmii(state->interface) ||
 	    state->interface == PHY_INTERFACE_MODE_SGMII) {
 		phylink_set(mask, 1000baseT_Full);
 	}
+
 	/* For T1 PHY */
 	if (lan937x_is_internal_t1_phy_port(dev, port)) {
 		phylink_set(mask, 100baseT1_Full);
