@@ -46,6 +46,24 @@
 #include "lib/fs_chains.h"
 #include "sf/sf.h"
 #include "en/tc_ct.h"
+#include "esw/sample.h"
+
+enum mlx5_mapped_obj_type {
+	MLX5_MAPPED_OBJ_CHAIN,
+	MLX5_MAPPED_OBJ_SAMPLE,
+};
+
+struct mlx5_mapped_obj {
+	enum mlx5_mapped_obj_type type;
+	union {
+		u32 chain;
+		struct {
+			u32 group_id;
+			u32 rate;
+			u32 trunc_size;
+		} sample;
+	};
+};
 
 #ifdef CONFIG_MLX5_ESWITCH
 
@@ -134,7 +152,6 @@ enum mlx5_eswitch_vport_event {
 
 struct mlx5_vport {
 	struct mlx5_core_dev    *dev;
-	int                     vport;
 	struct hlist_head       uc_list[MLX5_L2_ADDR_HASH_SIZE];
 	struct hlist_head       mc_list[MLX5_L2_ADDR_HASH_SIZE];
 	struct mlx5_flow_handle *promisc_rule;
@@ -156,6 +173,7 @@ struct mlx5_vport {
 		u32 max_rate;
 	} qos;
 
+	u16 vport;
 	bool                    enabled;
 	enum mlx5_eswitch_vport_event enabled_events;
 	struct devlink_port *dl_port;
@@ -206,6 +224,7 @@ struct mlx5_esw_offload {
 	struct mlx5_flow_table *ft_offloads_restore;
 	struct mlx5_flow_group *restore_group;
 	struct mlx5_modify_hdr *restore_copy_hdr_id;
+	struct mapping_ctx *reg_c0_obj_pool;
 
 	struct mlx5_flow_table *ft_offloads;
 	struct mlx5_flow_group *vport_rx_group;
@@ -295,6 +314,8 @@ int esw_offloads_enable(struct mlx5_eswitch *esw);
 void esw_offloads_cleanup_reps(struct mlx5_eswitch *esw);
 int esw_offloads_init_reps(struct mlx5_eswitch *esw);
 
+bool mlx5_esw_vport_match_metadata_supported(const struct mlx5_eswitch *esw);
+int mlx5_esw_offloads_vport_metadata_set(struct mlx5_eswitch *esw, bool enable);
 u32 mlx5_esw_match_metadata_alloc(struct mlx5_eswitch *esw);
 void mlx5_esw_match_metadata_free(struct mlx5_eswitch *esw, u32 metadata);
 
@@ -357,6 +378,9 @@ void
 mlx5_eswitch_termtbl_put(struct mlx5_eswitch *esw,
 			 struct mlx5_termtbl_handle *tt);
 
+void
+mlx5_eswitch_clear_rule_source_port(struct mlx5_eswitch *esw, struct mlx5_flow_spec *spec);
+
 struct mlx5_flow_handle *
 mlx5_eswitch_add_offloaded_rule(struct mlx5_eswitch *esw,
 				struct mlx5_flow_spec *spec,
@@ -404,6 +428,7 @@ enum {
 	MLX5_ESW_ATTR_FLAG_SLOW_PATH     = BIT(1),
 	MLX5_ESW_ATTR_FLAG_NO_IN_PORT    = BIT(2),
 	MLX5_ESW_ATTR_FLAG_SRC_REWRITE   = BIT(3),
+	MLX5_ESW_ATTR_FLAG_SAMPLE        = BIT(4),
 };
 
 struct mlx5_esw_flow_attr {
@@ -428,6 +453,7 @@ struct mlx5_esw_flow_attr {
 	} dests[MLX5_MAX_FLOW_FWD_VPORTS];
 	struct mlx5_rx_tun_attr *rx_tun_attr;
 	struct mlx5_pkt_reformat *decap_pkt_reformat;
+	struct mlx5_sample_attr *sample;
 };
 
 int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
@@ -494,6 +520,11 @@ const u32 *mlx5_esw_query_functions(struct mlx5_core_dev *dev);
 
 #define esw_debug(dev, format, ...)				\
 	mlx5_core_dbg_mask(dev, MLX5_DEBUG_ESWITCH_MASK, format, ##__VA_ARGS__)
+
+static inline bool mlx5_esw_allowed(const struct mlx5_eswitch *esw)
+{
+	return esw && MLX5_ESWITCH_MANAGER(esw->dev);
+}
 
 /* The returned number is valid only when the dev is eswitch manager. */
 static inline u16 mlx5_eswitch_manager_vport(struct mlx5_core_dev *dev)
@@ -713,13 +744,26 @@ void
 esw_vport_destroy_offloads_acl_tables(struct mlx5_eswitch *esw,
 				      struct mlx5_vport *vport);
 
-int mlx5_esw_vport_tbl_get(struct mlx5_eswitch *esw);
-void mlx5_esw_vport_tbl_put(struct mlx5_eswitch *esw);
+struct esw_vport_tbl_namespace {
+	int max_fte;
+	int max_num_groups;
+	u32 flags;
+};
+
+struct mlx5_vport_tbl_attr {
+	u16 chain;
+	u16 prio;
+	u16 vport;
+	const struct esw_vport_tbl_namespace *vport_ns;
+};
+
+struct mlx5_flow_table *
+mlx5_esw_vporttbl_get(struct mlx5_eswitch *esw, struct mlx5_vport_tbl_attr *attr);
+void
+mlx5_esw_vporttbl_put(struct mlx5_eswitch *esw, struct mlx5_vport_tbl_attr *attr);
 
 struct mlx5_flow_handle *
 esw_add_restore_rule(struct mlx5_eswitch *esw, u32 tag);
-u32
-esw_get_max_restore_tag(struct mlx5_eswitch *esw);
 
 int esw_offloads_load_rep(struct mlx5_eswitch *esw, u16 vport_num);
 void esw_offloads_unload_rep(struct mlx5_eswitch *esw, u16 vport_num);
@@ -769,6 +813,8 @@ void mlx5_esw_get(struct mlx5_core_dev *dev);
 void mlx5_esw_put(struct mlx5_core_dev *dev);
 int mlx5_esw_try_lock(struct mlx5_eswitch *esw);
 void mlx5_esw_unlock(struct mlx5_eswitch *esw);
+
+void esw_vport_change_handle_locked(struct mlx5_vport *vport);
 
 #else  /* CONFIG_MLX5_ESWITCH */
 /* eswitch API stubs */

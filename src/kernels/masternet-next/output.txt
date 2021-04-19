@@ -1,0 +1,49 @@
+WARNING: added, moved or deleted file(s), does MAINTAINERS need updating?
+#2: 
+new file mode 100644
+
+WARNING: DT binding docs and includes should be a separate patch. See: Documentation/devicetree/bindings/submitting-patches.rst
+
+CHECK: Avoid CamelCase: <baseT_Half>
+#2097: FILE: drivers/net/dsa/microchip/lan937x_main.c:1098:
++		phylink_set(mask, 10baseT_Half);
+
+CHECK: Avoid CamelCase: <baseT_Full>
+#2098: FILE: drivers/net/dsa/microchip/lan937x_main.c:1099:
++		phylink_set(mask, 10baseT_Full);
+
+CHECK: Avoid CamelCase: <Autoneg>
+#2101: FILE: drivers/net/dsa/microchip/lan937x_main.c:1102:
++		phylink_set(mask, Autoneg);
+
+CHECK: Avoid CamelCase: <Pause>
+#2103: FILE: drivers/net/dsa/microchip/lan937x_main.c:1104:
++		phylink_set(mask, Pause);
+
+CHECK: Avoid CamelCase: <Asym_Pause>
+#2104: FILE: drivers/net/dsa/microchip/lan937x_main.c:1105:
++		phylink_set(mask, Asym_Pause);
+
+CHECK: Avoid CamelCase: <baseT1_Full>
+#2113: FILE: drivers/net/dsa/microchip/lan937x_main.c:1114:
++		phylink_set(mask, 100baseT1_Full);
+
+ERROR: space required after that ',' (ctx:VxV)
+#3568: FILE: drivers/net/phy/microchip_t1.c:470:
++},{
+  ^
+
+total: 1 errors, 2 warnings, 6 checks, 3610 lines checked
+
+Wrote EXPERIMENTAL --fix correction(s) to 'my_fixes.patch.EXPERIMENTAL-checkpatch-fixes'
+
+Do _NOT_ trust the results written to this file.
+Do _NOT_ submit these changes without inspecting them for correctness.
+
+This EXPERIMENTAL file is simply a convenience to help rewrite patches.
+No warranties, expressed or implied...
+
+my_fixes.patch has style problems, please review.
+
+NOTE: If any of the errors are false positives, please report
+      them to the maintainer, see CHECKPATCH in MAINTAINERS.

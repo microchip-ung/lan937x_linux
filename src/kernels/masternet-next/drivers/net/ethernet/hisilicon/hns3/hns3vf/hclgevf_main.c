@@ -2114,10 +2114,11 @@ static void hclgevf_enable_vector(struct hclgevf_misc_vector *vector, bool en)
 	writel(en ? 1 : 0, vector->addr);
 }
 
-static void hclgevf_flr_prepare(struct hnae3_ae_dev *ae_dev)
+static void hclgevf_reset_prepare_general(struct hnae3_ae_dev *ae_dev,
+					  enum hnae3_reset_type rst_type)
 {
-#define HCLGEVF_FLR_RETRY_WAIT_MS	500
-#define HCLGEVF_FLR_RETRY_CNT		5
+#define HCLGEVF_RESET_RETRY_WAIT_MS	500
+#define HCLGEVF_RESET_RETRY_CNT		5
 
 	struct hclgevf_dev *hdev = ae_dev->priv;
 	int retry_cnt = 0;
@@ -2126,29 +2127,31 @@ static void hclgevf_flr_prepare(struct hnae3_ae_dev *ae_dev)
 retry:
 	down(&hdev->reset_sem);
 	set_bit(HCLGEVF_STATE_RST_HANDLING, &hdev->state);
-	hdev->reset_type = HNAE3_FLR_RESET;
+	hdev->reset_type = rst_type;
 	ret = hclgevf_reset_prepare(hdev);
 	if (ret) {
-		dev_err(&hdev->pdev->dev, "fail to prepare FLR, ret=%d\n",
+		dev_err(&hdev->pdev->dev, "fail to prepare to reset, ret=%d\n",
 			ret);
 		if (hdev->reset_pending ||
-		    retry_cnt++ < HCLGEVF_FLR_RETRY_CNT) {
+		    retry_cnt++ < HCLGEVF_RESET_RETRY_CNT) {
 			dev_err(&hdev->pdev->dev,
 				"reset_pending:0x%lx, retry_cnt:%d\n",
 				hdev->reset_pending, retry_cnt);
 			clear_bit(HCLGEVF_STATE_RST_HANDLING, &hdev->state);
 			up(&hdev->reset_sem);
-			msleep(HCLGEVF_FLR_RETRY_WAIT_MS);
+			msleep(HCLGEVF_RESET_RETRY_WAIT_MS);
 			goto retry;
 		}
 	}
 
-	/* disable misc vector before FLR done */
+	/* disable misc vector before reset done */
 	hclgevf_enable_vector(&hdev->misc_vector, false);
-	hdev->rst_stats.flr_rst_cnt++;
+
+	if (hdev->reset_type == HNAE3_FLR_RESET)
+		hdev->rst_stats.flr_rst_cnt++;
 }
 
-static void hclgevf_flr_done(struct hnae3_ae_dev *ae_dev)
+static void hclgevf_reset_done(struct hnae3_ae_dev *ae_dev)
 {
 	struct hclgevf_dev *hdev = ae_dev->priv;
 	int ret;
@@ -2223,7 +2226,7 @@ static void hclgevf_reset_service_task(struct hclgevf_dev *hdev)
 
 	if (test_and_clear_bit(HCLGEVF_RESET_PENDING,
 			       &hdev->reset_state)) {
-		/* PF has initmated that it is about to reset the hardware.
+		/* PF has intimated that it is about to reset the hardware.
 		 * We now have to poll & check if hardware has actually
 		 * completed the reset sequence. On hardware reset completion,
 		 * VF needs to reset the client and ae device.
@@ -2337,10 +2340,11 @@ static void hclgevf_periodic_service_task(struct hclgevf_dev *hdev)
 	if (!(hdev->serv_processed_cnt % HCLGEVF_STATS_TIMER_INTERVAL))
 		hclgevf_tqps_update_stats(handle);
 
-	/* request the link status from the PF. PF would be able to tell VF
-	 * about such updates in future so we might remove this later
+	/* VF does not need to request link status when this bit is set, because
+	 * PF will push its link status to VFs when link status changed.
 	 */
-	hclgevf_request_link_info(hdev);
+	if (!test_bit(HCLGEVF_STATE_PF_PUSH_LINK_STATUS, &hdev->state))
+		hclgevf_request_link_info(hdev);
 
 	hclgevf_update_link_mode(hdev);
 
@@ -2653,13 +2657,14 @@ static int hclgevf_ae_start(struct hnae3_handle *handle)
 {
 	struct hclgevf_dev *hdev = hclgevf_ae_get_hdev(handle);
 
+	clear_bit(HCLGEVF_STATE_DOWN, &hdev->state);
+	clear_bit(HCLGEVF_STATE_PF_PUSH_LINK_STATUS, &hdev->state);
+
 	hclgevf_reset_tqp_stats(handle);
 
 	hclgevf_request_link_info(hdev);
 
 	hclgevf_update_link_mode(hdev);
-
-	clear_bit(HCLGEVF_STATE_DOWN, &hdev->state);
 
 	return 0;
 }
@@ -3523,7 +3528,7 @@ static int hclgevf_set_channels(struct hnae3_handle *handle, u32 new_tqps_num,
 	if (ret)
 		return ret;
 
-	/* RSS indirection table has been configuared by user */
+	/* RSS indirection table has been configured by user */
 	if (rxfh_configured)
 		goto out;
 
@@ -3748,8 +3753,8 @@ void hclgevf_update_port_base_vlan_info(struct hclgevf_dev *hdev, u16 state,
 static const struct hnae3_ae_ops hclgevf_ops = {
 	.init_ae_dev = hclgevf_init_ae_dev,
 	.uninit_ae_dev = hclgevf_uninit_ae_dev,
-	.flr_prepare = hclgevf_flr_prepare,
-	.flr_done = hclgevf_flr_done,
+	.reset_prepare = hclgevf_reset_prepare_general,
+	.reset_done = hclgevf_reset_done,
 	.init_client_instance = hclgevf_init_client_instance,
 	.uninit_client_instance = hclgevf_uninit_client_instance,
 	.start = hclgevf_ae_start,

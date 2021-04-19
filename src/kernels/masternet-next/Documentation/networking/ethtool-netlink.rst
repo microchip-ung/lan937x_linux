@@ -210,6 +210,7 @@ Userspace to kernel:
   ``ETHTOOL_MSG_TUNNEL_INFO_GET``       get tunnel offload info
   ``ETHTOOL_MSG_FEC_GET``               get FEC settings
   ``ETHTOOL_MSG_FEC_SET``               set FEC settings
+  ``ETHTOOL_MSG_STATS_GET``             get standard statistics
   ===================================== ================================
 
 Kernel to userspace:
@@ -246,6 +247,7 @@ Kernel to userspace:
   ``ETHTOOL_MSG_TUNNEL_INFO_GET_REPLY`` tunnel offload info
   ``ETHTOOL_MSG_FEC_GET_REPLY``         FEC settings
   ``ETHTOOL_MSG_FEC_NTF``               FEC settings
+  ``ETHTOOL_MSG_STATS_GET_REPLY``       standard statistics
   ===================================== =================================
 
 ``GET`` requests are sent by userspace applications to retrieve device
@@ -980,9 +982,9 @@ constraints on coalescing parameters and their values.
 
 
 PAUSE_GET
-============
+=========
 
-Gets channel counts like ``ETHTOOL_GPAUSE`` ioctl request.
+Gets pause frame settings like ``ETHTOOL_GPAUSEPARAM`` ioctl request.
 
 Request contents:
 
@@ -1011,7 +1013,7 @@ the statistics in the following structure:
 Each member has a corresponding attribute defined.
 
 PAUSE_SET
-============
+=========
 
 Sets pause parameters like ``ETHTOOL_GPAUSEPARAM`` ioctl request.
 
@@ -1028,7 +1030,7 @@ Request contents:
 EEE_GET
 =======
 
-Gets channel counts like ``ETHTOOL_GEEE`` ioctl request.
+Gets Energy Efficient Ethernet settings like ``ETHTOOL_GEEE`` ioctl request.
 
 Request contents:
 
@@ -1058,7 +1060,7 @@ first 32 are provided by the ``ethtool_ops`` callback.
 EEE_SET
 =======
 
-Sets pause parameters like ``ETHTOOL_GEEEPARAM`` ioctl request.
+Sets Energy Efficient Ethernet parameters like ``ETHTOOL_SEEE`` ioctl request.
 
 Request contents:
 
@@ -1302,6 +1304,7 @@ Kernel response contents:
   ``ETHTOOL_A_FEC_MODES``                bitset  configured modes
   ``ETHTOOL_A_FEC_AUTO``                 bool    FEC mode auto selection
   ``ETHTOOL_A_FEC_ACTIVE``               u32     index of active FEC mode
+  ``ETHTOOL_A_FEC_STATS``                nested  FEC statistics
   =====================================  ======  ==========================
 
 ``ETHTOOL_A_FEC_ACTIVE`` is the bit index of the FEC link mode currently
@@ -1314,6 +1317,26 @@ select the FEC mode automatically based on the parameters of the SFP module.
 This is equivalent to the ``ETHTOOL_FEC_AUTO`` bit of the ioctl interface.
 ``ETHTOOL_A_FEC_MODES`` carry the current FEC configuration using link mode
 bits (rather than old ``ETHTOOL_FEC_*`` bits).
+
+``ETHTOOL_A_FEC_STATS`` are reported if ``ETHTOOL_FLAG_STATS`` was set in
+``ETHTOOL_A_HEADER_FLAGS``.
+Each attribute carries an array of 64bit statistics. First entry in the array
+contains the total number of events on the port, while the following entries
+are counters corresponding to lanes/PCS instances. The number of entries in
+the array will be:
+
++--------------+---------------------------------------------+
+| `0`          | device does not support FEC statistics      |
++--------------+---------------------------------------------+
+| `1`          | device does not support per-lane break down |
++--------------+---------------------------------------------+
+| `1 + #lanes` | device has full support for FEC stats       |
++--------------+---------------------------------------------+
+
+Drivers fill in the statistics in the following structure:
+
+.. kernel-doc:: include/linux/ethtool.h
+    :identifiers: ethtool_fec_stats
 
 FEC_SET
 =======
@@ -1337,6 +1360,118 @@ in an implementation specific way.
 
 ``ETHTOOL_A_FEC_AUTO`` requests the driver to choose FEC mode based on SFP
 module parameters. This does not mean autonegotiation.
+
+MODULE_EEPROM
+=============
+
+Fetch module EEPROM data dump.
+This interface is designed to allow dumps of at most 1/2 page at once. This
+means only dumps of 128 (or less) bytes are allowed, without crossing half page
+boundary located at offset 128. For pages other than 0 only high 128 bytes are
+accessible.
+
+Request contents:
+
+  =======================================  ======  ==========================
+  ``ETHTOOL_A_MODULE_EEPROM_HEADER``       nested  request header
+  ``ETHTOOL_A_MODULE_EEPROM_OFFSET``       u32     offset within a page
+  ``ETHTOOL_A_MODULE_EEPROM_LENGTH``       u32     amount of bytes to read
+  ``ETHTOOL_A_MODULE_EEPROM_PAGE``         u8      page number
+  ``ETHTOOL_A_MODULE_EEPROM_BANK``         u8      bank number
+  ``ETHTOOL_A_MODULE_EEPROM_I2C_ADDRESS``  u8      page I2C address
+  =======================================  ======  ==========================
+
+Kernel response contents:
+
+ +---------------------------------------------+--------+---------------------+
+ | ``ETHTOOL_A_MODULE_EEPROM_HEADER``          | nested | reply header        |
+ +---------------------------------------------+--------+---------------------+
+ | ``ETHTOOL_A_MODULE_EEPROM_DATA``            | nested | array of bytes from |
+ |                                             |        | module EEPROM       |
+ +---------------------------------------------+--------+---------------------+
+
+``ETHTOOL_A_MODULE_EEPROM_DATA`` has an attribute length equal to the amount of
+bytes driver actually read.
+
+STATS_GET
+=========
+
+Get standard statistics for the interface. Note that this is not
+a re-implementation of ``ETHTOOL_GSTATS`` which exposed driver-defined
+stats.
+
+Request contents:
+
+  =======================================  ======  ==========================
+  ``ETHTOOL_A_STATS_HEADER``               nested  request header
+  ``ETHTOOL_A_STATS_GROUPS``               bitset  requested groups of stats
+  =======================================  ======  ==========================
+
+Kernel response contents:
+
+ +-----------------------------------+--------+--------------------------------+
+ | ``ETHTOOL_A_STATS_HEADER``        | nested | reply header                   |
+ +-----------------------------------+--------+--------------------------------+
+ | ``ETHTOOL_A_STATS_GRP``           | nested | one or more group of stats     |
+ +-+---------------------------------+--------+--------------------------------+
+ | | ``ETHTOOL_A_STATS_GRP_ID``      | u32    | group ID - ``ETHTOOL_STATS_*`` |
+ +-+---------------------------------+--------+--------------------------------+
+ | | ``ETHTOOL_A_STATS_GRP_SS_ID``   | u32    | string set ID for names        |
+ +-+---------------------------------+--------+--------------------------------+
+ | | ``ETHTOOL_A_STATS_GRP_STAT``    | nested | nest containing a statistic    |
+ +-+---------------------------------+--------+--------------------------------+
+ | | ``ETHTOOL_A_STATS_GRP_HIST_RX`` | nested | histogram statistic (Rx)       |
+ +-+---------------------------------+--------+--------------------------------+
+ | | ``ETHTOOL_A_STATS_GRP_HIST_TX`` | nested | histogram statistic (Tx)       |
+ +-+---------------------------------+--------+--------------------------------+
+
+Users specify which groups of statistics they are requesting via
+the ``ETHTOOL_A_STATS_GROUPS`` bitset. Currently defined values are:
+
+ ====================== ======== ===============================================
+ ETHTOOL_STATS_ETH_MAC  eth-mac  Basic IEEE 802.3 MAC statistics (30.3.1.1.*)
+ ETHTOOL_STATS_ETH_PHY  eth-phy  Basic IEEE 802.3 PHY statistics (30.3.2.1.*)
+ ETHTOOL_STATS_ETH_CTRL eth-ctrl Basic IEEE 802.3 MAC Ctrl statistics (30.3.3.*)
+ ETHTOOL_STATS_RMON     rmon     RMON (RFC 2819) statistics
+ ====================== ======== ===============================================
+
+Each group should have a corresponding ``ETHTOOL_A_STATS_GRP`` in the reply.
+``ETHTOOL_A_STATS_GRP_ID`` identifies which group's statistics nest contains.
+``ETHTOOL_A_STATS_GRP_SS_ID`` identifies the string set ID for the names of
+the statistics in the group, if available.
+
+Statistics are added to the ``ETHTOOL_A_STATS_GRP`` nest under
+``ETHTOOL_A_STATS_GRP_STAT``. ``ETHTOOL_A_STATS_GRP_STAT`` should contain
+single 8 byte (u64) attribute inside - the type of that attribute is
+the statistic ID and the value is the value of the statistic.
+Each group has its own interpretation of statistic IDs.
+Attribute IDs correspond to strings from the string set identified
+by ``ETHTOOL_A_STATS_GRP_SS_ID``. Complex statistics (such as RMON histogram
+entries) are also listed inside ``ETHTOOL_A_STATS_GRP`` and do not have
+a string defined in the string set.
+
+RMON "histogram" counters count number of packets within given size range.
+Because RFC does not specify the ranges beyond the standard 1518 MTU devices
+differ in definition of buckets. For this reason the definition of packet ranges
+is left to each driver.
+
+``ETHTOOL_A_STATS_GRP_HIST_RX`` and ``ETHTOOL_A_STATS_GRP_HIST_TX`` nests
+contain the following attributes:
+
+ ================================= ====== ===================================
+ ETHTOOL_A_STATS_RMON_HIST_BKT_LOW u32    low bound of the packet size bucket
+ ETHTOOL_A_STATS_RMON_HIST_BKT_HI  u32    high bound of the bucket
+ ETHTOOL_A_STATS_RMON_HIST_VAL     u64    packet counter
+ ================================= ====== ===================================
+
+Low and high bounds are inclusive, for example:
+
+ ============================= ==== ====
+ RFC statistic                 low  high
+ ============================= ==== ====
+ etherStatsPkts64Octets          0    64
+ etherStatsPkts512to1023Octets 512  1023
+ ============================= ==== ====
 
 Request translation
 ===================
@@ -1415,8 +1550,8 @@ are netlink only.
   ``ETHTOOL_GET_DUMP_FLAG``           n/a
   ``ETHTOOL_GET_DUMP_DATA``           n/a
   ``ETHTOOL_GET_TS_INFO``             ``ETHTOOL_MSG_TSINFO_GET``
-  ``ETHTOOL_GMODULEINFO``             n/a
-  ``ETHTOOL_GMODULEEEPROM``           n/a
+  ``ETHTOOL_GMODULEINFO``             ``ETHTOOL_MSG_MODULE_EEPROM_GET``
+  ``ETHTOOL_GMODULEEEPROM``           ``ETHTOOL_MSG_MODULE_EEPROM_GET``
   ``ETHTOOL_GEEE``                    ``ETHTOOL_MSG_EEE_GET``
   ``ETHTOOL_SEEE``                    ``ETHTOOL_MSG_EEE_SET``
   ``ETHTOOL_GRSSH``                   n/a
@@ -1433,7 +1568,7 @@ are netlink only.
   ``ETHTOOL_PHY_STUNABLE``            n/a
   ``ETHTOOL_GFECPARAM``               ``ETHTOOL_MSG_FEC_GET``
   ``ETHTOOL_SFECPARAM``               ``ETHTOOL_MSG_FEC_SET``
-  n/a                                 ''ETHTOOL_MSG_CABLE_TEST_ACT''
-  n/a                                 ''ETHTOOL_MSG_CABLE_TEST_TDR_ACT''
+  n/a                                 ``ETHTOOL_MSG_CABLE_TEST_ACT``
+  n/a                                 ``ETHTOOL_MSG_CABLE_TEST_TDR_ACT``
   n/a                                 ``ETHTOOL_MSG_TUNNEL_INFO_GET``
   =================================== =====================================
