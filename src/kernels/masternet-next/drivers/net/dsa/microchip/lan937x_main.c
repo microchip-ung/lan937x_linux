@@ -114,7 +114,7 @@ exit:
 static int lan937x_read_table(struct ksz_device *dev, u32 *table)
 {
 	int rc;
-	
+
 	/* read alu table */
 	rc = ksz_read32(dev, REG_SW_ALU_VAL_A, &table[0]);
 	if (rc < 0)
@@ -499,9 +499,9 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 			rc = ksz_write8(dev, REG_SW_LUE_INT_STATUS__1, WRITE_FAIL_INT);
 			if (rc < 0)
 				goto exit;
-		}
-		else
+		} else {
 			goto exit;
+		}
 	}
 
 exit:

@@ -34,7 +34,7 @@ static const struct of_device_id lan937x_dt_ids[];
 
 static const struct lan937x_chip_data lan937x_switch_chips[] = {
 	{
-		.chip_id = 0x00937000,
+		.chip_id = 0x00937010,
 		.dev_name = "LAN9370",
 		.num_vlans = 4096,
 		.num_alus = 1024,
@@ -45,7 +45,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.port_cnt = 5,
 	},
 	{
-		.chip_id = 0x00937100,
+		.chip_id = 0x00937110,
 		.dev_name = "LAN9371",
 		.num_vlans = 4096,
 		.num_alus = 1024,
@@ -56,7 +56,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.port_cnt = 6,
 	},
 	{
-		.chip_id = 0x00937200,
+		.chip_id = 0x00937210,
 		.dev_name = "LAN9372",
 		.num_vlans = 4096,
 		.num_alus = 1024,
@@ -67,7 +67,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.port_cnt = 8,
 	},
 	{
-		.chip_id = 0x00937300,
+		.chip_id = 0x00937310,
 		.dev_name = "LAN9373",
 		.num_vlans = 4096,
 		.num_alus = 1024,
@@ -78,7 +78,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.port_cnt = 5,
 	},
 	{
-		.chip_id = 0x00937400,
+		.chip_id = 0x00937410,
 		.dev_name = "LAN9374",
 		.num_vlans = 4096,
 		.num_alus = 1024,

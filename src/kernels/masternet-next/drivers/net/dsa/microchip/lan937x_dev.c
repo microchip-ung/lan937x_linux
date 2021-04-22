@@ -305,7 +305,6 @@ int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
 
 	/* Allow SPI access */
 	data16 |= VPHY_SPI_INDIRECT_ENABLE;
-	
 	rc = ksz_write16(dev, REG_VPHY_SPECIAL_CTRL__2, data16);
 
 	return rc;

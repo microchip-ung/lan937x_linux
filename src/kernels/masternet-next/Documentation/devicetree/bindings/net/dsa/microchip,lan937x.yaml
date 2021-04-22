@@ -55,8 +55,6 @@ examples:
     spi {
       #address-cells = <1>;
       #size-cells = <0>;
-      pinctrl-0 = <&pinctrl_spi_ksz>;
-      cs-gpios = <0>, <0>, <0>, <&pioC 28 0>;
 
       lan9374: switch@0 {
         compatible = "microchip,lan9374";
