@@ -359,7 +359,7 @@ int lan937x_internal_phy_write(struct ksz_device *dev, int addr,
 
 	/* Check for internal phy port */
 	if (!lan937x_is_internal_phy_port(dev, addr))
-		return 0;
+		return -EOPNOTSUPP;
 
 	if (lan937x_is_internal_100BTX_phy_port(dev, addr))
 		addr_base = REG_PORT_TX_PHY_CTRL_BASE;
@@ -403,9 +403,9 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr,
 	unsigned int value;
 	int rc;
 
-	/* Check for internal phy port */
+	/* Check for internal phy port, return 0xffff for non-existent phy*/
 	if (!lan937x_is_internal_phy_port(dev, addr))
-		return 0;
+		return 0xffff;
 
 	if (lan937x_is_internal_100BTX_phy_port(dev, addr))
 		addr_base = REG_PORT_TX_PHY_CTRL_BASE;
