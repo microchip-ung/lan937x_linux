@@ -2,7 +2,7 @@
 
 int main()
 {
-	printf("DSA Version 2.1.0\n");
+	printf("DSA Version 2.1.1\n");
 	
 	return 0;
 }
