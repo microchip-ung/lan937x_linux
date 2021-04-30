@@ -68,8 +68,6 @@
 #define PORT_T1_MANUAL_CFG	BIT(12)
 #define PORT_T1_M_CFG		BIT(11)
 
-#define REG_PORT_T1_PHY_M_STATUS 0x0A
-
 #define REG_PORT_T1_MODE_STAT			0x11
 #define T1_PORT_DSCR_LOCK_STATUS_MSK		BIT(3)
 #define T1_PORT_LINK_UP_MSK			BIT(0)
@@ -153,6 +151,9 @@ static int access_ereg(struct phy_device *phydev, u8 mode, u8 bank,
 		ereg = LAN87XX_EXT_REG_CTL_RD_CTL;
 	}
 
+	ereg |= (bank << 8) | offset;
+
+	/* DSP bank access register workaround for lan937x*/
 	if (phydev->phy_id == LAN937X_T1_PHY_ID) {
 		/* Read previous selected bank */
 		rc = phy_read(phydev, LAN87XX_EXT_REG_CTL);
@@ -162,21 +163,18 @@ static int access_ereg(struct phy_device *phydev, u8 mode, u8 bank,
 		/* Store the prev_bank */
 		prev_bank = (rc >> T1_REG_BANK_SEL_S) & T1_REG_BANK_SEL_M;
 
-		/* if the bank is DSP need to write twice */
 		if (bank != prev_bank && bank == PHYACC_ATTR_BANK_DSP) {
 			u16 t = ereg & ~T1_REG_ADDR_M;
 
 			t &= ~LAN87XX_EXT_REG_CTL_WR_CTL;
 			t |= LAN87XX_EXT_REG_CTL_RD_CTL;
 
-			/* Need to write twice to access correct register. */
+			/* Need to access twice for DSP bank change - dummy access*/
 			rc = phy_write(phydev, LAN87XX_EXT_REG_CTL, t);
 			if (rc < 0)
 				return rc;
 		}
 	}
-
-	ereg |= (bank << 8) | offset;
 
 	rc = phy_write(phydev, LAN87XX_EXT_REG_CTL, ereg);
 	if (rc < 0)

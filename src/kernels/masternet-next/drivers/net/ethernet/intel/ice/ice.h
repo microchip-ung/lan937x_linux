@@ -36,6 +36,7 @@
 #include <linux/bpf.h>
 #include <linux/avf/virtchnl.h>
 #include <linux/cpu_rmap.h>
+#include <linux/dim.h>
 #include <net/devlink.h>
 #include <net/ipv6.h>
 #include <net/xdp_sock.h>
@@ -44,6 +45,9 @@
 #include <net/gre.h>
 #include <net/udp_tunnel.h>
 #include <net/vxlan.h>
+#if IS_ENABLED(CONFIG_DCB)
+#include <scsi/iscsi_proto.h>
+#endif /* CONFIG_DCB */
 #include "ice_devids.h"
 #include "ice_type.h"
 #include "ice_txrx.h"
@@ -194,51 +198,52 @@ struct ice_sw {
 };
 
 enum ice_pf_state {
-	__ICE_TESTING,
-	__ICE_DOWN,
-	__ICE_NEEDS_RESTART,
-	__ICE_PREPARED_FOR_RESET,	/* set by driver when prepared */
-	__ICE_RESET_OICR_RECV,		/* set by driver after rcv reset OICR */
-	__ICE_DCBNL_DEVRESET,		/* set by dcbnl devreset */
-	__ICE_PFR_REQ,			/* set by driver and peers */
-	__ICE_CORER_REQ,		/* set by driver and peers */
-	__ICE_GLOBR_REQ,		/* set by driver and peers */
-	__ICE_CORER_RECV,		/* set by OICR handler */
-	__ICE_GLOBR_RECV,		/* set by OICR handler */
-	__ICE_EMPR_RECV,		/* set by OICR handler */
-	__ICE_SUSPENDED,		/* set on module remove path */
-	__ICE_RESET_FAILED,		/* set by reset/rebuild */
+	ICE_TESTING,
+	ICE_DOWN,
+	ICE_NEEDS_RESTART,
+	ICE_PREPARED_FOR_RESET,	/* set by driver when prepared */
+	ICE_RESET_OICR_RECV,		/* set by driver after rcv reset OICR */
+	ICE_PFR_REQ,			/* set by driver and peers */
+	ICE_CORER_REQ,		/* set by driver and peers */
+	ICE_GLOBR_REQ,		/* set by driver and peers */
+	ICE_CORER_RECV,		/* set by OICR handler */
+	ICE_GLOBR_RECV,		/* set by OICR handler */
+	ICE_EMPR_RECV,		/* set by OICR handler */
+	ICE_SUSPENDED,		/* set on module remove path */
+	ICE_RESET_FAILED,		/* set by reset/rebuild */
 	/* When checking for the PF to be in a nominal operating state, the
 	 * bits that are grouped at the beginning of the list need to be
-	 * checked. Bits occurring before __ICE_STATE_NOMINAL_CHECK_BITS will
+	 * checked. Bits occurring before ICE_STATE_NOMINAL_CHECK_BITS will
 	 * be checked. If you need to add a bit into consideration for nominal
 	 * operating state, it must be added before
-	 * __ICE_STATE_NOMINAL_CHECK_BITS. Do not move this entry's position
+	 * ICE_STATE_NOMINAL_CHECK_BITS. Do not move this entry's position
 	 * without appropriate consideration.
 	 */
-	__ICE_STATE_NOMINAL_CHECK_BITS,
-	__ICE_ADMINQ_EVENT_PENDING,
-	__ICE_MAILBOXQ_EVENT_PENDING,
-	__ICE_MDD_EVENT_PENDING,
-	__ICE_VFLR_EVENT_PENDING,
-	__ICE_FLTR_OVERFLOW_PROMISC,
-	__ICE_VF_DIS,
-	__ICE_CFG_BUSY,
-	__ICE_SERVICE_SCHED,
-	__ICE_SERVICE_DIS,
-	__ICE_FD_FLUSH_REQ,
-	__ICE_OICR_INTR_DIS,		/* Global OICR interrupt disabled */
-	__ICE_MDD_VF_PRINT_PENDING,	/* set when MDD event handle */
-	__ICE_VF_RESETS_DISABLED,	/* disable resets during ice_remove */
-	__ICE_LINK_DEFAULT_OVERRIDE_PENDING,
-	__ICE_PHY_INIT_COMPLETE,
-	__ICE_FD_VF_FLUSH_CTX,		/* set at FD Rx IRQ or timeout */
-	__ICE_STATE_NBITS		/* must be last */
+	ICE_STATE_NOMINAL_CHECK_BITS,
+	ICE_ADMINQ_EVENT_PENDING,
+	ICE_MAILBOXQ_EVENT_PENDING,
+	ICE_MDD_EVENT_PENDING,
+	ICE_VFLR_EVENT_PENDING,
+	ICE_FLTR_OVERFLOW_PROMISC,
+	ICE_VF_DIS,
+	ICE_CFG_BUSY,
+	ICE_SERVICE_SCHED,
+	ICE_SERVICE_DIS,
+	ICE_FD_FLUSH_REQ,
+	ICE_OICR_INTR_DIS,		/* Global OICR interrupt disabled */
+	ICE_MDD_VF_PRINT_PENDING,	/* set when MDD event handle */
+	ICE_VF_RESETS_DISABLED,	/* disable resets during ice_remove */
+	ICE_LINK_DEFAULT_OVERRIDE_PENDING,
+	ICE_PHY_INIT_COMPLETE,
+	ICE_FD_VF_FLUSH_CTX,		/* set at FD Rx IRQ or timeout */
+	ICE_STATE_NBITS		/* must be last */
 };
 
 enum ice_vsi_state {
 	ICE_VSI_DOWN,
 	ICE_VSI_NEEDS_RESTART,
+	ICE_VSI_NETDEV_ALLOCD,
+	ICE_VSI_NETDEV_REGISTERED,
 	ICE_VSI_UMAC_FLTR_CHANGED,
 	ICE_VSI_MMAC_FLTR_CHANGED,
 	ICE_VSI_VLAN_FLTR_CHANGED,
@@ -265,7 +270,6 @@ struct ice_vsi {
 	u32 tx_busy;
 	u32 rx_buf_failed;
 	u32 rx_page_failed;
-	u32 rx_gro_dropped;
 	u16 num_q_vectors;
 	u16 base_vector;		/* IRQ base for OS reserved vectors */
 	enum ice_vsi_type type;
@@ -348,7 +352,7 @@ struct ice_q_vector {
 	u16 reg_idx;
 	u8 num_ring_rx;			/* total number of Rx rings in vector */
 	u8 num_ring_tx;			/* total number of Tx rings in vector */
-	u8 itr_countdown;		/* when 0 should adjust adaptive ITR */
+	u8 wb_on_itr:1;			/* if true, WB on ITR is enabled */
 	/* in usecs, need to use ice_intrl_to_usecs_reg() before writing this
 	 * value to the device
 	 */
@@ -363,6 +367,8 @@ struct ice_q_vector {
 	struct irq_affinity_notify affinity_notify;
 
 	char name[ICE_INT_NAME_STR_LEN];
+
+	u16 total_events;	/* net_dim(): number of interrupts processed */
 } ____cacheline_internodealigned_in_smp;
 
 enum ice_pf_flags {
@@ -420,7 +426,7 @@ struct ice_pf {
 	u16 num_msix_per_vf;
 	/* used to ratelimit the MDD event logging */
 	unsigned long last_printed_mdd_jiffies;
-	DECLARE_BITMAP(state, __ICE_STATE_NBITS);
+	DECLARE_BITMAP(state, ICE_STATE_NBITS);
 	DECLARE_BITMAP(flags, ICE_PF_FLAGS_NBITS);
 	unsigned long *avail_txqs;	/* bitmap to track PF Tx queue usage */
 	unsigned long *avail_rxqs;	/* bitmap to track PF Rx queue usage */
@@ -631,7 +637,7 @@ int ice_schedule_reset(struct ice_pf *pf, enum ice_reset_req reset);
 void ice_print_link_msg(struct ice_vsi *vsi, bool isup);
 const char *ice_stat_str(enum ice_status stat_err);
 const char *ice_aq_str(enum ice_aq_err aq_err);
-bool ice_is_wol_supported(struct ice_pf *pf);
+bool ice_is_wol_supported(struct ice_hw *hw);
 int
 ice_fdir_write_fltr(struct ice_pf *pf, struct ice_fdir_fltr *input, bool add,
 		    bool is_tun);
@@ -649,6 +655,7 @@ int ice_fdir_create_dflt_rules(struct ice_pf *pf);
 int ice_aq_wait_for_event(struct ice_pf *pf, u16 opcode, unsigned long timeout,
 			  struct ice_rq_event_info *event);
 int ice_open(struct net_device *netdev);
+int ice_open_internal(struct net_device *netdev);
 int ice_stop(struct net_device *netdev);
 void ice_service_task_schedule(struct ice_pf *pf);
 

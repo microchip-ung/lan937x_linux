@@ -23,6 +23,8 @@
 /* PVT limits for 4-bit port and 5-bit switch */
 #define MV88E6XXX_MAX_PVT_SWITCHES	32
 #define MV88E6XXX_MAX_PVT_PORTS		16
+#define MV88E6XXX_MAX_PVT_ENTRIES	\
+	(MV88E6XXX_MAX_PVT_SWITCHES * MV88E6XXX_MAX_PVT_PORTS)
 
 #define MV88E6XXX_MAX_GPIO	16
 
@@ -96,6 +98,22 @@ enum mv88e6xxx_family {
 	MV88E6XXX_FAMILY_6393,	/* 6191X 6193X 6393X */
 };
 
+/**
+ * enum mv88e6xxx_edsa_support - Ethertype DSA tag support level
+ * @MV88E6XXX_EDSA_UNSUPPORTED:  Device has no support for EDSA tags
+ * @MV88E6XXX_EDSA_UNDOCUMENTED: Documentation indicates that
+ *                               egressing FORWARD frames with an EDSA
+ *                               tag is reserved for future use, but
+ *                               empirical data shows that this mode
+ *                               is supported.
+ * @MV88E6XXX_EDSA_SUPPORTED:    EDSA tags are fully supported.
+ */
+enum mv88e6xxx_edsa_support {
+	MV88E6XXX_EDSA_UNSUPPORTED = 0,
+	MV88E6XXX_EDSA_UNDOCUMENTED,
+	MV88E6XXX_EDSA_SUPPORTED,
+};
+
 struct mv88e6xxx_ops;
 
 struct mv88e6xxx_info {
@@ -133,7 +151,7 @@ struct mv88e6xxx_info {
 	 */
 	bool dual_chip;
 
-	enum dsa_tag_protocol tag_protocol;
+	enum mv88e6xxx_edsa_support edsa_support;
 
 	/* Mask for FromPort and ToPort value of PortVec used in ATU Move
 	 * operation. 0 means that the ATU Move operation is not supported.
@@ -250,6 +268,7 @@ enum mv88e6xxx_region_id {
 	MV88E6XXX_REGION_GLOBAL2,
 	MV88E6XXX_REGION_ATU,
 	MV88E6XXX_REGION_VTU,
+	MV88E6XXX_REGION_PVT,
 
 	_MV88E6XXX_REGION_MAX,
 };
@@ -260,6 +279,9 @@ struct mv88e6xxx_region_priv {
 
 struct mv88e6xxx_chip {
 	const struct mv88e6xxx_info *info;
+
+	/* Currently configured tagging protocol */
+	enum dsa_tag_protocol tag_protocol;
 
 	/* The dsa_switch this private structure is related to */
 	struct dsa_switch *ds;

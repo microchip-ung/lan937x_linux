@@ -2880,6 +2880,28 @@ static int hclge_get_mac_phy_link(struct hclge_dev *hdev, int *link_status)
 	return hclge_get_mac_link_status(hdev, link_status);
 }
 
+static void hclge_push_link_status(struct hclge_dev *hdev)
+{
+	struct hclge_vport *vport;
+	int ret;
+	u16 i;
+
+	for (i = 0; i < pci_num_vf(hdev->pdev); i++) {
+		vport = &hdev->vport[i + HCLGE_VF_VPORT_START_NUM];
+
+		if (!test_bit(HCLGE_VPORT_STATE_ALIVE, &vport->state) ||
+		    vport->vf_info.link_state != IFLA_VF_LINK_STATE_AUTO)
+			continue;
+
+		ret = hclge_push_vf_link_status(vport);
+		if (ret) {
+			dev_err(&hdev->pdev->dev,
+				"failed to push link status to vf%u, ret = %d\n",
+				i, ret);
+		}
+	}
+}
+
 static void hclge_update_link_status(struct hclge_dev *hdev)
 {
 	struct hnae3_handle *rhandle = &hdev->vport[0].roce;
@@ -2908,6 +2930,7 @@ static void hclge_update_link_status(struct hclge_dev *hdev)
 			rclient->ops->link_status_change(rhandle, state);
 
 		hdev->hw.mac.link = state;
+		hclge_push_link_status(hdev);
 	}
 
 	clear_bit(HCLGE_STATE_LINK_UPDATING, &hdev->state);
@@ -3246,14 +3269,24 @@ static int hclge_set_vf_link_state(struct hnae3_handle *handle, int vf,
 {
 	struct hclge_vport *vport = hclge_get_vport(handle);
 	struct hclge_dev *hdev = vport->back;
+	int link_state_old;
+	int ret;
 
 	vport = hclge_get_vf_vport(hdev, vf);
 	if (!vport)
 		return -EINVAL;
 
+	link_state_old = vport->vf_info.link_state;
 	vport->vf_info.link_state = link_state;
 
-	return 0;
+	ret = hclge_push_vf_link_status(vport);
+	if (ret) {
+		vport->vf_info.link_state = link_state_old;
+		dev_err(&hdev->pdev->dev,
+			"failed to push vf%d link status, ret = %d\n", vf, ret);
+	}
+
+	return ret;
 }
 
 static u32 hclge_check_event_cause(struct hclge_dev *hdev, u32 *clearval)
@@ -4118,7 +4151,6 @@ static void hclge_reset_event(struct pci_dev *pdev, struct hnae3_handle *handle)
 	 *    normalcy is to reset.
 	 * 2. A new reset request from the stack due to timeout
 	 *
-	 * For the first case,error event might not have ae handle available.
 	 * check if this is a new reset request and we are not here just because
 	 * last reset attempt did not succeed and watchdog hit us again. We will
 	 * know this if last reset request did not occur very recently (watchdog
@@ -4128,14 +4160,14 @@ static void hclge_reset_event(struct pci_dev *pdev, struct hnae3_handle *handle)
 	 * want to make sure we throttle the reset request. Therefore, we will
 	 * not allow it again before 3*HZ times.
 	 */
-	if (!handle)
-		handle = &hdev->vport[0].nic;
 
 	if (time_before(jiffies, (hdev->last_reset_time +
 				  HCLGE_RESET_INTERVAL))) {
 		mod_timer(&hdev->reset_timer, jiffies + HCLGE_RESET_INTERVAL);
 		return;
-	} else if (hdev->default_reset_request) {
+	}
+
+	if (hdev->default_reset_request) {
 		hdev->reset_level =
 			hclge_get_reset_level(ae_dev,
 					      &hdev->default_reset_request);
@@ -11058,10 +11090,11 @@ static void hclge_state_uninit(struct hclge_dev *hdev)
 		cancel_delayed_work_sync(&hdev->service_task);
 }
 
-static void hclge_flr_prepare(struct hnae3_ae_dev *ae_dev)
+static void hclge_reset_prepare_general(struct hnae3_ae_dev *ae_dev,
+					enum hnae3_reset_type rst_type)
 {
-#define HCLGE_FLR_RETRY_WAIT_MS	500
-#define HCLGE_FLR_RETRY_CNT	5
+#define HCLGE_RESET_RETRY_WAIT_MS	500
+#define HCLGE_RESET_RETRY_CNT	5
 
 	struct hclge_dev *hdev = ae_dev->priv;
 	int retry_cnt = 0;
@@ -11070,30 +11103,32 @@ static void hclge_flr_prepare(struct hnae3_ae_dev *ae_dev)
 retry:
 	down(&hdev->reset_sem);
 	set_bit(HCLGE_STATE_RST_HANDLING, &hdev->state);
-	hdev->reset_type = HNAE3_FLR_RESET;
+	hdev->reset_type = rst_type;
 	ret = hclge_reset_prepare(hdev);
 	if (ret || hdev->reset_pending) {
-		dev_err(&hdev->pdev->dev, "fail to prepare FLR, ret=%d\n",
+		dev_err(&hdev->pdev->dev, "fail to prepare to reset, ret=%d\n",
 			ret);
 		if (hdev->reset_pending ||
-		    retry_cnt++ < HCLGE_FLR_RETRY_CNT) {
+		    retry_cnt++ < HCLGE_RESET_RETRY_CNT) {
 			dev_err(&hdev->pdev->dev,
 				"reset_pending:0x%lx, retry_cnt:%d\n",
 				hdev->reset_pending, retry_cnt);
 			clear_bit(HCLGE_STATE_RST_HANDLING, &hdev->state);
 			up(&hdev->reset_sem);
-			msleep(HCLGE_FLR_RETRY_WAIT_MS);
+			msleep(HCLGE_RESET_RETRY_WAIT_MS);
 			goto retry;
 		}
 	}
 
-	/* disable misc vector before FLR done */
+	/* disable misc vector before reset done */
 	hclge_enable_vector(&hdev->misc_vector, false);
 	set_bit(HCLGE_STATE_CMD_DISABLE, &hdev->state);
-	hdev->rst_stats.flr_rst_cnt++;
+
+	if (hdev->reset_type == HNAE3_FLR_RESET)
+		hdev->rst_stats.flr_rst_cnt++;
 }
 
-static void hclge_flr_done(struct hnae3_ae_dev *ae_dev)
+static void hclge_reset_done(struct hnae3_ae_dev *ae_dev)
 {
 	struct hclge_dev *hdev = ae_dev->priv;
 	int ret;
@@ -11786,7 +11821,7 @@ static int hclge_set_channels(struct hnae3_handle *handle, u32 new_tqps_num,
 	if (ret)
 		return ret;
 
-	/* RSS indirection table has been configuared by user */
+	/* RSS indirection table has been configured by user */
 	if (rxfh_configured)
 		goto out;
 
@@ -12466,8 +12501,8 @@ static int hclge_get_module_eeprom(struct hnae3_handle *handle, u32 offset,
 static const struct hnae3_ae_ops hclge_ops = {
 	.init_ae_dev = hclge_init_ae_dev,
 	.uninit_ae_dev = hclge_uninit_ae_dev,
-	.flr_prepare = hclge_flr_prepare,
-	.flr_done = hclge_flr_done,
+	.reset_prepare = hclge_reset_prepare_general,
+	.reset_done = hclge_reset_done,
 	.init_client_instance = hclge_init_client_instance,
 	.uninit_client_instance = hclge_uninit_client_instance,
 	.map_ring_to_vector = hclge_map_ring_to_vector,

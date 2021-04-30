@@ -114,6 +114,18 @@ void mlx5e_stats_update_ndo_stats(struct mlx5e_priv *priv);
 
 void mlx5e_stats_pause_get(struct mlx5e_priv *priv,
 			   struct ethtool_pause_stats *pause_stats);
+void mlx5e_stats_fec_get(struct mlx5e_priv *priv,
+			 struct ethtool_fec_stats *fec_stats);
+
+void mlx5e_stats_eth_phy_get(struct mlx5e_priv *priv,
+			     struct ethtool_eth_phy_stats *phy_stats);
+void mlx5e_stats_eth_mac_get(struct mlx5e_priv *priv,
+			     struct ethtool_eth_mac_stats *mac_stats);
+void mlx5e_stats_eth_ctrl_get(struct mlx5e_priv *priv,
+			      struct ethtool_eth_ctrl_stats *ctrl_stats);
+void mlx5e_stats_rmon_get(struct mlx5e_priv *priv,
+			  struct ethtool_rmon_stats *rmon,
+			  const struct ethtool_rmon_hist_range **ranges);
 
 /* Concrete NIC Stats */
 
@@ -192,7 +204,6 @@ struct mlx5e_sw_stats {
 #ifdef CONFIG_MLX5_EN_TLS
 	u64 tx_tls_encrypted_packets;
 	u64 tx_tls_encrypted_bytes;
-	u64 tx_tls_ctx;
 	u64 tx_tls_ooo;
 	u64 tx_tls_dump_packets;
 	u64 tx_tls_dump_bytes;
@@ -203,13 +214,12 @@ struct mlx5e_sw_stats {
 
 	u64 rx_tls_decrypted_packets;
 	u64 rx_tls_decrypted_bytes;
-	u64 rx_tls_ctx;
-	u64 rx_tls_del;
 	u64 rx_tls_resync_req_pkt;
 	u64 rx_tls_resync_req_start;
 	u64 rx_tls_resync_req_end;
 	u64 rx_tls_resync_req_skip;
 	u64 rx_tls_resync_res_ok;
+	u64 rx_tls_resync_res_retry;
 	u64 rx_tls_resync_res_skip;
 	u64 rx_tls_err;
 #endif
@@ -335,13 +345,12 @@ struct mlx5e_rq_stats {
 #ifdef CONFIG_MLX5_EN_TLS
 	u64 tls_decrypted_packets;
 	u64 tls_decrypted_bytes;
-	u64 tls_ctx;
-	u64 tls_del;
 	u64 tls_resync_req_pkt;
 	u64 tls_resync_req_start;
 	u64 tls_resync_req_end;
 	u64 tls_resync_req_skip;
 	u64 tls_resync_res_ok;
+	u64 tls_resync_res_retry;
 	u64 tls_resync_res_skip;
 	u64 tls_err;
 #endif
@@ -365,7 +374,6 @@ struct mlx5e_sq_stats {
 #ifdef CONFIG_MLX5_EN_TLS
 	u64 tls_encrypted_packets;
 	u64 tls_encrypted_bytes;
-	u64 tls_ctx;
 	u64 tls_ooo;
 	u64 tls_dump_packets;
 	u64 tls_dump_bytes;

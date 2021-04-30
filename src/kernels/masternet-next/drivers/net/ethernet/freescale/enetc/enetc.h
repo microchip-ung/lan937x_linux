@@ -30,7 +30,7 @@ struct enetc_tx_swbd {
 	enum dma_data_direction dir;
 	u8 is_dma_page:1;
 	u8 check_wb:1;
-	u8 do_tstamp:1;
+	u8 do_twostep_tstamp:1;
 	u8 is_eof:1;
 	u8 is_xdp_tx:1;
 	u8 is_xdp_redirect:1;
@@ -79,7 +79,7 @@ struct enetc_xdp_data {
 };
 
 #define ENETC_RX_RING_DEFAULT_SIZE	2048
-#define ENETC_TX_RING_DEFAULT_SIZE	256
+#define ENETC_TX_RING_DEFAULT_SIZE	2048
 #define ENETC_DEFAULT_TX_WORK		(ENETC_TX_RING_DEFAULT_SIZE / 2)
 
 struct enetc_bdr {
@@ -237,6 +237,22 @@ static inline bool enetc_si_is_pf(struct enetc_si *si)
 	return !!(si->hw.port);
 }
 
+static inline int enetc_pf_to_port(struct pci_dev *pf_pdev)
+{
+	switch (pf_pdev->devfn) {
+	case 0:
+		return 0;
+	case 1:
+		return 1;
+	case 2:
+		return 2;
+	case 6:
+		return 3;
+	default:
+		return -1;
+	}
+}
+
 #define ENETC_MAX_NUM_TXQS	8
 #define ENETC_INT_NAME_MAX	(IFNAMSIZ + 8)
 
@@ -271,12 +287,20 @@ struct psfp_cap {
 	u32 max_psfp_meter;
 };
 
+#define ENETC_F_TX_TSTAMP_MASK	0xff
 /* TODO: more hardware offloads */
 enum enetc_active_offloads {
-	ENETC_F_RX_TSTAMP	= BIT(0),
-	ENETC_F_TX_TSTAMP	= BIT(1),
-	ENETC_F_QBV             = BIT(2),
-	ENETC_F_QCI		= BIT(3),
+	/* 8 bits reserved for TX timestamp types (hwtstamp_tx_types) */
+	ENETC_F_TX_TSTAMP		= BIT(0),
+	ENETC_F_TX_ONESTEP_SYNC_TSTAMP	= BIT(1),
+
+	ENETC_F_RX_TSTAMP		= BIT(8),
+	ENETC_F_QBV			= BIT(9),
+	ENETC_F_QCI			= BIT(10),
+};
+
+enum enetc_flags_bit {
+	ENETC_TX_ONESTEP_TSTAMP_IN_PROGRESS = 0,
 };
 
 /* interrupt coalescing modes */
@@ -309,6 +333,7 @@ struct enetc_ndev_priv {
 
 	u32 speed; /* store speed for compare update pspeed */
 
+	struct enetc_bdr **xdp_tx_ring;
 	struct enetc_bdr *tx_ring[16];
 	struct enetc_bdr *rx_ring[16];
 
@@ -321,6 +346,11 @@ struct enetc_ndev_priv {
 	u32 tx_ictt;
 
 	struct bpf_prog *xdp_prog;
+
+	unsigned long flags;
+
+	struct work_struct	tx_onestep_tstamp;
+	struct sk_buff_head	tx_skbs;
 };
 
 /* Messaging */

@@ -67,7 +67,7 @@
  */
 
 /* The name of the GSI firmware file relative to /lib/firmware */
-#define IPA_FWS_PATH		"ipa_fws.mdt"
+#define IPA_FW_PATH_DEFAULT	"ipa_fws.mdt"
 #define IPA_PAS_ID		15
 
 /* Shift of 19.2 MHz timestamp to achieve lower resolution timestamps */
@@ -147,13 +147,13 @@ int ipa_setup(struct ipa *ipa)
 	if (ret)
 		goto err_endpoint_teardown;
 
-	ret = ipa_mem_setup(ipa);
+	ret = ipa_mem_setup(ipa);	/* No matching teardown required */
 	if (ret)
 		goto err_command_disable;
 
-	ret = ipa_table_setup(ipa);
+	ret = ipa_table_setup(ipa);	/* No matching teardown required */
 	if (ret)
-		goto err_mem_teardown;
+		goto err_command_disable;
 
 	/* Enable the exception handling endpoint, and tell the hardware
 	 * to use it by default.
@@ -161,7 +161,7 @@ int ipa_setup(struct ipa *ipa)
 	exception_endpoint = ipa->name_map[IPA_ENDPOINT_AP_LAN_RX];
 	ret = ipa_endpoint_enable_one(exception_endpoint);
 	if (ret)
-		goto err_table_teardown;
+		goto err_command_disable;
 
 	ipa_endpoint_default_route_set(ipa, exception_endpoint->endpoint_id);
 
@@ -179,10 +179,6 @@ int ipa_setup(struct ipa *ipa)
 err_default_route_clear:
 	ipa_endpoint_default_route_clear(ipa);
 	ipa_endpoint_disable_one(exception_endpoint);
-err_table_teardown:
-	ipa_table_teardown(ipa);
-err_mem_teardown:
-	ipa_mem_teardown(ipa);
 err_command_disable:
 	ipa_endpoint_disable_one(command_endpoint);
 err_endpoint_teardown:
@@ -211,8 +207,6 @@ static void ipa_teardown(struct ipa *ipa)
 	ipa_endpoint_default_route_clear(ipa);
 	exception_endpoint = ipa->name_map[IPA_ENDPOINT_AP_LAN_RX];
 	ipa_endpoint_disable_one(exception_endpoint);
-	ipa_table_teardown(ipa);
-	ipa_mem_teardown(ipa);
 	command_endpoint = ipa->name_map[IPA_ENDPOINT_AP_COMMAND_TX];
 	ipa_endpoint_disable_one(command_endpoint);
 	ipa_endpoint_teardown(ipa);
@@ -480,23 +474,20 @@ static int ipa_config(struct ipa *ipa, const struct ipa_data *data)
 	if (ret)
 		goto err_endpoint_deconfig;
 
-	ipa_table_config(ipa);
+	ipa_table_config(ipa);		/* No deconfig required */
 
-	/* Assign resource limitation to each group */
+	/* Assign resource limitation to each group; no deconfig required */
 	ret = ipa_resource_config(ipa, data->resource_data);
 	if (ret)
-		goto err_table_deconfig;
+		goto err_mem_deconfig;
 
 	ret = ipa_modem_config(ipa);
 	if (ret)
-		goto err_resource_deconfig;
+		goto err_mem_deconfig;
 
 	return 0;
 
-err_resource_deconfig:
-	ipa_resource_deconfig(ipa);
-err_table_deconfig:
-	ipa_table_deconfig(ipa);
+err_mem_deconfig:
 	ipa_mem_deconfig(ipa);
 err_endpoint_deconfig:
 	ipa_endpoint_deconfig(ipa);
@@ -514,8 +505,6 @@ err_hardware_deconfig:
 static void ipa_deconfig(struct ipa *ipa)
 {
 	ipa_modem_deconfig(ipa);
-	ipa_resource_deconfig(ipa);
-	ipa_table_deconfig(ipa);
 	ipa_mem_deconfig(ipa);
 	ipa_endpoint_deconfig(ipa);
 	ipa_hardware_deconfig(ipa);
@@ -528,6 +517,7 @@ static int ipa_firmware_load(struct device *dev)
 	struct device_node *node;
 	struct resource res;
 	phys_addr_t phys;
+	const char *path;
 	ssize_t size;
 	void *virt;
 	int ret;
@@ -545,9 +535,17 @@ static int ipa_firmware_load(struct device *dev)
 		return ret;
 	}
 
-	ret = request_firmware(&fw, IPA_FWS_PATH, dev);
+	/* Use name from DTB if specified; use default for *any* error */
+	ret = of_property_read_string(dev->of_node, "firmware-name", &path);
 	if (ret) {
-		dev_err(dev, "error %d requesting \"%s\"\n", ret, IPA_FWS_PATH);
+		dev_dbg(dev, "error %d getting \"firmware-name\" resource\n",
+			ret);
+		path = IPA_FW_PATH_DEFAULT;
+	}
+
+	ret = request_firmware(&fw, path, dev);
+	if (ret) {
+		dev_err(dev, "error %d requesting \"%s\"\n", ret, path);
 		return ret;
 	}
 
@@ -560,13 +558,11 @@ static int ipa_firmware_load(struct device *dev)
 		goto out_release_firmware;
 	}
 
-	ret = qcom_mdt_load(dev, fw, IPA_FWS_PATH, IPA_PAS_ID,
-			    virt, phys, size, NULL);
+	ret = qcom_mdt_load(dev, fw, path, IPA_PAS_ID, virt, phys, size, NULL);
 	if (ret)
-		dev_err(dev, "error %d loading \"%s\"\n", ret, IPA_FWS_PATH);
+		dev_err(dev, "error %d loading \"%s\"\n", ret, path);
 	else if ((ret = qcom_scm_pas_auth_and_reset(IPA_PAS_ID)))
-		dev_err(dev, "error %d authenticating \"%s\"\n", ret,
-			IPA_FWS_PATH);
+		dev_err(dev, "error %d authenticating \"%s\"\n", ret, path);
 
 	memunmap(virt);
 out_release_firmware:
@@ -583,6 +579,18 @@ static const struct of_device_id ipa_match[] = {
 	{
 		.compatible	= "qcom,sc7180-ipa",
 		.data		= &ipa_data_v4_2,
+	},
+	{
+		.compatible	= "qcom,sdx55-ipa",
+		.data		= &ipa_data_v4_5,
+	},
+	{
+		.compatible	= "qcom,sm8350-ipa",
+		.data		= &ipa_data_v4_9,
+	},
+	{
+		.compatible	= "qcom,sc7280-ipa",
+		.data		= &ipa_data_v4_11,
 	},
 	{ },
 };

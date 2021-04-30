@@ -6,7 +6,28 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <linux/vmalloc.h>
+#include <linux/ptp_classify.h>
 #include <net/pkt_sched.h>
+
+static int enetc_num_stack_tx_queues(struct enetc_ndev_priv *priv)
+{
+	int num_tx_rings = priv->num_tx_rings;
+	int i;
+
+	for (i = 0; i < priv->num_rx_rings; i++)
+		if (priv->rx_ring[i]->xdp.prog)
+			return num_tx_rings - num_possible_cpus();
+
+	return num_tx_rings;
+}
+
+static struct enetc_bdr *enetc_rx_ring_from_xdp_tx_ring(struct enetc_ndev_priv *priv,
+							struct enetc_bdr *tx_ring)
+{
+	int index = &priv->tx_ring[tx_ring->index] - priv->xdp_tx_ring;
+
+	return priv->rx_ring[index];
+}
 
 static struct sk_buff *enetc_tx_swbd_get_skb(struct enetc_tx_swbd *tx_swbd)
 {
@@ -67,16 +88,52 @@ static void enetc_update_tx_ring_tail(struct enetc_bdr *tx_ring)
 	enetc_wr_reg_hot(tx_ring->tpir, tx_ring->next_to_use);
 }
 
-static int enetc_map_tx_buffs(struct enetc_bdr *tx_ring, struct sk_buff *skb,
-			      int active_offloads)
+static int enetc_ptp_parse(struct sk_buff *skb, u8 *udp,
+			   u8 *msgtype, u8 *twostep,
+			   u16 *correction_offset, u16 *body_offset)
 {
+	unsigned int ptp_class;
+	struct ptp_header *hdr;
+	unsigned int type;
+	u8 *base;
+
+	ptp_class = ptp_classify_raw(skb);
+	if (ptp_class == PTP_CLASS_NONE)
+		return -EINVAL;
+
+	hdr = ptp_parse_header(skb, ptp_class);
+	if (!hdr)
+		return -EINVAL;
+
+	type = ptp_class & PTP_CLASS_PMASK;
+	if (type == PTP_CLASS_IPV4 || type == PTP_CLASS_IPV6)
+		*udp = 1;
+	else
+		*udp = 0;
+
+	*msgtype = ptp_get_msgtype(hdr, ptp_class);
+	*twostep = hdr->flag_field[0] & 0x2;
+
+	base = skb_mac_header(skb);
+	*correction_offset = (u8 *)&hdr->correction - base;
+	*body_offset = (u8 *)hdr + sizeof(struct ptp_header) - base;
+
+	return 0;
+}
+
+static int enetc_map_tx_buffs(struct enetc_bdr *tx_ring, struct sk_buff *skb)
+{
+	bool do_vlan, do_onestep_tstamp = false, do_twostep_tstamp = false;
+	struct enetc_ndev_priv *priv = netdev_priv(tx_ring->ndev);
+	struct enetc_hw *hw = &priv->si->hw;
 	struct enetc_tx_swbd *tx_swbd;
-	skb_frag_t *frag;
 	int len = skb_headlen(skb);
 	union enetc_tx_bd temp_bd;
+	u8 msgtype, twostep, udp;
 	union enetc_tx_bd *txbd;
-	bool do_vlan, do_tstamp;
+	u16 offset1, offset2;
 	int i, count = 0;
+	skb_frag_t *frag;
 	unsigned int f;
 	dma_addr_t dma;
 	u8 flags = 0;
@@ -101,12 +158,21 @@ static int enetc_map_tx_buffs(struct enetc_bdr *tx_ring, struct sk_buff *skb,
 	count++;
 
 	do_vlan = skb_vlan_tag_present(skb);
-	do_tstamp = (active_offloads & ENETC_F_TX_TSTAMP) &&
-		    (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP);
-	tx_swbd->do_tstamp = do_tstamp;
-	tx_swbd->check_wb = tx_swbd->do_tstamp;
+	if (skb->cb[0] & ENETC_F_TX_ONESTEP_SYNC_TSTAMP) {
+		if (enetc_ptp_parse(skb, &udp, &msgtype, &twostep, &offset1,
+				    &offset2) ||
+		    msgtype != PTP_MSGTYPE_SYNC || twostep)
+			WARN_ONCE(1, "Bad packet for one-step timestamping\n");
+		else
+			do_onestep_tstamp = true;
+	} else if (skb->cb[0] & ENETC_F_TX_TSTAMP) {
+		do_twostep_tstamp = true;
+	}
 
-	if (do_vlan || do_tstamp)
+	tx_swbd->do_twostep_tstamp = do_twostep_tstamp;
+	tx_swbd->check_wb = tx_swbd->do_twostep_tstamp;
+
+	if (do_vlan || do_onestep_tstamp || do_twostep_tstamp)
 		flags |= ENETC_TXBD_FLAGS_EX;
 
 	if (tx_ring->tsd_enable)
@@ -143,7 +209,40 @@ static int enetc_map_tx_buffs(struct enetc_bdr *tx_ring, struct sk_buff *skb,
 			e_flags |= ENETC_TXBD_E_FLAGS_VLAN_INS;
 		}
 
-		if (do_tstamp) {
+		if (do_onestep_tstamp) {
+			u32 lo, hi, val;
+			u64 sec, nsec;
+			u8 *data;
+
+			lo = enetc_rd_hot(hw, ENETC_SICTR0);
+			hi = enetc_rd_hot(hw, ENETC_SICTR1);
+			sec = (u64)hi << 32 | lo;
+			nsec = do_div(sec, 1000000000);
+
+			/* Configure extension BD */
+			temp_bd.ext.tstamp = cpu_to_le32(lo & 0x3fffffff);
+			e_flags |= ENETC_TXBD_E_FLAGS_ONE_STEP_PTP;
+
+			/* Update originTimestamp field of Sync packet
+			 * - 48 bits seconds field
+			 * - 32 bits nanseconds field
+			 */
+			data = skb_mac_header(skb);
+			*(__be16 *)(data + offset2) =
+				htons((sec >> 32) & 0xffff);
+			*(__be32 *)(data + offset2 + 2) =
+				htonl(sec & 0xffffffff);
+			*(__be32 *)(data + offset2 + 6) = htonl(nsec);
+
+			/* Configure single-step register */
+			val = ENETC_PM0_SINGLE_STEP_EN;
+			val |= ENETC_SET_SINGLE_STEP_OFFSET(offset1);
+			if (udp)
+				val |= ENETC_PM0_SINGLE_STEP_CH;
+
+			enetc_port_wr(hw, ENETC_PM0_SINGLE_STEP, val);
+			enetc_port_wr(hw, ENETC_PM1_SINGLE_STEP, val);
+		} else if (do_twostep_tstamp) {
 			skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
 			e_flags |= ENETC_TXBD_E_FLAGS_TWO_STEP_PTP;
 		}
@@ -215,7 +314,8 @@ dma_err:
 	return 0;
 }
 
-netdev_tx_t enetc_xmit(struct sk_buff *skb, struct net_device *ndev)
+static netdev_tx_t enetc_start_xmit(struct sk_buff *skb,
+				    struct net_device *ndev)
 {
 	struct enetc_ndev_priv *priv = netdev_priv(ndev);
 	struct enetc_bdr *tx_ring;
@@ -234,7 +334,7 @@ netdev_tx_t enetc_xmit(struct sk_buff *skb, struct net_device *ndev)
 	}
 
 	enetc_lock_mdio();
-	count = enetc_map_tx_buffs(tx_ring, skb, priv->active_offloads);
+	count = enetc_map_tx_buffs(tx_ring, skb);
 	enetc_unlock_mdio();
 
 	if (unlikely(!count))
@@ -248,6 +348,40 @@ netdev_tx_t enetc_xmit(struct sk_buff *skb, struct net_device *ndev)
 drop_packet_err:
 	dev_kfree_skb_any(skb);
 	return NETDEV_TX_OK;
+}
+
+netdev_tx_t enetc_xmit(struct sk_buff *skb, struct net_device *ndev)
+{
+	struct enetc_ndev_priv *priv = netdev_priv(ndev);
+	u8 udp, msgtype, twostep;
+	u16 offset1, offset2;
+
+	/* Mark tx timestamp type on skb->cb[0] if requires */
+	if ((skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) &&
+	    (priv->active_offloads & ENETC_F_TX_TSTAMP_MASK)) {
+		skb->cb[0] = priv->active_offloads & ENETC_F_TX_TSTAMP_MASK;
+	} else {
+		skb->cb[0] = 0;
+	}
+
+	/* Fall back to two-step timestamp if not one-step Sync packet */
+	if (skb->cb[0] & ENETC_F_TX_ONESTEP_SYNC_TSTAMP) {
+		if (enetc_ptp_parse(skb, &udp, &msgtype, &twostep,
+				    &offset1, &offset2) ||
+		    msgtype != PTP_MSGTYPE_SYNC || twostep != 0)
+			skb->cb[0] = ENETC_F_TX_TSTAMP;
+	}
+
+	/* Queue one-step Sync packet if already locked */
+	if (skb->cb[0] & ENETC_F_TX_ONESTEP_SYNC_TSTAMP) {
+		if (test_and_set_bit_lock(ENETC_TX_ONESTEP_TSTAMP_IN_PROGRESS,
+					  &priv->flags)) {
+			skb_queue_tail(&priv->tx_skbs, skb);
+			return NETDEV_TX_OK;
+		}
+	}
+
+	return enetc_start_xmit(skb, ndev);
 }
 
 static irqreturn_t enetc_msix(int irq, void *data)
@@ -354,7 +488,6 @@ static void enetc_recycle_xdp_tx_buff(struct enetc_bdr *tx_ring,
 				      struct enetc_tx_swbd *tx_swbd)
 {
 	struct enetc_ndev_priv *priv = netdev_priv(tx_ring->ndev);
-	struct enetc_bdr *rx_ring = priv->rx_ring[tx_ring->index];
 	struct enetc_rx_swbd rx_swbd = {
 		.dma = tx_swbd->dma,
 		.page = tx_swbd->page,
@@ -362,6 +495,9 @@ static void enetc_recycle_xdp_tx_buff(struct enetc_bdr *tx_ring,
 		.dir = tx_swbd->dir,
 		.len = tx_swbd->len,
 	};
+	struct enetc_bdr *rx_ring;
+
+	rx_ring = enetc_rx_ring_from_xdp_tx_ring(priv, tx_ring);
 
 	if (likely(enetc_swbd_unused(rx_ring))) {
 		enetc_reuse_page(rx_ring, &rx_swbd);
@@ -390,10 +526,11 @@ static void enetc_recycle_xdp_tx_buff(struct enetc_bdr *tx_ring,
 static bool enetc_clean_tx_ring(struct enetc_bdr *tx_ring, int napi_budget)
 {
 	struct net_device *ndev = tx_ring->ndev;
+	struct enetc_ndev_priv *priv = netdev_priv(ndev);
 	int tx_frm_cnt = 0, tx_byte_cnt = 0;
 	struct enetc_tx_swbd *tx_swbd;
 	int i, bds_to_clean;
-	bool do_tstamp;
+	bool do_twostep_tstamp;
 	u64 tstamp = 0;
 
 	i = tx_ring->next_to_clean;
@@ -401,11 +538,12 @@ static bool enetc_clean_tx_ring(struct enetc_bdr *tx_ring, int napi_budget)
 
 	bds_to_clean = enetc_bd_ready_count(tx_ring, i);
 
-	do_tstamp = false;
+	do_twostep_tstamp = false;
 
 	while (bds_to_clean && tx_frm_cnt < ENETC_DEFAULT_TX_WORK) {
 		struct xdp_frame *xdp_frame = enetc_tx_swbd_get_xdp_frame(tx_swbd);
 		struct sk_buff *skb = enetc_tx_swbd_get_skb(tx_swbd);
+		bool is_eof = tx_swbd->is_eof;
 
 		if (unlikely(tx_swbd->check_wb)) {
 			struct enetc_ndev_priv *priv = netdev_priv(ndev);
@@ -414,10 +552,10 @@ static bool enetc_clean_tx_ring(struct enetc_bdr *tx_ring, int napi_budget)
 			txbd = ENETC_TXBD(*tx_ring, i);
 
 			if (txbd->flags & ENETC_TXBD_FLAGS_W &&
-			    tx_swbd->do_tstamp) {
+			    tx_swbd->do_twostep_tstamp) {
 				enetc_get_tx_tstamp(&priv->si->hw, txbd,
 						    &tstamp);
-				do_tstamp = true;
+				do_twostep_tstamp = true;
 			}
 		}
 
@@ -428,14 +566,19 @@ static bool enetc_clean_tx_ring(struct enetc_bdr *tx_ring, int napi_budget)
 
 		if (xdp_frame) {
 			xdp_return_frame(xdp_frame);
-			tx_swbd->xdp_frame = NULL;
 		} else if (skb) {
-			if (unlikely(do_tstamp)) {
+			if (unlikely(tx_swbd->skb->cb[0] &
+				     ENETC_F_TX_ONESTEP_SYNC_TSTAMP)) {
+				/* Start work to release lock for next one-step
+				 * timestamping packet. And send one skb in
+				 * tx_skbs queue if has.
+				 */
+				schedule_work(&priv->tx_onestep_tstamp);
+			} else if (unlikely(do_twostep_tstamp)) {
 				enetc_tstamp_tx(skb, tstamp);
-				do_tstamp = false;
+				do_twostep_tstamp = false;
 			}
 			napi_consume_skb(skb, napi_budget);
-			tx_swbd->skb = NULL;
 		}
 
 		tx_byte_cnt += tx_swbd->len;
@@ -453,7 +596,7 @@ static bool enetc_clean_tx_ring(struct enetc_bdr *tx_ring, int napi_budget)
 		}
 
 		/* BD iteration loop end */
-		if (tx_swbd->is_eof) {
+		if (is_eof) {
 			tx_frm_cnt++;
 			/* re-arm interrupt source */
 			enetc_wr_reg_hot(tx_ring->idr, BIT(tx_ring->index) |
@@ -630,27 +773,35 @@ static struct enetc_rx_swbd *enetc_get_rx_buff(struct enetc_bdr *rx_ring,
 	return rx_swbd;
 }
 
+/* Reuse the current page without performing half-page buffer flipping */
 static void enetc_put_rx_buff(struct enetc_bdr *rx_ring,
 			      struct enetc_rx_swbd *rx_swbd)
 {
-	if (likely(enetc_page_reusable(rx_swbd->page))) {
-		size_t buffer_size = ENETC_RXB_TRUESIZE - rx_ring->buffer_offset;
+	size_t buffer_size = ENETC_RXB_TRUESIZE - rx_ring->buffer_offset;
 
+	enetc_reuse_page(rx_ring, rx_swbd);
+
+	dma_sync_single_range_for_device(rx_ring->dev, rx_swbd->dma,
+					 rx_swbd->page_offset,
+					 buffer_size, rx_swbd->dir);
+
+	rx_swbd->page = NULL;
+}
+
+/* Reuse the current page by performing half-page buffer flipping */
+static void enetc_flip_rx_buff(struct enetc_bdr *rx_ring,
+			       struct enetc_rx_swbd *rx_swbd)
+{
+	if (likely(enetc_page_reusable(rx_swbd->page))) {
 		rx_swbd->page_offset ^= ENETC_RXB_TRUESIZE;
 		page_ref_inc(rx_swbd->page);
 
-		enetc_reuse_page(rx_ring, rx_swbd);
-
-		/* sync for use by the device */
-		dma_sync_single_range_for_device(rx_ring->dev, rx_swbd->dma,
-						 rx_swbd->page_offset,
-						 buffer_size, rx_swbd->dir);
+		enetc_put_rx_buff(rx_ring, rx_swbd);
 	} else {
 		dma_unmap_page(rx_ring->dev, rx_swbd->dma, PAGE_SIZE,
 			       rx_swbd->dir);
+		rx_swbd->page = NULL;
 	}
-
-	rx_swbd->page = NULL;
 }
 
 static struct sk_buff *enetc_map_rx_buff_to_skb(struct enetc_bdr *rx_ring,
@@ -670,7 +821,7 @@ static struct sk_buff *enetc_map_rx_buff_to_skb(struct enetc_bdr *rx_ring,
 	skb_reserve(skb, rx_ring->buffer_offset);
 	__skb_put(skb, size);
 
-	enetc_put_rx_buff(rx_ring, rx_swbd);
+	enetc_flip_rx_buff(rx_ring, rx_swbd);
 
 	return skb;
 }
@@ -683,7 +834,7 @@ static void enetc_add_rx_buff_to_skb(struct enetc_bdr *rx_ring, int i,
 	skb_add_rx_frag(skb, skb_shinfo(skb)->nr_frags, rx_swbd->page,
 			rx_swbd->page_offset, size, ENETC_RXB_TRUESIZE);
 
-	enetc_put_rx_buff(rx_ring, rx_swbd);
+	enetc_flip_rx_buff(rx_ring, rx_swbd);
 }
 
 static bool enetc_check_bd_errors_and_consume(struct enetc_bdr *rx_ring,
@@ -693,12 +844,14 @@ static bool enetc_check_bd_errors_and_consume(struct enetc_bdr *rx_ring,
 	if (likely(!(bd_status & ENETC_RXBD_LSTATUS(ENETC_RXBD_ERR_MASK))))
 		return false;
 
+	enetc_put_rx_buff(rx_ring, &rx_ring->rx_swbd[*i]);
 	enetc_rxbd_next(rx_ring, rxbd, i);
 
 	while (!(bd_status & ENETC_RXBD_LSTATUS_F)) {
 		dma_rmb();
 		bd_status = le32_to_cpu((*rxbd)->r.lstatus);
 
+		enetc_put_rx_buff(rx_ring, &rx_ring->rx_swbd[*i]);
 		enetc_rxbd_next(rx_ring, rxbd, i);
 	}
 
@@ -895,7 +1048,7 @@ static int enetc_xdp_frame_to_xdp_tx_swbd(struct enetc_bdr *tx_ring,
 		dma = dma_map_single(tx_ring->dev, data, len, DMA_TO_DEVICE);
 		if (unlikely(dma_mapping_error(tx_ring->dev, dma))) {
 			/* Undo the DMA mapping for all fragments */
-			while (n-- >= 0)
+			while (--n >= 0)
 				enetc_unmap_tx_buff(tx_ring, &xdp_tx_arr[n]);
 
 			netdev_err(tx_ring->ndev, "DMA map error\n");
@@ -928,7 +1081,9 @@ int enetc_xdp_xmit(struct net_device *ndev, int num_frames,
 	int xdp_tx_bd_cnt, i, k;
 	int xdp_tx_frm_cnt = 0;
 
-	tx_ring = priv->tx_ring[smp_processor_id()];
+	enetc_lock_mdio();
+
+	tx_ring = priv->xdp_tx_ring[smp_processor_id()];
 
 	prefetchw(ENETC_TXBD(*tx_ring, tx_ring->next_to_use));
 
@@ -955,6 +1110,8 @@ int enetc_xdp_xmit(struct net_device *ndev, int num_frames,
 		enetc_update_tx_ring_tail(tx_ring);
 
 	tx_ring->stats.xdp_tx += xdp_tx_frm_cnt;
+
+	enetc_unlock_mdio();
 
 	return xdp_tx_frm_cnt;
 }
@@ -1021,24 +1178,8 @@ static void enetc_build_xdp_buff(struct enetc_bdr *rx_ring, u32 bd_status,
 	}
 }
 
-/* Reuse the current page without performing half-page buffer flipping */
-static void enetc_put_xdp_buff(struct enetc_bdr *rx_ring,
-			       struct enetc_rx_swbd *rx_swbd)
-{
-	enetc_reuse_page(rx_ring, rx_swbd);
-
-	dma_sync_single_range_for_device(rx_ring->dev, rx_swbd->dma,
-					 rx_swbd->page_offset,
-					 ENETC_RXB_DMA_SIZE_XDP,
-					 rx_swbd->dir);
-
-	rx_swbd->page = NULL;
-}
-
 /* Convert RX buffer descriptors to TX buffer descriptors. These will be
- * recycled back into the RX ring in enetc_clean_tx_ring. We need to scrub the
- * RX software BDs because the ownership of the buffer no longer belongs to the
- * RX ring, so enetc_refill_rx_ring may not reuse rx_swbd->page.
+ * recycled back into the RX ring in enetc_clean_tx_ring.
  */
 static int enetc_rx_swbd_to_xdp_tx_swbd(struct enetc_tx_swbd *xdp_tx_arr,
 					struct enetc_bdr *rx_ring,
@@ -1060,7 +1201,6 @@ static int enetc_rx_swbd_to_xdp_tx_swbd(struct enetc_tx_swbd *xdp_tx_arr,
 		tx_swbd->is_dma_page = true;
 		tx_swbd->is_xdp_tx = true;
 		tx_swbd->is_eof = false;
-		memset(rx_swbd, 0, sizeof(*rx_swbd));
 	}
 
 	/* We rely on caller providing an rx_ring_last > rx_ring_first */
@@ -1073,8 +1213,8 @@ static void enetc_xdp_drop(struct enetc_bdr *rx_ring, int rx_ring_first,
 			   int rx_ring_last)
 {
 	while (rx_ring_first != rx_ring_last) {
-		enetc_put_xdp_buff(rx_ring,
-				   &rx_ring->rx_swbd[rx_ring_first]);
+		enetc_put_rx_buff(rx_ring,
+				  &rx_ring->rx_swbd[rx_ring_first]);
 		enetc_bdr_idx_inc(rx_ring, &rx_ring_first);
 	}
 	rx_ring->stats.xdp_drops++;
@@ -1104,8 +1244,8 @@ static int enetc_clean_rx_ring_xdp(struct enetc_bdr *rx_ring,
 	int xdp_tx_bd_cnt, xdp_tx_frm_cnt = 0, xdp_redirect_frm_cnt = 0;
 	struct enetc_tx_swbd xdp_tx_arr[ENETC_MAX_SKB_FRAGS] = {0};
 	struct enetc_ndev_priv *priv = netdev_priv(rx_ring->ndev);
-	struct enetc_bdr *tx_ring = priv->tx_ring[rx_ring->index];
 	int rx_frm_cnt = 0, rx_byte_cnt = 0;
+	struct enetc_bdr *tx_ring;
 	int cleaned_cnt, i;
 	u32 xdp_act;
 
@@ -1143,6 +1283,9 @@ static int enetc_clean_rx_ring_xdp(struct enetc_bdr *rx_ring,
 		xdp_act = bpf_prog_run_xdp(prog, &xdp_buff);
 
 		switch (xdp_act) {
+		default:
+			bpf_warn_invalid_xdp_action(xdp_act);
+			fallthrough;
 		case XDP_ABORTED:
 			trace_xdp_exception(rx_ring->ndev, prog, xdp_act);
 			fallthrough;
@@ -1158,12 +1301,12 @@ static int enetc_clean_rx_ring_xdp(struct enetc_bdr *rx_ring,
 					      &i, &cleaned_cnt,
 					      ENETC_RXB_DMA_SIZE_XDP);
 			if (unlikely(!skb))
-				/* Exit the switch/case, not the loop */
-				break;
+				goto out;
 
 			napi_gro_receive(napi, skb);
 			break;
 		case XDP_TX:
+			tx_ring = priv->xdp_tx_ring[rx_ring->index];
 			xdp_tx_bd_cnt = enetc_rx_swbd_to_xdp_tx_swbd(xdp_tx_arr,
 								     rx_ring,
 								     orig_i, i);
@@ -1175,6 +1318,17 @@ static int enetc_clean_rx_ring_xdp(struct enetc_bdr *rx_ring,
 				tx_ring->stats.xdp_tx += xdp_tx_bd_cnt;
 				rx_ring->xdp.xdp_tx_in_flight += xdp_tx_bd_cnt;
 				xdp_tx_frm_cnt++;
+				/* The XDP_TX enqueue was successful, so we
+				 * need to scrub the RX software BDs because
+				 * the ownership of the buffers no longer
+				 * belongs to the RX ring, and we must prevent
+				 * enetc_refill_rx_ring() from reusing
+				 * rx_swbd->page.
+				 */
+				while (orig_i != i) {
+					rx_ring->rx_swbd[orig_i].page = NULL;
+					enetc_bdr_idx_inc(rx_ring, &orig_i);
+				}
 			}
 			break;
 		case XDP_REDIRECT:
@@ -1195,8 +1349,8 @@ static int enetc_clean_rx_ring_xdp(struct enetc_bdr *rx_ring,
 			tmp_orig_i = orig_i;
 
 			while (orig_i != i) {
-				enetc_put_rx_buff(rx_ring,
-						  &rx_ring->rx_swbd[orig_i]);
+				enetc_flip_rx_buff(rx_ring,
+						   &rx_ring->rx_swbd[orig_i]);
 				enetc_bdr_idx_inc(rx_ring, &orig_i);
 			}
 
@@ -1207,20 +1361,12 @@ static int enetc_clean_rx_ring_xdp(struct enetc_bdr *rx_ring,
 				xdp_redirect_frm_cnt++;
 				rx_ring->stats.xdp_redirect++;
 			}
-
-			if (unlikely(xdp_redirect_frm_cnt > ENETC_DEFAULT_TX_WORK)) {
-				xdp_do_flush_map();
-				xdp_redirect_frm_cnt = 0;
-			}
-
-			break;
-		default:
-			bpf_warn_invalid_xdp_action(xdp_act);
 		}
 
 		rx_frm_cnt++;
 	}
 
+out:
 	rx_ring->next_to_clean = i;
 
 	rx_ring->stats.packets += rx_frm_cnt;
@@ -1861,6 +2007,29 @@ static int enetc_phylink_connect(struct net_device *ndev)
 	return 0;
 }
 
+static void enetc_tx_onestep_tstamp(struct work_struct *work)
+{
+	struct enetc_ndev_priv *priv;
+	struct sk_buff *skb;
+
+	priv = container_of(work, struct enetc_ndev_priv, tx_onestep_tstamp);
+
+	netif_tx_lock(priv->ndev);
+
+	clear_bit_unlock(ENETC_TX_ONESTEP_TSTAMP_IN_PROGRESS, &priv->flags);
+	skb = skb_dequeue(&priv->tx_skbs);
+	if (skb)
+		enetc_start_xmit(skb, priv->ndev);
+
+	netif_tx_unlock(priv->ndev);
+}
+
+static void enetc_tx_onestep_tstamp_init(struct enetc_ndev_priv *priv)
+{
+	INIT_WORK(&priv->tx_onestep_tstamp, enetc_tx_onestep_tstamp);
+	skb_queue_head_init(&priv->tx_skbs);
+}
+
 void enetc_start(struct net_device *ndev)
 {
 	struct enetc_ndev_priv *priv = netdev_priv(ndev);
@@ -1887,6 +2056,7 @@ void enetc_start(struct net_device *ndev)
 int enetc_open(struct net_device *ndev)
 {
 	struct enetc_ndev_priv *priv = netdev_priv(ndev);
+	int num_stack_tx_queues;
 	int err;
 
 	err = enetc_setup_irqs(priv);
@@ -1905,7 +2075,9 @@ int enetc_open(struct net_device *ndev)
 	if (err)
 		goto err_alloc_rx;
 
-	err = netif_set_real_num_tx_queues(ndev, priv->num_tx_rings);
+	num_stack_tx_queues = enetc_num_stack_tx_queues(priv);
+
+	err = netif_set_real_num_tx_queues(ndev, num_stack_tx_queues);
 	if (err)
 		goto err_set_queues;
 
@@ -1913,6 +2085,7 @@ int enetc_open(struct net_device *ndev)
 	if (err)
 		goto err_set_queues;
 
+	enetc_tx_onestep_tstamp_init(priv);
 	enetc_setup_bdrs(priv);
 	enetc_start(ndev);
 
@@ -1977,15 +2150,17 @@ static int enetc_setup_tc_mqprio(struct net_device *ndev, void *type_data)
 	struct enetc_ndev_priv *priv = netdev_priv(ndev);
 	struct tc_mqprio_qopt *mqprio = type_data;
 	struct enetc_bdr *tx_ring;
+	int num_stack_tx_queues;
 	u8 num_tc;
 	int i;
 
+	num_stack_tx_queues = enetc_num_stack_tx_queues(priv);
 	mqprio->hw = TC_MQPRIO_HW_OFFLOAD_TCS;
 	num_tc = mqprio->num_tc;
 
 	if (!num_tc) {
 		netdev_reset_tc(ndev);
-		netif_set_real_num_tx_queues(ndev, priv->num_tx_rings);
+		netif_set_real_num_tx_queues(ndev, num_stack_tx_queues);
 
 		/* Reset all ring priorities to 0 */
 		for (i = 0; i < priv->num_tx_rings; i++) {
@@ -1997,7 +2172,7 @@ static int enetc_setup_tc_mqprio(struct net_device *ndev, void *type_data)
 	}
 
 	/* Check if we have enough BD rings available to accommodate all TCs */
-	if (num_tc > priv->num_tx_rings) {
+	if (num_tc > num_stack_tx_queues) {
 		netdev_err(ndev, "Max %d traffic classes supported\n",
 			   priv->num_tx_rings);
 		return -EINVAL;
@@ -2211,10 +2386,15 @@ static int enetc_hwtstamp_set(struct net_device *ndev, struct ifreq *ifr)
 
 	switch (config.tx_type) {
 	case HWTSTAMP_TX_OFF:
-		priv->active_offloads &= ~ENETC_F_TX_TSTAMP;
+		priv->active_offloads &= ~ENETC_F_TX_TSTAMP_MASK;
 		break;
 	case HWTSTAMP_TX_ON:
+		priv->active_offloads &= ~ENETC_F_TX_TSTAMP_MASK;
 		priv->active_offloads |= ENETC_F_TX_TSTAMP;
+		break;
+	case HWTSTAMP_TX_ONESTEP_SYNC:
+		priv->active_offloads &= ~ENETC_F_TX_TSTAMP_MASK;
+		priv->active_offloads |= ENETC_F_TX_ONESTEP_SYNC_TSTAMP;
 		break;
 	default:
 		return -ERANGE;
@@ -2246,7 +2426,9 @@ static int enetc_hwtstamp_get(struct net_device *ndev, struct ifreq *ifr)
 
 	config.flags = 0;
 
-	if (priv->active_offloads & ENETC_F_TX_TSTAMP)
+	if (priv->active_offloads & ENETC_F_TX_ONESTEP_SYNC_TSTAMP)
+		config.tx_type = HWTSTAMP_TX_ONESTEP_SYNC;
+	else if (priv->active_offloads & ENETC_F_TX_TSTAMP)
 		config.tx_type = HWTSTAMP_TX_ON;
 	else
 		config.tx_type = HWTSTAMP_TX_OFF;
@@ -2278,8 +2460,9 @@ int enetc_ioctl(struct net_device *ndev, struct ifreq *rq, int cmd)
 int enetc_alloc_msix(struct enetc_ndev_priv *priv)
 {
 	struct pci_dev *pdev = priv->si->pdev;
-	int v_tx_rings;
+	int first_xdp_tx_ring;
 	int i, n, err, nvec;
+	int v_tx_rings;
 
 	nvec = ENETC_BDR_INT_BASE_IDX + priv->bdr_int_num;
 	/* allocate MSIX for both messaging and Rx/Tx interrupts */
@@ -2343,11 +2526,7 @@ int enetc_alloc_msix(struct enetc_ndev_priv *priv)
 			int idx;
 
 			/* default tx ring mapping policy */
-			if (priv->bdr_int_num == ENETC_MAX_BDR_INT)
-				idx = 2 * j + i; /* 2 CPUs */
-			else
-				idx = j + i * v_tx_rings; /* default */
-
+			idx = priv->bdr_int_num * j + i;
 			__set_bit(idx, &v->tx_rings_map);
 			bdr = &v->tx_ring[j];
 			bdr->index = idx;
@@ -2357,6 +2536,9 @@ int enetc_alloc_msix(struct enetc_ndev_priv *priv)
 			priv->tx_ring[idx] = bdr;
 		}
 	}
+
+	first_xdp_tx_ring = priv->num_tx_rings - num_possible_cpus();
+	priv->xdp_tx_ring = &priv->tx_ring[first_xdp_tx_ring];
 
 	return 0;
 

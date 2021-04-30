@@ -21,6 +21,8 @@ struct nf_flow_key {
 	struct flow_dissector_key_control		control;
 	struct flow_dissector_key_control		enc_control;
 	struct flow_dissector_key_basic			basic;
+	struct flow_dissector_key_vlan			vlan;
+	struct flow_dissector_key_vlan			cvlan;
 	union {
 		struct flow_dissector_key_ipv4_addrs	ipv4;
 		struct flow_dissector_key_ipv6_addrs	ipv6;
@@ -90,7 +92,8 @@ enum flow_offload_tuple_dir {
 #define FLOW_OFFLOAD_DIR_MAX	IP_CT_DIR_MAX
 
 enum flow_offload_xmit_type {
-	FLOW_OFFLOAD_XMIT_NEIGH		= 0,
+	FLOW_OFFLOAD_XMIT_UNSPEC	= 0,
+	FLOW_OFFLOAD_XMIT_NEIGH,
 	FLOW_OFFLOAD_XMIT_XFRM,
 	FLOW_OFFLOAD_XMIT_DIRECT,
 };
@@ -129,7 +132,10 @@ struct flow_offload_tuple {
 					in_vlan_ingress:2;
 	u16				mtu;
 	union {
-		struct dst_entry	*dst_cache;
+		struct {
+			struct dst_entry *dst_cache;
+			u32		dst_cookie;
+		};
 		struct {
 			u32		ifidx;
 			u32		hw_ifidx;
