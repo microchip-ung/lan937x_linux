@@ -165,16 +165,13 @@ static int lan937x_ptp_enable_pps(struct ksz_device *dev, int on)
 		return -EBUSY;
 
 	//get the pps led no, numbering is -1 from dts tree
-	if (of_property_read_u32(dev->dev->of_node, "pps_led_index",
-	    &pps_led_index)) {
-		dev_err(dev->dev, "pps_led_index not defined in dts tree");
-		return -EINVAL;
+	if (!(of_property_read_u32(dev->dev->of_node, "pps_led_index",
+	    &pps_led_index))) {
+		if (pps_led_index == 1 || pps_led_index == 2)
+			pps_led_index -= 1;
+		else
+			return -EINVAL;
 	}
-
-	if (pps_led_index == 1 || pps_led_index == 2)
-		pps_led_index -= 1;
-	else
-		return -EINVAL;
 
 	/* Set the tou index register */
 	ret = lan937x_ptp_tou_index(dev, LAN937x_PPS_TOU, pps_led_index);
