@@ -18,8 +18,8 @@ static int lan937x_wait_vlan_ctrl_ready(struct ksz_device *dev)
 {
 	unsigned int val;
 
-	return regmap_read_poll_timeout(dev->regmap[0], REG_SW_VLAN_CTRL,
-					val, !(val & VLAN_START), 10, 1000);
+	return regmap_read_poll_timeout(dev->regmap[0], REG_SW_VLAN_CTRL, val,
+					!(val & VLAN_START), 10, 1000);
 }
 
 static int lan937x_get_vlan_table(struct ksz_device *dev, u16 vid,
@@ -167,10 +167,8 @@ static int lan937x_wait_alu_sta_ready(struct ksz_device *dev)
 {
 	unsigned int val;
 
-	return regmap_read_poll_timeout(dev->regmap[2],
-					REG_SW_ALU_STAT_CTRL__4,
-					val, !(val & ALU_STAT_START),
-					10, 1000);
+	return regmap_read_poll_timeout(dev->regmap[2], REG_SW_ALU_STAT_CTRL__4,
+					val, !(val & ALU_STAT_START), 10, 1000);
 }
 
 static enum dsa_tag_protocol lan937x_get_tag_protocol(struct dsa_switch *ds,
@@ -202,8 +200,8 @@ static int lan937x_phy_write16(struct dsa_switch *ds, int addr, int reg,
 	return lan937x_internal_phy_write(dev, addr, reg, val);
 }
 
-static void lan937x_get_strings(struct dsa_switch *ds, int port,
-				u32 stringset, uint8_t *buf)
+static void lan937x_get_strings(struct dsa_switch *ds, int port, u32 stringset,
+				uint8_t *buf)
 {
 	struct ksz_device *dev = ds->priv;
 	int i;
@@ -294,21 +292,10 @@ static int lan937x_port_vlan_filtering(struct dsa_switch *ds, int port,
 	struct ksz_device *dev = ds->priv;
 	int rc;
 
-	if (flag) {
-		rc = lan937x_port_cfg(dev, port, REG_PORT_LUE_CTRL,
-				      PORT_VLAN_LOOKUP_VID_0, true);
-		if (rc < 0)
-			return rc;
-
+	if (flag)
 		rc = lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_VLAN_ENABLE, true);
-	} else {
+	else
 		rc = lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_VLAN_ENABLE, false);
-		if (rc < 0)
-			return rc;
-
-		rc = lan937x_port_cfg(dev, port, REG_PORT_LUE_CTRL,
-				      PORT_VLAN_LOOKUP_VID_0, false);
-	}
 
 	return rc;
 }
@@ -347,7 +334,8 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 
 	/* change PVID */
 	if (vlan->flags & BRIDGE_VLAN_INFO_PVID) {
-		rc = lan937x_pwrite16(dev, port, REG_PORT_DEFAULT_VID, vlan->vid);
+		rc = lan937x_pwrite16(dev, port, REG_PORT_DEFAULT_VID,
+				      vlan->vid);
 
 		if (rc < 0) {
 			dev_err(dev->dev, "Failed to set pvid\n");
@@ -473,7 +461,8 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 		if (rc < 0)
 			goto exit;
 
-		rc = ksz_write32(dev, REG_SW_ALU_CTRL(i), ALU_WRITE | ALU_START);
+		rc = ksz_write32(dev, REG_SW_ALU_CTRL(i),
+				 (ALU_WRITE | ALU_START));
 		if (rc < 0)
 			goto exit;
 
@@ -496,7 +485,8 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 		/* ALU1 write failed and attempt to write ALU2, otherwise exit*/
 		if (val & WRITE_FAIL_INT) {
 			/* Write to clear the Write Fail */
-			rc = ksz_write8(dev, REG_SW_LUE_INT_STATUS__1, WRITE_FAIL_INT);
+			rc = ksz_write8(dev, REG_SW_LUE_INT_STATUS__1,
+					WRITE_FAIL_INT);
 			if (rc < 0)
 				goto exit;
 		} else {
@@ -536,7 +526,8 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 			goto exit;
 
 		/* start read operation */
-		rc = ksz_write32(dev, REG_SW_ALU_CTRL(i), ALU_READ | ALU_START);
+		rc = ksz_write32(dev, REG_SW_ALU_CTRL(i),
+				 (ALU_READ | ALU_START));
 		if (rc < 0)
 			goto exit;
 
@@ -580,7 +571,8 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 		if (rc < 0)
 			goto exit;
 
-		rc = ksz_write32(dev, REG_SW_ALU_CTRL(i), ALU_WRITE | ALU_START);
+		rc = ksz_write32(dev, REG_SW_ALU_CTRL(i),
+				 (ALU_WRITE | ALU_START));
 		if (rc < 0)
 			goto exit;
 
@@ -602,7 +594,7 @@ static void lan937x_convert_alu(struct lan_alu_struct *alu, u32 *alu_table)
 	alu->is_src_filter = !!(alu_table[0] & ALU_V_SRC_FILTER);
 	alu->is_dst_filter = !!(alu_table[0] & ALU_V_DST_FILTER);
 	alu->prio_age = (alu_table[0] >> ALU_V_PRIO_AGE_CNT_S) &
-			ALU_V_PRIO_AGE_CNT_M;
+			 ALU_V_PRIO_AGE_CNT_M;
 	alu->mstp = alu_table[0] & ALU_V_MSTP_M;
 
 	alu->is_override = !!(alu_table[1] & ALU_V_OVERRIDE);
@@ -633,7 +625,8 @@ static int lan937x_port_fdb_dump(struct dsa_switch *ds, int port,
 
 	for (i = 0; i < ALU_STA_DYN_CNT; i++) {
 		/* start ALU search */
-		rc = ksz_write32(dev, REG_SW_ALU_CTRL(i), ALU_START | ALU_SEARCH);
+		rc = ksz_write32(dev, REG_SW_ALU_CTRL(i),
+				 (ALU_START | ALU_SEARCH));
 
 		if (rc < 0)
 			goto exit;
@@ -641,12 +634,14 @@ static int lan937x_port_fdb_dump(struct dsa_switch *ds, int port,
 		do {
 			timeout = 1000;
 			do {
-				rc = ksz_read32(dev, REG_SW_ALU_CTRL(i), &lan937x_data);
+				rc = ksz_read32(dev, REG_SW_ALU_CTRL(i),
+						&lan937x_data);
 
 				if (rc < 0)
 					goto exit;
 
-				if ((lan937x_data & ALU_VALID) || !(lan937x_data & ALU_START))
+				if ((lan937x_data & ALU_VALID) ||
+				    !(lan937x_data & ALU_START))
 					break;
 				usleep_range(1, 10);
 			} while (timeout-- > 0);
@@ -701,6 +696,7 @@ static int lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 		/* find empty slot first */
 		data = (index << ALU_STAT_INDEX_S) |
 			ALU_STAT_READ | ALU_STAT_START;
+
 		rc = ksz_write32(dev, REG_SW_ALU_STAT_CTRL__4, data);
 		if (rc < 0)
 			goto exit;
@@ -858,14 +854,18 @@ static int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
 	int rc;
 
 	if (ingress)
-		rc = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX, true);
+		rc = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX,
+				      true);
 	else
-		rc = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX, true);
+		rc = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX,
+				      true);
 
 	if (rc < 0)
 		return rc;
 
-	rc = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_SNIFFER, false);
+	rc = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_SNIFFER,
+			      false);
+
 	if (rc < 0)
 		return rc;
 
@@ -887,9 +887,11 @@ static void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
 	u8 data;
 
 	if (mirror->ingress)
-		lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX, false);
+		lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX,
+				 false);
 	else
-		lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX, false);
+		lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX,
+				 false);
 
 	lan937x_pread8(dev, port, P_MIRROR_CTRL, &data);
 
@@ -961,12 +963,8 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 			 * note the difference to help debugging.
 			 */
 			interface = lan937x_get_interface(dev, i);
-			if (!p->interface) {
-				if (dev->compat_interface)
-					p->interface = dev->compat_interface;
-				else
-					p->interface = interface;
-			}
+			if (!p->interface)
+				p->interface = interface;
 
 			if (interface && interface != p->interface) {
 				prev_msg = " instead of ";
@@ -1022,22 +1020,21 @@ static int lan937x_setup(struct dsa_switch *ds)
 	}
 
 	/* Required for port partitioning. */
-	lan937x_cfg32(dev, REG_SW_QM_CTRL__4, UNICAST_VLAN_BOUNDARY,
-		      true);
+	lan937x_cfg32(dev, REG_SW_QM_CTRL__4, UNICAST_VLAN_BOUNDARY, true);
 
 	lan937x_config_cpu_port(ds);
 
-	ds->configure_vlan_while_not_filtering = true;
-
 	/* Enable aggressive back off & UNH */
-	lan937x_cfg(dev, REG_SW_MAC_CTRL_0, SW_PAUSE_UNH_MODE | SW_NEW_BACKOFF |
-						SW_AGGR_BACKOFF, true);
+	lan937x_cfg(dev, REG_SW_MAC_CTRL_0,
+		    (SW_PAUSE_UNH_MODE | SW_NEW_BACKOFF | SW_AGGR_BACKOFF),
+		    true);
 
-	lan937x_cfg(dev, REG_SW_MAC_CTRL_1, (MULTICAST_STORM_DISABLE
-							| NO_EXC_COLLISION_DROP), true);
+	lan937x_cfg(dev, REG_SW_MAC_CTRL_1,
+		    (MULTICAST_STORM_DISABLE | NO_EXC_COLLISION_DROP), true);
 
 	/* queue based egress rate limit */
-	lan937x_cfg(dev, REG_SW_MAC_CTRL_5, SW_OUT_RATE_LIMIT_QUEUE_BASED, true);
+	lan937x_cfg(dev, REG_SW_MAC_CTRL_5, SW_OUT_RATE_LIMIT_QUEUE_BASED,
+		    true);
 
 	lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_RESV_MCAST_ENABLE, true);
 
@@ -1045,8 +1042,8 @@ static int lan937x_setup(struct dsa_switch *ds)
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FREEZE, true);
 
 	/* disable CLK125 & CLK25, 1: disable, 0: enable*/
-	lan937x_cfg(dev, REG_SW_GLOBAL_OUTPUT_CTRL__1, (SW_CLK125_ENB |
-						SW_CLK25_ENB), true);
+	lan937x_cfg(dev, REG_SW_GLOBAL_OUTPUT_CTRL__1,
+		    (SW_CLK125_ENB | SW_CLK25_ENB), true);
 
 	lan937x_enable_spi_indirect_access(dev);
 
@@ -1065,10 +1062,12 @@ static int lan937x_change_mtu(struct dsa_switch *ds, int port, int mtu)
 	int rc;
 
 	if (mtu >= FR_MIN_SIZE) {
-		rc = lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_JUMBO_EN, true);
+		rc = lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0,
+				      PORT_JUMBO_EN, true);
 		max_size = FR_MAX_SIZE;
 	} else {
-		rc = lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_JUMBO_EN, false);
+		rc = lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0,
+				      PORT_JUMBO_EN, false);
 		max_size = FR_MIN_SIZE;
 	}
 
@@ -1099,16 +1098,16 @@ static int lan937x_get_max_mtu(struct dsa_switch *ds, int port)
 
 static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 				     unsigned long *supported,
-			  struct phylink_link_state *state)
+				     struct phylink_link_state *state)
 {
 	struct ksz_device *dev = ds->priv;
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(mask) = { 0, };
 
 	if (phy_interface_mode_is_rgmii(state->interface) ||
 	    state->interface == PHY_INTERFACE_MODE_SGMII ||
-		state->interface == PHY_INTERFACE_MODE_RMII ||
-		state->interface == PHY_INTERFACE_MODE_MII ||
-		lan937x_is_internal_100BTX_phy_port(dev, port)) {
+	    state->interface == PHY_INTERFACE_MODE_RMII ||
+	    state->interface == PHY_INTERFACE_MODE_MII ||
+	    lan937x_is_internal_100BTX_phy_port(dev, port)) {
 		phylink_set(mask, 10baseT_Half);
 		phylink_set(mask, 10baseT_Full);
 		phylink_set(mask, 100baseT_Half);
@@ -1131,55 +1130,38 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 		phylink_set_port_modes(mask);
 	}
 
-	bitmap_and(supported, supported, mask,
-		   __ETHTOOL_LINK_MODE_MASK_NBITS);
+	bitmap_and(supported, supported, mask, __ETHTOOL_LINK_MODE_MASK_NBITS);
 	bitmap_and(state->advertising, state->advertising, mask,
 		   __ETHTOOL_LINK_MODE_MASK_NBITS);
 }
 
-static int	lan937x_port_pre_bridge_flags(struct dsa_switch *ds, int port,
-					      struct switchdev_brport_flags flags,
-					 struct netlink_ext_ack *extack)
-{
-	return -EOPNOTSUPP;
-}
-
-static int	lan937x_port_bridge_flags(struct dsa_switch *ds, int port,
-					  struct switchdev_brport_flags flags,
-					 struct netlink_ext_ack *extack)
-{
-	return -EOPNOTSUPP;
-}
-
 const struct dsa_switch_ops lan937x_switch_ops = {
-	.get_tag_protocol	= lan937x_get_tag_protocol,
-	.setup			= lan937x_setup,
-	.phy_read		= lan937x_phy_read16,
-	.phy_write		= lan937x_phy_write16,
-	.port_enable		= ksz_enable_port,
-	.get_strings		= lan937x_get_strings,
-	.get_ethtool_stats	= ksz_get_ethtool_stats,
-	.get_sset_count		= ksz_sset_count,
-	.port_bridge_join	= ksz_port_bridge_join,
-	.port_bridge_leave	= ksz_port_bridge_leave,
-	.port_pre_bridge_flags	= lan937x_port_pre_bridge_flags,
-	.port_bridge_flags	= lan937x_port_bridge_flags,
-	.port_stp_state_set	= lan937x_port_stp_state_set,
-	.port_fast_age		= ksz_port_fast_age,
-	.port_vlan_filtering	= lan937x_port_vlan_filtering,
-	.port_vlan_add		= lan937x_port_vlan_add,
-	.port_vlan_del		= lan937x_port_vlan_del,
-	.port_fdb_dump		= lan937x_port_fdb_dump,
-	.port_fdb_add		= lan937x_port_fdb_add,
-	.port_fdb_del		= lan937x_port_fdb_del,
-	.port_mdb_add           = lan937x_port_mdb_add,
-	.port_mdb_del           = lan937x_port_mdb_del,
-	.port_mirror_add	= lan937x_port_mirror_add,
-	.port_mirror_del	= lan937x_port_mirror_del,
-	.port_max_mtu		= lan937x_get_max_mtu,
-	.port_change_mtu	= lan937x_change_mtu,
-	.phylink_validate	= lan937x_phylink_validate,
-	.phylink_mac_link_down	= ksz_mac_link_down,
+	.get_tag_protocol = lan937x_get_tag_protocol,
+	.setup = lan937x_setup,
+	.phy_read = lan937x_phy_read16,
+	.phy_write = lan937x_phy_write16,
+	.port_enable = ksz_enable_port,
+	.get_strings = lan937x_get_strings,
+	.get_ethtool_stats = ksz_get_ethtool_stats,
+	.get_sset_count = ksz_sset_count,
+	.port_bridge_join = ksz_port_bridge_join,
+	.port_bridge_leave = ksz_port_bridge_leave,
+	.port_stp_state_set = lan937x_port_stp_state_set,
+	.port_fast_age = ksz_port_fast_age,
+	.port_vlan_filtering = lan937x_port_vlan_filtering,
+	.port_vlan_add = lan937x_port_vlan_add,
+	.port_vlan_del = lan937x_port_vlan_del,
+	.port_fdb_dump = lan937x_port_fdb_dump,
+	.port_fdb_add = lan937x_port_fdb_add,
+	.port_fdb_del = lan937x_port_fdb_del,
+	.port_mdb_add = lan937x_port_mdb_add,
+	.port_mdb_del = lan937x_port_mdb_del,
+	.port_mirror_add = lan937x_port_mirror_add,
+	.port_mirror_del = lan937x_port_mirror_del,
+	.port_max_mtu = lan937x_get_max_mtu,
+	.port_change_mtu = lan937x_change_mtu,
+	.phylink_validate = lan937x_phylink_validate,
+	.phylink_mac_link_down = ksz_mac_link_down,
 };
 
 int lan937x_switch_register(struct ksz_device *dev)

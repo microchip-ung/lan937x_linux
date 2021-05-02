@@ -169,7 +169,7 @@ static int access_ereg(struct phy_device *phydev, u8 mode, u8 bank,
 			t &= ~LAN87XX_EXT_REG_CTL_WR_CTL;
 			t |= LAN87XX_EXT_REG_CTL_RD_CTL;
 
-			/* Need to access twice for DSP bank change - dummy access*/
+			/*access twice for DSP bank change,dummy access*/
 			rc = phy_write(phydev, LAN87XX_EXT_REG_CTL, t);
 			if (rc < 0)
 				return rc;

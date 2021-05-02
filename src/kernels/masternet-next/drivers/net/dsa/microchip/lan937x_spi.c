@@ -2,9 +2,6 @@
 /* Microchip LAN937X switch driver register access through SPI
  * Copyright (C) 2019-2021 Microchip Technology Inc.
  */
-#include <asm/unaligned.h>
-
-#include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
@@ -13,12 +10,12 @@
 
 #include "ksz_common.h"
 
-#define SPI_ADDR_SHIFT				24
-#define SPI_ADDR_ALIGN				3
-#define SPI_TURNAROUND_SHIFT		5
+#define SPI_ADDR_SHIFT 24
+#define SPI_ADDR_ALIGN 3
+#define SPI_TURNAROUND_SHIFT 5
 
-KSZ_REGMAP_TABLE(lan937x, 32, SPI_ADDR_SHIFT,
-		 SPI_TURNAROUND_SHIFT, SPI_ADDR_ALIGN);
+KSZ_REGMAP_TABLE(lan937x, 32, SPI_ADDR_SHIFT, SPI_TURNAROUND_SHIFT,
+		 SPI_ADDR_ALIGN);
 
 struct lan937x_chip_data {
 	u32 chip_id;
@@ -78,7 +75,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.port_cnt = 5,
 	},
 	{
-		.chip_id = 0x00937410,
+		.chip_id = 0x00937400,
 		.dev_name = "LAN9374",
 		.num_vlans = 4096,
 		.num_alus = 1024,
@@ -88,7 +85,6 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		/* total port count */
 		.port_cnt = 8,
 	},
-
 };
 
 static int lan937x_spi_probe(struct spi_device *spi)
@@ -105,6 +101,7 @@ static int lan937x_spi_probe(struct spi_device *spi)
 		rc = lan937x_regmap_config[i];
 		rc.lock_arg = &dev->regmap_mutex;
 		dev->regmap[i] = devm_regmap_init_spi(spi, &rc);
+
 		if (IS_ERR(dev->regmap[i])) {
 			ret = PTR_ERR(dev->regmap[i]);
 			dev_err(&spi->dev,
@@ -148,7 +145,8 @@ int lan937x_check_device_id(struct ksz_device *dev)
 
 		/* Check for Device Tree and Chip ID */
 		if (dt_chip_data->chip_id != dev->chip_id) {
-			dev_err(dev->dev, "Device tree specifies chip %s but found %s, please fix it!\n",
+			dev_err(dev->dev,
+				"Device tree specifies chip %s but found %s, please fix it!\n",
 				dt_chip_data->dev_name, chip_data->dev_name);
 			return -ENODEV;
 		}

@@ -141,7 +141,7 @@
 
 #define REG_SW_STATIC_ENTRY_LIMIT__4	0x032C
 
-#define REG_SW_MAC_CTRL_0			0x0330
+#define REG_SW_MAC_CTRL_0		0x0330
 #define SW_NEW_BACKOFF			BIT(7)
 #define SW_PAUSE_UNH_MODE		BIT(1)
 #define SW_AGGR_BACKOFF			BIT(0)
@@ -161,7 +161,7 @@
 
 #define REG_SW_MAC_CTRL_3		0x0333
 #define BROADCAST_STORM_RATE_LO		0xFF
-#define BROADCAST_STORM_RATE		0x07FF
+#define BR_STORM_RATE			0x07FF
 
 #define REG_SW_MAC_CTRL_4		0x0334
 #define SW_PASS_PAUSE			BIT(3)
@@ -391,8 +391,7 @@
 #define PORT_INTF_SPEED_M		0x3
 #define PORT_INTF_SPEED_S		3
 #define PORT_INTF_FULL_DUPLEX		BIT(2)
-#define PORT_TX_FLOW_CTRL		BIT(1)
-#define PORT_RX_FLOW_CTRL		BIT(0)
+
 
 #define REG_PORT_STATUS_1		0x0034
 
@@ -443,11 +442,11 @@
 #define LAN937X_ID_LO			0x1951
 
 #define REG_PORT_PHY_1000_CTRL		0x0112
-#define PORT_AUTO_NEG_MANUAL			BIT(12)
-#define PORT_AUTO_NEG_M		BIT(11)
+#define PORT_AUTO_NEG_MANUAL		BIT(12)
+#define PORT_AUTO_NEG_M			BIT(11)
 #define PORT_AUTO_NEG_M_PREFERRED	BIT(10)
 #define PORT_AUTO_NEG_1000BT_FD		BIT(9)
-#define PORT_AUTO_NEG_1000BT			BIT(8)
+#define PORT_AUTO_NEG_1000BT		BIT(8)
 
 #define REG_PORT_PHY_1000_STATUS	0x0114
 
@@ -522,7 +521,7 @@
 #define PORT_RATE_LIMIT_M		(BIT(7) - 1)
 
 /* 5 - MIB Counters */
-#define REG_PORT_MIB_CTRL_STAT__4	0x0500
+#define REG_PORT_MIB_CTRL_STAT		0x0500
 #define MIB_COUNTER_OVERFLOW		BIT(31)
 #define MIB_COUNTER_VALID		BIT(30)
 #define MIB_COUNTER_READ		BIT(25)
@@ -608,11 +607,11 @@
 
 #define REG_PORT_LUE_LEARN_CNT__2	0x0B08
 
-#define REG_PORT_LUE_UNK_CTL0	0x0B0E
-#define REG_PORT_LUE_UNK_CTL1	0x0B10
+#define REG_PORT_LUE_UNK_CTL0		0x0B0E
+#define REG_PORT_LUE_UNK_CTL1		0x0B10
 #define REG_PORT_LUE_UNK_VID_CTRL__2	0x0B12
 
-#define PORT_UNK_UCAST_MCAST_ENABLE		BIT(15)
+#define PORT_UNK_UCAST_MCAST_ENABLE	BIT(15)
 #define PORT_UCAST_MCAST_MASK		0xFF
 #define PORT_UNK_VID_ENABLE		BIT(15)
 
@@ -664,7 +663,7 @@
 #define TAIL_TAG_RX_PORTS_M		0x7
 
 /* 148,800 frames * 67 ms / 100 */
-#define BROADCAST_STORM_VALUE		9969
+#define BR_STORM_VALUE			9969
 
 #define SW_CHECK_LENGTH			BIT(3)
 
@@ -677,10 +676,10 @@
 
 #define FR_SIZE_CPU_PORT		1540
 
-#define REG_PORT_CTRL_0				0x0020
-#define PORT_MAC_LOOPBACK			BIT(7)
-#define PORT_FORCE_TX_FLOW_CTRL		BIT(5)
-#define PORT_FORCE_RX_FLOW_CTRL		BIT(3)
+#define REG_PORT_CTRL_0			0x0020
+#define PORT_MAC_LOOPBACK		BIT(7)
+#define PORT_TX_FLOW_CTRL		BIT(5)
+#define PORT_RX_FLOW_CTRL		BIT(3)
 
 #define PORT_QUEUE_SPLIT_ENABLE		0x3
 
@@ -688,11 +687,11 @@
 #define LAN937X_GET_FID(vid)	(((vid) % ALU_FID_SIZE) + 1)
 
 /* Driver set switch broadcast storm protection at 10% rate. */
-#define BROADCAST_STORM_PROT_RATE	10
+#define BR_STORM_PROT_RATE	10
 
 #define MII_BMSR_100BASE_TX_FD		BIT(14)
 
-#define PHY_LINK_UP					1
+#define PHY_LINK_UP				1
 #define PHY_LINK_DOWN				0
 
 /*The port number as per the datasheet*/
@@ -704,7 +703,7 @@
 #define GET_CHIP_ID_LSB(chip_id)	(((chip_id) >> 8) & 0xff)
 #define LAN937X_RGMII_2_PORT		(RGMII_2_PORT_NUM - 1)
 #define LAN937X_RGMII_1_PORT		(RGMII_1_PORT_NUM - 1)
-#define LAN937X_SGMII_PORT			(SGMII_PORT_NUM - 1)
-#define LAN937X_TXPHY_PORT			(TXPHY_PORT_NUM - 1)
+#define LAN937X_SGMII_PORT		(SGMII_PORT_NUM - 1)
+#define LAN937X_TXPHY_PORT		(TXPHY_PORT_NUM - 1)
 
 #endif
