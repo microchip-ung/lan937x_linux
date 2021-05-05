@@ -204,28 +204,28 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
  * tag0 : zero-based value represents port
  *	  (eg, 0x00=port1, 0x02=port3, 0x07=port8)
  */
-#define LAN937X_INGRESS_TAG_LEN		2
+#define LAN937X_EGRESS_TAG_LEN		2
 
-#define LAN937X_TAIL_TAG_OVERRIDE	BIT(11)
-#define LAN937X_TAIL_TAG_LOOKUP		BIT(12)
-#define LAN937X_TAIL_TAG_VALID		BIT(13)
-#define LAN937X_TAIL_TAG_PORT_MASK	7
+#define LAN937X_TAIL_TAG_BLOCKING_OVERRIDE	BIT(11)
+#define LAN937X_TAIL_TAG_LOOKUP			BIT(12)
+#define LAN937X_TAIL_TAG_VALID			BIT(13)
+#define LAN937X_TAIL_TAG_PORT_MASK		7
 
 static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 				    struct net_device *dev)
 {
 	struct dsa_port *dp = dsa_slave_to_port(dev);
+	const struct ethhdr *hdr = eth_hdr(skb);
 	__be16 *tag;
 	u8 *addr;
 	u16 val;
 
-	tag = skb_put(skb, LAN937X_INGRESS_TAG_LEN);
-	addr = skb_mac_header(skb);
+	tag = skb_put(skb, LAN937X_EGRESS_TAG_LEN);
 
 	val = BIT(dp->index);
 
-	if (is_link_local_ether_addr(addr))
-		val |= LAN937X_TAIL_TAG_OVERRIDE;
+        if (is_link_local_ether_addr(hdr->h_dest))
+		val |= LAN937X_TAIL_TAG_BLOCKING_OVERRIDE;
 
 	/* Tail tag valid bit - This bit should always be set by the CPU*/
 	val |= LAN937X_TAIL_TAG_VALID;
@@ -240,7 +240,7 @@ static const struct dsa_device_ops lan937x_netdev_ops = {
 	.proto	= DSA_TAG_PROTO_LAN937X,
 	.xmit	= lan937x_xmit,
 	.rcv	= ksz9477_rcv,
-	.overhead = LAN937X_INGRESS_TAG_LEN,
+	.overhead = LAN937X_EGRESS_TAG_LEN,
 	.tail_tag = true,
 };
 
