@@ -392,7 +392,6 @@
 #define PORT_INTF_SPEED_S		3
 #define PORT_INTF_FULL_DUPLEX		BIT(2)
 
-
 #define REG_PORT_STATUS_1		0x0034
 
 /* 1 - PHY */
