@@ -113,7 +113,7 @@
 			};
 
 			macb0: ethernet@f0028000 {
-				phy-mode = "rgmii-tx";
+				phy-mode = "rgmii";
 				#address-cells = <1>;
 				#size-cells = <0>;
 				status = "okay";
@@ -167,12 +167,13 @@
 				lan9374: lan9374@0 {
 					compatible = "microchip,lan9374";
 					reg = <0>;
-					/*44 MHz did not work*/
-					spi-max-frequency = <10000000>;
+					spi-max-frequency = <44000000>;
 					spi-cpha;
 					spi-cpol;
 					interrupt-parent = <&pioB>;
-					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;					
+					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
+					resetb-gpios = <&pioD 28 GPIO_ACTIVE_LOW>;
+					pinctrl-0 = <&pinctrl_spi_ksz_rst>;					
 					status = "okay";
 					ports {
 						#address-cells = <1>;
@@ -199,8 +200,7 @@
 						};
 						port@4 {
 							reg = <4>;
-							phy-mode = "rgmii-txid";
-							label = "cpu";
+							phy-mode = "rgmii-id";
 							ethernet = <&macb0>;
 							fixed-link {
 								speed = <1000>;
@@ -209,7 +209,7 @@
 						};
 						port@5 {
 							reg = <5>;
-							phy-mode = "rgmii-txid";
+							phy-mode = "rgmii-id";
 							label = "lan7";
 							fixed-link {
 								speed = <1000>;
@@ -228,7 +228,6 @@
 						};
 					};
 					mdio {
-						compatible = "microchip,lan937x-mdio";
 						#address-cells = <1>;
 						#size-cells = <0>;
 						
@@ -244,10 +243,10 @@
 						t1phy3: ethernet-phy@3{
 							reg = <0x3>;
 						};
-						t1phy4: ethernet-phy@4{
+						t1phy4: ethernet-phy@6{
 							reg = <0x6>;
 						};
-						t1phy5: ethernet-phy@5{
+						t1phy5: ethernet-phy@7{
 							reg = <0x7>;
 						};
 					};
@@ -394,6 +393,10 @@
 					pinctrl_spi_ksz: spi_ksz {
 						atmel,pins =
 							<AT91_PIOB 28 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
+					};
+					pinctrl_spi_ksz_rst: spi_ksz_rst {
+						atmel,pins =
+							<AT91_PIOD 28 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
 					};
 				};
 			};
