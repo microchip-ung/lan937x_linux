@@ -325,7 +325,7 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 		vlan_table[1] &= ~BIT(port);
 	vlan_table[1] &= ~(BIT(dev->cpu_port));
 
-	vlan_table[2] |= BIT(port) | BIT(dev->cpu_port);
+	vlan_table[2] |= BIT(port);
 
 	rc = lan937x_set_vlan_table(dev, vlan->vid, vlan_table);
 	if (rc < 0) {
@@ -367,9 +367,6 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 	}
 	/* clear switch port number */
 	vlan_table[2] &= ~BIT(port);
-
-	if (pvid == vlan->vid)
-		pvid = 1;
 
 	if (untagged)
 		vlan_table[1] &= ~BIT(port);
