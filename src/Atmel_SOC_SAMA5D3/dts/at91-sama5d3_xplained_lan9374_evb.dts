@@ -131,7 +131,7 @@
 			};
 
 			usart0: serial@f001c000 {
-				status = "okay";
+				status = "disabled";
 			};
 
 			usart1: serial@f0020000 {
@@ -172,7 +172,7 @@
 					spi-cpol;
 					interrupt-parent = <&pioB>;
 					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
-					resetb-gpios = <&pioD 28 GPIO_ACTIVE_LOW>;
+					resetb-gpios = <&pioD 18 GPIO_ACTIVE_LOW>;
 					pinctrl-0 = <&pinctrl_spi_ksz_rst>;					
 					status = "okay";
 					ports {
@@ -331,7 +331,7 @@
 					&pinctrl_adc0_ad8
 					&pinctrl_adc0_ad9
 					>;
-				status = "disabled";
+				status = "okay";
 			};
 
 			i2c2: i2c@f801c000 {
@@ -396,7 +396,7 @@
 					};
 					pinctrl_spi_ksz_rst: spi_ksz_rst {
 						atmel,pins =
-							<AT91_PIOD 28 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
+							<AT91_PIOD 18 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
 					};
 				};
 			};
