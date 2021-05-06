@@ -1016,6 +1016,10 @@ static int lan937x_setup(struct dsa_switch *ds)
 		dev_err(ds->dev, "failed to reset switch\n");
 		return rc;
 	}
+	/* The VLAN aware is a global setting. Mixed vlan
+	 * filterings are not supported.
+	 */
+	ds->vlan_filtering_is_global = true;
 
 	/* Required for port partitioning. */
 	lan937x_cfg32(dev, REG_SW_QM_CTRL__4, UNICAST_VLAN_BOUNDARY, true);
