@@ -312,7 +312,7 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 
 	rc = lan937x_get_vlan_table(dev, vlan->vid, vlan_table);
 	if (rc < 0) {
-		dev_err(dev->dev, "Failed to get vlan table\n");
+		NL_SET_ERR_MSG_MOD(extack, "Failed to get vlan table\n");
 		return rc;
 	}
 
@@ -329,7 +329,7 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 
 	rc = lan937x_set_vlan_table(dev, vlan->vid, vlan_table);
 	if (rc < 0) {
-		dev_err(dev->dev, "Failed to set vlan table\n");
+		NL_SET_ERR_MSG_MOD(extack, "Failed to set vlan table\n");
 		return rc;
 	}
 
@@ -339,7 +339,7 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 				      vlan->vid);
 
 		if (rc < 0) {
-			dev_err(dev->dev, "Failed to set pvid\n");
+			NL_SET_ERR_MSG_MOD(extack, "Failed to set pvid\n");
 			return rc;
 		}
 	}
