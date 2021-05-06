@@ -7,6 +7,7 @@
 #include <linux/iopoll.h>
 #include <linux/phy.h>
 #include <linux/if_bridge.h>
+#include <linux/if_vlan.h>
 #include <net/dsa.h>
 #include <net/switchdev.h>
 
@@ -1055,30 +1056,30 @@ static int lan937x_setup(struct dsa_switch *ds)
 	return 0;
 }
 
-static int lan937x_change_mtu(struct dsa_switch *ds, int port, int mtu)
+static int lan937x_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
 {
 	struct ksz_device *dev = ds->priv;
-	u16 max_size;
 	int rc;
 
-	if (mtu >= FR_MIN_SIZE) {
+	new_mtu += VLAN_ETH_HLEN + ETH_FCS_LEN;
+
+	if (dsa_is_cpu_port(ds, port))
+		new_mtu += LAN937X_TAG_LEN;
+
+	if (new_mtu >= FR_MIN_SIZE) {
 		rc = lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0,
 				      PORT_JUMBO_EN, true);
-		max_size = FR_MAX_SIZE;
 	} else {
 		rc = lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0,
 				      PORT_JUMBO_EN, false);
-		max_size = FR_MIN_SIZE;
 	}
-
 	if (rc < 0) {
 		dev_err(ds->dev, "failed to enable jumbo\n");
 		return rc;
 	}
 
 	/* Write the frame size in PORT_MAX_FR_SIZE register */
-	rc = lan937x_pwrite16(dev, port, PORT_MAX_FR_SIZE, max_size);
-
+	rc = lan937x_pwrite16(dev, port, PORT_MAX_FR_SIZE, new_mtu);
 	if (rc < 0) {
 		dev_err(ds->dev, "failed to change the mtu\n");
 		return rc;
@@ -1093,7 +1094,7 @@ static int lan937x_get_max_mtu(struct dsa_switch *ds, int port)
 	 * jumbo frame support is enabled, PORT_JUMBO_EN bit will be enabled
 	 * based on mtu in lan937x_change_mtu() API
 	 */
-	return FR_MAX_SIZE;
+	return (FR_MAX_SIZE-VLAN_ETH_HLEN-ETH_FCS_LEN);
 }
 
 static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
@@ -1169,13 +1170,6 @@ int lan937x_switch_register(struct ksz_device *dev)
 	int ret;
 
 	ret = ksz_switch_register(dev, &lan937x_dev_ops);
-
-	if (ret) {
-		if (dev->mdio_np) {
-			mdiobus_unregister(dev->ds->slave_mii_bus);
-			of_node_put(dev->mdio_np);
-		}
-	}
 
 	return ret;
 }

@@ -217,7 +217,6 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	struct dsa_port *dp = dsa_slave_to_port(dev);
 	const struct ethhdr *hdr = eth_hdr(skb);
 	__be16 *tag;
-	u8 *addr;
 	u16 val;
 
 	tag = skb_put(skb, LAN937X_EGRESS_TAG_LEN);

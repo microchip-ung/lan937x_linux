@@ -168,7 +168,6 @@ static void lan937x_r_mib_cnt(struct ksz_device *dev, int port, u16 addr,
 				       PORT_CTRL_ADDR(port, REG_PORT_MIB_CTRL_STAT),
 				       val, !(val & MIB_COUNTER_READ),
 				       10, 1000);
-	/* failed to read MIB. get out of loop */
 	if (ret) {
 		dev_err(dev->dev, "Failed to get MIB\n");
 		return;
@@ -235,13 +234,6 @@ int lan937x_reset_switch(struct ksz_device *dev)
 		return rc;
 
 	rc = ksz_read32(dev, REG_SW_PORT_INT_STATUS__4, &data32);
-	if (rc < 0)
-		return rc;
-
-	/* set broadcast storm protection 10% rate */
-	rc = regmap_update_bits(dev->regmap[1], REG_SW_MAC_CTRL_2,
-				BR_STORM_RATE,
-				(BR_STORM_VALUE * BR_STORM_PROT_RATE) / 100);
 
 	return rc;
 }
@@ -271,6 +263,11 @@ static int lan937x_switch_detect(struct ksz_device *dev)
 static void lan937x_switch_exit(struct ksz_device *dev)
 {
 	lan937x_reset_switch(dev);
+	
+	if (dev->mdio_np) {
+		mdiobus_unregister(dev->ds->slave_mii_bus);
+		of_node_put(dev->mdio_np);
+	}
 }
 
 int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
@@ -381,8 +378,6 @@ int lan937x_internal_phy_write(struct ksz_device *dev, int addr, int reg,
 	rc = regmap_read_poll_timeout(dev->regmap[1], REG_VPHY_IND_CTRL__2,
 				      value, !(value & VPHY_IND_BUSY), 10,
 				      1000);
-
-	/* failed to write phy register. get out of loop */
 	if (rc < 0) {
 		dev_err(dev->dev, "Failed to write phy register\n");
 		return rc;
@@ -422,8 +417,6 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
 	rc = regmap_read_poll_timeout(dev->regmap[1], REG_VPHY_IND_CTRL__2,
 				      value, !(value & VPHY_IND_BUSY), 10,
 				      1000);
-
-	/*  failed to read phy register. get out of loop */
 	if (rc < 0) {
 		dev_err(dev->dev, "Failed to read phy register\n");
 		return rc;
@@ -452,12 +445,6 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 	if (cpu_port) {
 		lan937x_port_cfg(dev, port, REG_PORT_CTRL_0,
 				 PORT_TAIL_TAG_ENABLE, true);
-		/* Enable jumbo packet in host port so that frames are not
-		 * counted as oversized.
-		 */
-		lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0,
-				 PORT_JUMBO_PACKET, true);
-		lan937x_pwrite16(dev, port, REG_PORT_MTU__2, FR_SIZE_CPU_PORT);
 	}
 
 	lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_FR_CHK_LENGTH,
@@ -510,17 +497,17 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 		default:
 			lan937x_set_gbit(dev, true, &data8);
 			data8 |= PORT_RGMII_SEL;
+			
+			/* Add RGMII internal delay for cpu port*/
+			if (dsa_is_cpu_port(dev->ds, port)) {
+				if (p->interface == PHY_INTERFACE_MODE_RGMII_ID ||
+				p->interface == PHY_INTERFACE_MODE_RGMII_RXID)
+					data8 |= PORT_RGMII_ID_IG_ENABLE;
 
-			data8 &= ~PORT_RGMII_ID_IG_ENABLE;
-			data8 &= ~PORT_RGMII_ID_EG_ENABLE;
-
-			if (p->interface == PHY_INTERFACE_MODE_RGMII_ID ||
-			    p->interface == PHY_INTERFACE_MODE_RGMII_RXID)
-				data8 |= PORT_RGMII_ID_IG_ENABLE;
-
-			if (p->interface == PHY_INTERFACE_MODE_RGMII_ID ||
-			    p->interface == PHY_INTERFACE_MODE_RGMII_TXID)
-				data8 |= PORT_RGMII_ID_EG_ENABLE;
+				if (p->interface == PHY_INTERFACE_MODE_RGMII_ID ||
+				p->interface == PHY_INTERFACE_MODE_RGMII_TXID)
+					data8 |= PORT_RGMII_ID_EG_ENABLE;
+			}
 			break;
 		}
 		lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, data8);
