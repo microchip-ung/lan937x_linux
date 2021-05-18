@@ -113,7 +113,7 @@
 			};
 
 			macb0: ethernet@f0028000 {
-				phy-mode = "rgmii";
+				phy-mode = "rgmii-id";
 				#address-cells = <1>;
 				#size-cells = <0>;
 				status = "okay";
@@ -198,8 +198,8 @@
 							phy-handle=<&t1phy3>;
 							label = "lan6";
 						};
-						port@4 {
-							reg = <4>;
+						port@5 {
+							reg = <5>;
 							phy-mode = "rgmii-id";
 							ethernet = <&macb0>;
 							fixed-link {
@@ -207,8 +207,8 @@
 								full-duplex;
 							};
 						};
-						port@5 {
-							reg = <5>;
+						port@4 {
+							reg = <4>;
 							phy-mode = "rgmii-id";
 							label = "lan7";
 							fixed-link {
