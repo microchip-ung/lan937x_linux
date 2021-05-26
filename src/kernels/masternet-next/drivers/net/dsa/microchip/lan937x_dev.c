@@ -205,37 +205,37 @@ int lan937x_reset_switch(struct ksz_device *dev)
 {
 	u32 data32;
 	u8 data8;
-	int rc;
+	int ret;
 
 	/* reset switch */
-	rc = lan937x_cfg(dev, REG_SW_OPERATION, SW_RESET, true);
-	if (rc < 0)
-		return rc;
+	ret = lan937x_cfg(dev, REG_SW_OPERATION, SW_RESET, true);
+	if (ret < 0)
+		return ret;
 
 	/* default configuration */
-	rc = ksz_read8(dev, REG_SW_LUE_CTRL_1, &data8);
-	if (rc < 0)
-		return rc;
+	ret = ksz_read8(dev, REG_SW_LUE_CTRL_1, &data8);
+	if (ret < 0)
+		return ret;
 
 	data8 = SW_AGING_ENABLE | SW_LINK_AUTO_AGING |
 	      SW_SRC_ADDR_FILTER;
 
-	rc = ksz_write8(dev, REG_SW_LUE_CTRL_1, data8);
-	if (rc < 0)
-		return rc;
+	ret = ksz_write8(dev, REG_SW_LUE_CTRL_1, data8);
+	if (ret < 0)
+		return ret;
 
 	/* disable interrupts */
-	rc = ksz_write32(dev, REG_SW_INT_MASK__4, SWITCH_INT_MASK);
-	if (rc < 0)
-		return rc;
+	ret = ksz_write32(dev, REG_SW_INT_MASK__4, SWITCH_INT_MASK);
+	if (ret < 0)
+		return ret;
 
-	rc = ksz_write32(dev, REG_SW_PORT_INT_MASK__4, 0xFF);
-	if (rc < 0)
-		return rc;
+	ret = ksz_write32(dev, REG_SW_PORT_INT_MASK__4, 0xFF);
+	if (ret < 0)
+		return ret;
 
-	rc = ksz_read32(dev, REG_SW_PORT_INT_STATUS__4, &data32);
+	ret = ksz_read32(dev, REG_SW_PORT_INT_STATUS__4, &data32);
 
-	return rc;
+	return ret;
 }
 
 static int lan937x_switch_detect(struct ksz_device *dev)
@@ -274,31 +274,31 @@ int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
 {
 	u16 data16;
 	u8 data8;
-	int rc;
+	int ret;
 
-	rc = ksz_read8(dev, REG_GLOBAL_CTRL_0, &data8);
-	if (rc < 0)
-		return rc;
+	ret = ksz_read8(dev, REG_GLOBAL_CTRL_0, &data8);
+	if (ret < 0)
+		return ret;
 
 	/* Check if PHY register is blocked */
 	if (data8 & SW_PHY_REG_BLOCK) {
 		/* Enable Phy access through SPI*/
 		data8 &= ~SW_PHY_REG_BLOCK;
 
-		rc = ksz_write8(dev, REG_GLOBAL_CTRL_0, data8);
-		if (rc < 0)
-			return rc;
+		ret = ksz_write8(dev, REG_GLOBAL_CTRL_0, data8);
+		if (ret < 0)
+			return ret;
 	}
 
-	rc = ksz_read16(dev, REG_VPHY_SPECIAL_CTRL__2, &data16);
-	if (rc < 0)
-		return rc;
+	ret = ksz_read16(dev, REG_VPHY_SPECIAL_CTRL__2, &data16);
+	if (ret < 0)
+		return ret;
 
 	/* Allow SPI access */
 	data16 |= VPHY_SPI_INDIRECT_ENABLE;
-	rc = ksz_write16(dev, REG_VPHY_SPECIAL_CTRL__2, data16);
+	ret = ksz_write16(dev, REG_VPHY_SPECIAL_CTRL__2, data16);
 
-	return rc;
+	return ret;
 }
 
 bool lan937x_is_internal_phy_port(struct ksz_device *dev, int port)
@@ -347,7 +347,7 @@ int lan937x_internal_phy_write(struct ksz_device *dev, int addr, int reg,
 {
 	u16 temp, addr_base;
 	unsigned int value;
-	int rc;
+	int ret;
 
 	/* Check for internal phy port */
 	if (!lan937x_is_internal_phy_port(dev, addr))
@@ -360,27 +360,27 @@ int lan937x_internal_phy_write(struct ksz_device *dev, int addr, int reg,
 
 	temp = PORT_CTRL_ADDR(addr, (addr_base + (reg << 2)));
 
-	rc = ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
-	if (rc < 0)
-		return rc;
+	ret = ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
+	if (ret < 0)
+		return ret;
 
 	/* Write the data to be written to the VPHY reg */
-	rc = ksz_write16(dev, REG_VPHY_IND_DATA__2, val);
-	if (rc < 0)
-		return rc;
+	ret = ksz_write16(dev, REG_VPHY_IND_DATA__2, val);
+	if (ret < 0)
+		return ret;
 
 	/* Write the Write En and Busy bit */
-	rc = ksz_write16(dev, REG_VPHY_IND_CTRL__2,
+	ret = ksz_write16(dev, REG_VPHY_IND_CTRL__2,
 			 (VPHY_IND_WRITE | VPHY_IND_BUSY));
-	if (rc < 0)
-		return rc;
+	if (ret < 0)
+		return ret;
 
-	rc = regmap_read_poll_timeout(dev->regmap[1], REG_VPHY_IND_CTRL__2,
+	ret = regmap_read_poll_timeout(dev->regmap[1], REG_VPHY_IND_CTRL__2,
 				      value, !(value & VPHY_IND_BUSY), 10,
 				      1000);
-	if (rc < 0) {
+	if (ret < 0) {
 		dev_err(dev->dev, "Failed to write phy register\n");
-		return rc;
+		return ret;
 	}
 
 	return 0;
@@ -391,7 +391,7 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
 {
 	u16 temp, addr_base;
 	unsigned int value;
-	int rc;
+	int ret;
 
 	/* Check for internal phy port, return 0xffff for non-existent phy*/
 	if (!lan937x_is_internal_phy_port(dev, addr))
@@ -405,27 +405,27 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
 	/* get register address based on the logical port */
 	temp = PORT_CTRL_ADDR(addr, (addr_base + (reg << 2)));
 
-	rc = ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
-	if (rc < 0)
-		return rc;
+	ret = ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
+	if (ret < 0)
+		return ret;
 
 	/* Write Read and Busy bit to start the transaction*/
-	rc = ksz_write16(dev, REG_VPHY_IND_CTRL__2, VPHY_IND_BUSY);
-	if (rc < 0)
-		return rc;
+	ret = ksz_write16(dev, REG_VPHY_IND_CTRL__2, VPHY_IND_BUSY);
+	if (ret < 0)
+		return ret;
 
-	rc = regmap_read_poll_timeout(dev->regmap[1], REG_VPHY_IND_CTRL__2,
+	ret = regmap_read_poll_timeout(dev->regmap[1], REG_VPHY_IND_CTRL__2,
 				      value, !(value & VPHY_IND_BUSY), 10,
 				      1000);
-	if (rc < 0) {
+	if (ret < 0) {
 		dev_err(dev->dev, "Failed to read phy register\n");
-		return rc;
+		return ret;
 	}
 
 	/* Read the VPHY register which has the PHY data*/
-	rc = ksz_read16(dev, REG_VPHY_IND_DATA__2, val);
+	ret = ksz_read16(dev, REG_VPHY_IND_DATA__2, val);
 
-	return rc;
+	return ret;
 }
 
 static void lan937x_set_gbit(struct ksz_device *dev, bool gbit, u8 *data)
@@ -525,11 +525,11 @@ static int lan937x_sw_mdio_read(struct mii_bus *bus, int addr, int regnum)
 {
 	struct ksz_device *dev = bus->priv;
 	u16 val;
-	int rc;
+	int ret;
 
-	rc = lan937x_internal_phy_read(dev, addr, regnum, &val);
-	if (rc < 0)
-		return rc;
+	ret = lan937x_internal_phy_read(dev, addr, regnum, &val);
+	if (ret < 0)
+		return ret;
 
 	return val;
 }
@@ -620,25 +620,25 @@ static int lan937x_switch_init(struct ksz_device *dev)
 
 static int lan937x_init(struct ksz_device *dev)
 {
-	int rc;
+	int ret;
 
-	rc = lan937x_switch_init(dev);
-	if (rc < 0) {
+	ret = lan937x_switch_init(dev);
+	if (ret < 0) {
 		dev_err(dev->dev, "failed to initialize the switch");
-		return rc;
+		return ret;
 	}
 
 	/* enable Indirect Access from SPI to the VPHY registers */
-	rc = lan937x_enable_spi_indirect_access(dev);
-	if (rc < 0) {
+	ret = lan937x_enable_spi_indirect_access(dev);
+	if (ret < 0) {
 		dev_err(dev->dev, "failed to enable spi indirect access");
-		return rc;
+		return ret;
 	}
 
-	rc = lan937x_mdio_register(dev->ds);
-	if (rc < 0) {
+	ret = lan937x_mdio_register(dev->ds);
+	if (ret < 0) {
 		dev_err(dev->dev, "failed to register the mdio");
-		return rc;
+		return ret;
 	}
 
 	return 0;

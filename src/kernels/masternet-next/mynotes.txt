@@ -111,3 +111,19 @@ Error: Documentation/devicetree/bindings/net/dsa/microchip,lan937x.example.dts:2
 FATAL ERROR: Unable to parse input tre
 
 git format-patch --cover-letter -s --subject-prefix=”RFC PATCH v2 net-next”
+
+--cc UNGLinuxDriver@microchip.com 
+--cc andrew@lunn.ch  
+--cc hkallweit1@gmail.com 
+--cc linux@armlinux.org.uk
+--cc davem@davemloft.net
+--cc kuba@kernel.org
+--cc netdev@vger.kernel.org
+--cc linux-kernel@vger.kernel.org
+--cc vivien.didelot@gmail.com
+--cc f.fainelli@gmail.com
+--cc olteanv@gmail.com
+--cc robh+dt@kernel.org
+--cc devicetree@vger.kernel.org
+
+
