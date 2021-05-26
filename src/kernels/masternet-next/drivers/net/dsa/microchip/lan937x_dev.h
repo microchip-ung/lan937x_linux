@@ -61,6 +61,16 @@ struct lan_alu_struct {
 	u8	mac[ETH_ALEN];
 };
 
+struct lan937x_vlan {
+	/* entry 1 */
+	bool valid;
+	u8 fid;
+	/* entry 2 */
+	u32 untag_prtmap;
+	/* entry 3 */
+	u32 fwd_map;
+};
+
 extern const struct dsa_switch_ops lan937x_switch_ops;
 extern const struct ksz_dev_ops lan937x_dev_ops;
 extern const struct mib_names lan937x_mib_names[];

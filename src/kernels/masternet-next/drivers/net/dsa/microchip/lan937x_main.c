@@ -23,9 +23,18 @@ static int lan937x_wait_vlan_ctrl_ready(struct ksz_device *dev)
 					!(val & VLAN_START), 10, 1000);
 }
 
-static int lan937x_get_vlan_table(struct ksz_device *dev, u16 vid,
-				  u32 *vlan_table)
+static u8 lan937x_get_fid(u16 vid)
 {
+	if (vid > ALU_FID_SIZE)
+		return LAN937X_GET_FID(vid);
+	else
+		return vid;
+}
+
+static int lan937x_get_vlan_table(struct ksz_device *dev, u16 vid,
+				  struct lan937x_vlan *vlan_entry)
+{
+	u32 data;
 	int ret;
 
 	mutex_lock(&dev->vlan_mutex);
@@ -43,15 +52,18 @@ static int lan937x_get_vlan_table(struct ksz_device *dev, u16 vid,
 	if (ret < 0)
 		goto exit;
 
-	ret = ksz_read32(dev, REG_SW_VLAN_ENTRY__4, &vlan_table[0]);
+	ret = ksz_read32(dev, REG_SW_VLAN_ENTRY__4, &data);
 	if (ret < 0)
 		goto exit;
 
-	ret = ksz_read32(dev, REG_SW_VLAN_ENTRY_UNTAG__4, &vlan_table[1]);
+	vlan_entry->valid = !!(data & VLAN_VALID);
+	vlan_entry->fid	= data & VLAN_FID_M;
+
+	ret = ksz_read32(dev, REG_SW_VLAN_ENTRY_UNTAG__4, &vlan_entry->untag_prtmap);
 	if (ret < 0)
 		goto exit;
 
-	ret = ksz_read32(dev, REG_SW_VLAN_ENTRY_PORTS__4, &vlan_table[2]);
+	ret = ksz_read32(dev, REG_SW_VLAN_ENTRY_PORTS__4, &vlan_entry->fwd_map);
 	if (ret < 0)
 		goto exit;
 
@@ -66,21 +78,25 @@ exit:
 }
 
 static int lan937x_set_vlan_table(struct ksz_device *dev, u16 vid,
-				  u32 *vlan_table)
+				   struct lan937x_vlan *vlan_entry)
 {
+	u32 data;
 	int ret;
 
 	mutex_lock(&dev->vlan_mutex);
+	
+	data = vlan_entry->valid ? VLAN_VALID : 0;
+	data |= vlan_entry->fid;
 
-	ret = ksz_write32(dev, REG_SW_VLAN_ENTRY__4, vlan_table[0]);
+	ret = ksz_write32(dev, REG_SW_VLAN_ENTRY__4, data);
 	if (ret < 0)
 		goto exit;
 
-	ret = ksz_write32(dev, REG_SW_VLAN_ENTRY_UNTAG__4, vlan_table[1]);
+	ret = ksz_write32(dev, REG_SW_VLAN_ENTRY_UNTAG__4, vlan_entry->untag_prtmap);
 	if (ret < 0)
 		goto exit;
 
-	ret = ksz_write32(dev, REG_SW_VLAN_ENTRY_PORTS__4, vlan_table[2]);
+	ret = ksz_write32(dev, REG_SW_VLAN_ENTRY_PORTS__4, vlan_entry->fwd_map);
 	if (ret < 0)
 		goto exit;
 
@@ -98,14 +114,6 @@ static int lan937x_set_vlan_table(struct ksz_device *dev, u16 vid,
 		goto exit;
 
 	ret = ksz_write8(dev, REG_SW_VLAN_CTRL, 0);
-	if (ret < 0)
-		goto exit;
-
-	/* update vlan cache table */
-	dev->vlan_cache[vid].table[0] = vlan_table[0];
-	dev->vlan_cache[vid].table[1] = vlan_table[1];
-	dev->vlan_cache[vid].table[2] = vlan_table[2];
-
 exit:
 	mutex_unlock(&dev->vlan_mutex);
 
@@ -307,27 +315,28 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 {
 	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
 	struct ksz_device *dev = ds->priv;
-	u32 vlan_table[3];
+	struct lan937x_vlan vlan_entry;
 	int ret;
 
-	ret = lan937x_get_vlan_table(dev, vlan->vid, vlan_table);
+	ret = lan937x_get_vlan_table(dev, vlan->vid, &vlan_entry);
 	if (ret < 0) {
 		NL_SET_ERR_MSG_MOD(extack, "Failed to get vlan table\n");
 		return ret;
 	}
 
-	vlan_table[0] = VLAN_VALID | (vlan->vid & VLAN_FID_M);
+	vlan_entry.fid = lan937x_get_fid(vlan->vid);
+	vlan_entry.valid = true;
 
 	/* set/clear switch port when updating vlan table registers */
 	if (untagged)
-		vlan_table[1] |= BIT(port);
+		vlan_entry.untag_prtmap |= BIT(port);
 	else
-		vlan_table[1] &= ~BIT(port);
-	vlan_table[1] &= ~(BIT(dev->cpu_port));
+		vlan_entry.untag_prtmap &= ~BIT(port);
 
-	vlan_table[2] |= BIT(port);
+	vlan_entry.untag_prtmap &= ~(BIT(dev->cpu_port));
+	vlan_entry.fwd_map |= BIT(port);
 
-	ret = lan937x_set_vlan_table(dev, vlan->vid, vlan_table);
+	ret = lan937x_set_vlan_table(dev, vlan->vid, &vlan_entry);
 	if (ret < 0) {
 		NL_SET_ERR_MSG_MOD(extack, "Failed to set vlan table\n");
 		return ret;
@@ -352,26 +361,26 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 {
 	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
 	struct ksz_device *dev = ds->priv;
-	u32 vlan_table[3];
+	struct lan937x_vlan vlan_entry;
 	u16 pvid;
 	int ret;
 
 	lan937x_pread16(dev, port, REG_PORT_DEFAULT_VID, &pvid);
 	pvid &= 0xFFF;
 
-	ret = lan937x_get_vlan_table(dev, vlan->vid, vlan_table);
+	ret = lan937x_get_vlan_table(dev, vlan->vid, &vlan_entry);
 
 	if (ret < 0) {
 		dev_err(dev->dev, "Failed to get vlan table\n");
 		return ret;
 	}
-	/* clear switch port number */
-	vlan_table[2] &= ~BIT(port);
+	/* clear port fwd map */
+	vlan_entry.fwd_map &= ~BIT(port);
 
 	if (untagged)
-		vlan_table[1] &= ~BIT(port);
+		vlan_entry.untag_prtmap &= ~BIT(port);
 
-	ret = lan937x_set_vlan_table(dev, vlan->vid, vlan_table);
+	ret = lan937x_set_vlan_table(dev, vlan->vid, &vlan_entry);
 	if (ret < 0) {
 		dev_err(dev->dev, "Failed to set vlan table\n");
 		return ret;
@@ -385,14 +394,6 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 	}
 
 	return 0;
-}
-
-static u8 lan937x_get_fid(u16 vid)
-{
-	if (vid > ALU_FID_SIZE)
-		return LAN937X_GET_FID(vid);
-	else
-		return vid;
 }
 
 static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
@@ -1005,11 +1006,6 @@ static int lan937x_setup(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
 	int ret;
-
-	dev->vlan_cache = devm_kcalloc(dev->dev, sizeof(struct vlan_table),
-				       dev->num_vlans, GFP_KERNEL);
-	if (!dev->vlan_cache)
-		return -ENOMEM;
 
 	ret = lan937x_reset_switch(dev);
 	if (ret < 0) {
