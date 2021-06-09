@@ -850,8 +850,10 @@ static int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
 				   bool ingress)
 {
 	struct ksz_device *dev = ds->priv;
-	int ret;
+	int ret, p;
+	u8 data;
 
+	/*Configure ingress/egress mirroring*/
 	if (ingress)
 		ret = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX,
 				      true);
@@ -862,13 +864,28 @@ static int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
 	if (ret < 0)
 		return ret;
 
-	ret = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_SNIFFER,
-			      false);
+	/* Configure sniffer port meanwhile limit to one sniffer port
+	 * Check if any of the port is already set for sniffing
+	 * If yes, instruct the user to remove the previous entry & exit*/
+	for (p = 0; p < dev->port_cnt; p++) {
 
-	if (ret < 0)
-		return ret;
+		/*Skip the current sniffing port*/
+		if (p == mirror->to_local_port)
+			continue;
 
-	/* configure mirror port */
+		ret = lan937x_pread8 (dev, p, P_MIRROR_CTRL, &data);
+
+		if (ret < 0)
+			return ret;
+		
+		if (data & PORT_MIRROR_SNIFFER) {
+			dev_err(dev->dev,
+				"Delete existing rules towards %s & try\n",
+				dsa_to_port(ds,p)->name);
+			return -EBUSY;
+		}
+	}
+
 	ret = lan937x_port_cfg(dev, mirror->to_local_port, P_MIRROR_CTRL,
 			      PORT_MIRROR_SNIFFER, true);
 	if (ret < 0)
@@ -883,18 +900,31 @@ static void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
 				    struct dsa_mall_mirror_tc_entry *mirror)
 {
 	struct ksz_device *dev = ds->priv;
+	bool in_use = false;
 	u8 data;
+	int p;
 
+	/* clear ingress/egress mirroring port*/
 	if (mirror->ingress)
 		lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX,
 				 false);
 	else
 		lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX,
 				 false);
+	
+	/* Check if any of the port is still referring to sniffer port*/
+	for (p = 0; p < dev->port_cnt; p++) {
 
-	lan937x_pread8(dev, port, P_MIRROR_CTRL, &data);
+		lan937x_pread8 (dev, p, P_MIRROR_CTRL, &data);
 
-	if (!(data & (PORT_MIRROR_RX | PORT_MIRROR_TX)))
+		if ((data & (PORT_MIRROR_RX | PORT_MIRROR_TX))) {
+			in_use = true;
+			break;
+		}
+	}
+
+	/* delete sniffing if there are no other mirroring rule exist*/
+	if (!in_use)
 		lan937x_port_cfg(dev, mirror->to_local_port, P_MIRROR_CTRL,
 				 PORT_MIRROR_SNIFFER, false);
 }
