@@ -188,7 +188,7 @@ static int access_ereg_clr_poll_timeout(struct phy_device *phydev, u8 bank,
 				     150, 30000, true);
 }
 
-static int mchp_t1_phy_init(struct phy_device *phydev)
+static int mchp_t1_phy_config_init(struct phy_device *phydev)
 {
 	static const struct access_ereg_val init[] = {
 		/* TXPD/TXAMP6 Configs*/
@@ -387,7 +387,7 @@ static irqreturn_t lan87xx_handle_interrupt(struct phy_device *phydev)
 
 static int lan87xx_config_init(struct phy_device *phydev)
 {
-	int rc = mchp_t1_phy_init(phydev);
+	int rc = mchp_t1_phy_config_init(phydev);
 
 	if (rc < 0)
 		phydev_err(phydev, "failed to initialize phy\n");
@@ -397,20 +397,14 @@ static int lan87xx_config_init(struct phy_device *phydev)
 
 static int lan937x_read_status(struct phy_device *phydev)
 {
-	int val1, val2;
+	int val;
 
-	val1 = phy_read(phydev, T1_M_STATUS_REG);
+	val = phy_read(phydev, T1_MODE_STAT_REG);
 
-	if (val1 < 0)
-		return val1;
+	if (val < 0)
+		return val;
 
-	val2 = phy_read(phydev, T1_MODE_STAT_REG);
-
-	if (val2 < 0)
-		return val2;
-
-	if (val1 & (T1_LOCAL_RX_OK | T1_REMOTE_RX_OK) &&
-	    val2 & (T1_DSCR_LOCK_STATUS_MSK | T1_LINK_UP_MSK))
+	if (val & T1_LINK_UP_MSK)
 		phydev->link = 1;
 	else
 		phydev->link = 0;
@@ -425,12 +419,8 @@ static int lan937x_read_status(struct phy_device *phydev)
 
 static int lan937x_config_init(struct phy_device *phydev)
 {
-	int rc = mchp_t1_phy_init(phydev);
-
-	if (rc < 0)
-		phydev_err(phydev, "failed to initialize phy\n");
-
-	return rc < 0 ? rc : 0;
+	/* lan87xx & lan937x follows same init sequence */
+	return lan87xx_config_init(phydev);
 }
 
 static struct phy_driver microchip_t1_phy_driver[] = {
