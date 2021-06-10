@@ -196,9 +196,6 @@ static void lan937x_port_init_cnt(struct ksz_device *dev, int port)
 	ksz_write8(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FLUSH);
 	lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT, 0);
 	mutex_unlock(&mib->cnt_mutex);
-
-	mib->cnt_ptr = 0;
-	memset(mib->counters, 0, dev->mib_cnt * sizeof(u64));
 }
 
 int lan937x_reset_switch(struct ksz_device *dev)

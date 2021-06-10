@@ -231,8 +231,6 @@ static void ksz8795_port_init_cnt(struct ksz_device *dev, int port)
 					NULL, &mib->counters[mib->cnt_ptr]);
 		++mib->cnt_ptr;
 	}
-	mib->cnt_ptr = 0;
-	memset(mib->counters, 0, dev->mib_cnt * sizeof(u64));
 }
 
 static void ksz8795_r_table(struct ksz_device *dev, int table, u16 addr,
