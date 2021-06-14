@@ -1,0 +1,15 @@
+--- at91bootstrap3-v3.8.5.orig/driver/macb.c	2019-08-16 17:05:07.319998457 -0700
++++ at91bootstrap3-v3.8.5/driver/macb.c	2019-08-15 19:09:08.083998997 -0700
+@@ -343,10 +343,12 @@ static int phy_power_down(struct mii_bus
+ 		return -1;
+ 	}
+ 
++#if 0
+ 	if (macb_mdio_write(bus, MII_BMCR, (value | BMCR_PDOWN))) {
+ 		dbg_loud("MACB: Failed to write MII_BMCR\n");
+ 		return -1;
+ 	}
++#endif
+ 
+ 	return 0;
+ }
