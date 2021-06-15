@@ -1,0 +1,47 @@
+LinuxCommands Supported
+=======================
+
+gPTP
+====
+1. Ethtool - to check hardware timestamping support
+
+ethtool -T lan1
+
+2. ptp4l - to establish the master-slave ptp configuration
+
+Ptp4l -i lan1 –l 7 –m –f def.cfg
+
+3. phc2sys - It is used for synchronizing the time between phc clock and system clock. 
+
+phc2sys -f /etc/phc2sys.cfg -a -r -r
+
+4. pmc - ptp management client. It is used to get or set the configuration of ptp state machine.
+
+pmc -u -t 1 -b 2 'get priority1'
+pmc -u -t 1 -b 2 'get port_data_set'
+pmc -u -t 1 -b 2 'get current_data_set'
+pmc -u -t 1 -b 2 'get default_data_set'
+pmc -u -t 1 -b 2 'get port_data_set_np'
+pmc -u -t 1 -b 2 'get port_stats_np'
+pmc -u -t 1 -b 2 'get parent_data_set'
+pmc -u -t 1 -b 2 'get time_properties_data_set'
+
+5. PPS - Pulse per second can be enabled or disabled through sysfs file system. 
+
+echo 1 > /sys/class/ptp/ptp0/pps_enable
+echo 0 > /sys/class/ptp/ptp0/pps_enable
+
+ 
+tc-mqprio
+---------
+It is enable the multiple queue on the port 
+
+tc qdisc add dev lan3 root handle 1: mqprio num_tc 8 map 0 1 2 3 4 5 6 7 hw 1
+
+tc-cbs
+------
+It is to enable the egress rate limiting based on the credit based shaper
+
+tc qdisc replace dev lan3 parent 1:1 handle 11 cbs idleslope 10000 sendslope -90000 locredit 0x0606 hicredit 0x606 offload     1
+
+
