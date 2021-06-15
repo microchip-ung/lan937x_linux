@@ -30,6 +30,7 @@ Table of Contents:
         lan937x_linux
                 |-docs 
                 |       |-build_instructions.txt
+                |       |-LinuxCommands_supported.txt
                 |-Atmel_SOC_SAMA5D3
                 |       |-buildroot-at91
                 |       |-dts
