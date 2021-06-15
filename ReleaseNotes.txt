@@ -45,6 +45,10 @@ V2.1.1 : 14/06/2021
 -------------------
         Initial version of Linux DSA driver
 
+	Images.zip and Images_slv.zip are same except that all T1 phy in Image.zip
+	are configured in master mode and T1 phy in Imagex_slv.zip are configured in 
+	slave mode.
+
         New Features added
         -----------------
                 1. Linux (5.12.0-rc7) DSA driver with following features,
