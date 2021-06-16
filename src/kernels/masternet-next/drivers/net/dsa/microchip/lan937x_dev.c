@@ -260,7 +260,7 @@ static int lan937x_switch_detect(struct ksz_device *dev)
 static void lan937x_switch_exit(struct ksz_device *dev)
 {
 	lan937x_reset_switch(dev);
-	
+
 	if (dev->mdio_np) {
 		mdiobus_unregister(dev->ds->slave_mii_bus);
 		of_node_put(dev->mdio_np);
@@ -368,13 +368,13 @@ int lan937x_internal_phy_write(struct ksz_device *dev, int addr, int reg,
 
 	/* Write the Write En and Busy bit */
 	ret = ksz_write16(dev, REG_VPHY_IND_CTRL__2,
-			 (VPHY_IND_WRITE | VPHY_IND_BUSY));
+			  (VPHY_IND_WRITE | VPHY_IND_BUSY));
 	if (ret < 0)
 		return ret;
 
 	ret = regmap_read_poll_timeout(dev->regmap[1], REG_VPHY_IND_CTRL__2,
-				      value, !(value & VPHY_IND_BUSY), 10,
-				      1000);
+				       value, !(value & VPHY_IND_BUSY), 10,
+				       1000);
 	if (ret < 0) {
 		dev_err(dev->dev, "Failed to write phy register\n");
 		return ret;
@@ -412,8 +412,8 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
 		return ret;
 
 	ret = regmap_read_poll_timeout(dev->regmap[1], REG_VPHY_IND_CTRL__2,
-				      value, !(value & VPHY_IND_BUSY), 10,
-				      1000);
+				       value, !(value & VPHY_IND_BUSY), 10,
+				       1000);
 	if (ret < 0) {
 		dev_err(dev->dev, "Failed to read phy register\n");
 		return ret;
@@ -425,7 +425,7 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
 	return ret;
 }
 
-static void lan937x_set_gbit(struct ksz_device *dev, bool gbit, u8 *data)
+static void lan937x_config_gbit(struct ksz_device *dev, bool gbit, u8 *data)
 {
 	if (gbit)
 		*data &= ~PORT_MII_NOT_1GBIT;
@@ -433,10 +433,104 @@ static void lan937x_set_gbit(struct ksz_device *dev, bool gbit, u8 *data)
 		*data |= PORT_MII_NOT_1GBIT;
 }
 
+void lan937x_mac_config(struct ksz_device *dev, int port,
+			phy_interface_t interface)
+{
+	u8 data8;
+
+	lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
+
+	/* clear MII selection & set it based on interface later */
+	data8 &= ~PORT_MII_SEL_M;
+
+	/* configure MAC based on interface */
+	switch (interface) {
+	case PHY_INTERFACE_MODE_MII:
+		lan937x_config_gbit(dev, false, &data8);
+		data8 |= PORT_MII_SEL;
+		break;
+	case PHY_INTERFACE_MODE_RMII:
+		lan937x_config_gbit(dev, false, &data8);
+		data8 |= PORT_RMII_SEL;
+		break;
+	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+		lan937x_config_gbit(dev, true, &data8);
+		data8 |= PORT_RGMII_SEL;
+
+		/* Add RGMII internal delay for cpu port*/
+		if (dsa_is_cpu_port(dev->ds, port)) {
+			if (interface == PHY_INTERFACE_MODE_RGMII_ID ||
+			    interface == PHY_INTERFACE_MODE_RGMII_RXID)
+				data8 |= PORT_RGMII_ID_IG_ENABLE;
+
+			if (interface == PHY_INTERFACE_MODE_RGMII_ID ||
+			    interface == PHY_INTERFACE_MODE_RGMII_TXID)
+				data8 |= PORT_RGMII_ID_EG_ENABLE;
+		}
+		break;
+	default:
+		dev_err(dev->dev, "Unsupported interface '%s' for port %d\n",
+			phy_modes(interface), port);
+		return;
+	}
+
+	/* Write the updated value */
+	lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, data8);
+}
+
+void lan937x_config_interface(struct ksz_device *dev, int port,
+			      int speed, int duplex,
+			      bool tx_pause, bool rx_pause)
+{
+	u8 xmii_ctrl0, xmii_ctrl1;
+
+	lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_0, &xmii_ctrl0);
+	lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &xmii_ctrl1);
+
+	switch (speed) {
+	case SPEED_1000:
+		lan937x_config_gbit(dev, true, &xmii_ctrl1);
+		break;
+	case SPEED_100:
+		lan937x_config_gbit(dev, false, &xmii_ctrl1);
+		xmii_ctrl0 |= PORT_MAC_SPEED_100;
+		break;
+	case SPEED_10:
+		lan937x_config_gbit(dev, false, &xmii_ctrl1);
+		xmii_ctrl0 &= ~PORT_MAC_SPEED_100;
+		break;
+	default:
+		dev_err(dev->dev, "Unsupported speed on port %d: %d\n",
+			port, speed);
+		return;
+	}
+
+	if (duplex)
+		xmii_ctrl0 |= PORT_FULL_DUPLEX;
+	else
+		xmii_ctrl0 &= ~PORT_FULL_DUPLEX;
+
+	if (tx_pause)
+		xmii_ctrl0 |= PORT_TX_FLOW_CTRL;
+	else
+		xmii_ctrl1 &= ~PORT_TX_FLOW_CTRL;
+
+	if (rx_pause)
+		xmii_ctrl0 |= PORT_RX_FLOW_CTRL;
+	else
+		xmii_ctrl0 &= ~PORT_RX_FLOW_CTRL;
+
+	lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_0, xmii_ctrl0);
+	lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, xmii_ctrl1);
+}
+
 void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 {
 	struct ksz_port *p = &dev->ports[port];
-	u8 data8, member;
+	u8 member;
 
 	/* enable tag tail for host port */
 	if (cpu_port) {
@@ -444,28 +538,13 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 				 PORT_TAIL_TAG_ENABLE, true);
 	}
 
+	/*disable frame check length field*/
 	lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_FR_CHK_LENGTH,
 			 false);
 
-	lan937x_port_cfg(dev, port, REG_PORT_CTRL_0, PORT_MAC_LOOPBACK, false);
-
-	/* set back pressure */
+	/* set back pressure for half duplex */
 	lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_1, PORT_BACK_PRESSURE,
 			 true);
-
-	/* enable broadcast storm limit */
-	lan937x_port_cfg(dev, port, P_BCAST_STORM_CTRL, PORT_BROADCAST_STORM,
-			 true);
-
-	/* disable DiffServ priority */
-	lan937x_port_cfg(dev, port, P_PRIO_CTRL, PORT_DIFFSERV_PRIO_ENABLE,
-			 false);
-
-	/* replace priority */
-	lan937x_port_cfg(dev, port, REG_PORT_MRI_MAC_CTRL,
-			 PORT_USER_PRIO_CEILING, false);
-	lan937x_port_cfg32(dev, port, REG_PORT_MTI_QUEUE_CTRL_0__4,
-			   MTI_PVID_REPLACE, false);
 
 	/* enable 802.1p priority */
 	lan937x_port_cfg(dev, port, P_PRIO_CTRL, PORT_802_1P_PRIO_ENABLE, true);
@@ -475,39 +554,7 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 		lan937x_port_cfg(dev, port, REG_PORT_XMII_CTRL_0,
 				 PORT_TX_FLOW_CTRL | PORT_RX_FLOW_CTRL,
 				 true);
-
-		lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
-
-		/* clear MII selection & set it based on interface later */
-		data8 &= ~PORT_MII_SEL_M;
-
-		/* configure MAC based on p->interface */
-		switch (p->interface) {
-		case PHY_INTERFACE_MODE_MII:
-			lan937x_set_gbit(dev, false, &data8);
-			data8 |= PORT_MII_SEL;
-			break;
-		case PHY_INTERFACE_MODE_RMII:
-			lan937x_set_gbit(dev, false, &data8);
-			data8 |= PORT_RMII_SEL;
-			break;
-		default:
-			lan937x_set_gbit(dev, true, &data8);
-			data8 |= PORT_RGMII_SEL;
-			
-			/* Add RGMII internal delay for cpu port*/
-			if (dsa_is_cpu_port(dev->ds, port)) {
-				if (p->interface == PHY_INTERFACE_MODE_RGMII_ID ||
-				p->interface == PHY_INTERFACE_MODE_RGMII_RXID)
-					data8 |= PORT_RGMII_ID_IG_ENABLE;
-
-				if (p->interface == PHY_INTERFACE_MODE_RGMII_ID ||
-				p->interface == PHY_INTERFACE_MODE_RGMII_TXID)
-					data8 |= PORT_RGMII_ID_EG_ENABLE;
-			}
-			break;
-		}
-		lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, data8);
+		lan937x_mac_config(dev, port, p->interface);
 	}
 
 	if (cpu_port)
