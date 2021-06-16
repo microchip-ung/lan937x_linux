@@ -12206,8 +12206,7 @@ static void bnx2x_read_fwinfo(struct bnx2x *bp)
 	/* VPD RO tag should be first tag after identifier string, hence
 	 * we should be able to find it in first BNX2X_VPD_LEN chars
 	 */
-	i = pci_vpd_find_tag(vpd_start, 0, BNX2X_VPD_LEN,
-			     PCI_VPD_LRDT_RO_DATA);
+	i = pci_vpd_find_tag(vpd_start, BNX2X_VPD_LEN, PCI_VPD_LRDT_RO_DATA);
 	if (i < 0)
 		goto out_not_found;
 
@@ -13587,7 +13586,7 @@ static int bnx2x_set_qm_cid_count(struct bnx2x *bp)
 }
 
 /**
- * bnx2x_get_num_none_def_sbs - return the number of none default SBs
+ * bnx2x_get_num_non_def_sbs - return the number of none default SBs
  * @pdev: pci device
  * @cnic_cnt: count
  *

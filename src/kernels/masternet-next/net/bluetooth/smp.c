@@ -40,7 +40,7 @@
 	((struct smp_dev *)((struct l2cap_chan *)((hdev)->smp_data))->data)
 
 /* Low-level debug macros to be used for stuff that we don't want
- * accidentially in dmesg, i.e. the values of the various crypto keys
+ * accidentally in dmesg, i.e. the values of the various crypto keys
  * and the inputs & outputs of crypto functions.
  */
 #ifdef DEBUG
@@ -560,7 +560,7 @@ int smp_generate_oob(struct hci_dev *hdev, u8 hash[16], u8 rand[16])
 				return err;
 
 			/* This is unlikely, but we need to check that
-			 * we didn't accidentially generate a debug key.
+			 * we didn't accidentally generate a debug key.
 			 */
 			if (crypto_memneq(smp->local_pk, debug_pk, 64))
 				break;
@@ -1389,7 +1389,7 @@ static struct smp_chan *smp_chan_create(struct l2cap_conn *conn)
 		goto zfree_smp;
 	}
 
-	smp->tfm_ecdh = crypto_alloc_kpp("ecdh", 0, 0);
+	smp->tfm_ecdh = crypto_alloc_kpp("ecdh-nist-p256", 0, 0);
 	if (IS_ERR(smp->tfm_ecdh)) {
 		bt_dev_err(hcon->hdev, "Unable to create ECDH crypto context");
 		goto free_shash;
@@ -1902,7 +1902,7 @@ static u8 sc_send_public_key(struct smp_chan *smp)
 				return SMP_UNSPECIFIED;
 
 			/* This is unlikely, but we need to check that
-			 * we didn't accidentially generate a debug key.
+			 * we didn't accidentally generate a debug key.
 			 */
 			if (crypto_memneq(smp->local_pk, debug_pk, 64))
 				break;
@@ -3296,7 +3296,7 @@ static struct l2cap_chan *smp_add_cid(struct hci_dev *hdev, u16 cid)
 		return ERR_CAST(tfm_cmac);
 	}
 
-	tfm_ecdh = crypto_alloc_kpp("ecdh", 0, 0);
+	tfm_ecdh = crypto_alloc_kpp("ecdh-nist-p256", 0, 0);
 	if (IS_ERR(tfm_ecdh)) {
 		bt_dev_err(hdev, "Unable to create ECDH crypto context");
 		crypto_free_shash(tfm_cmac);
@@ -3821,7 +3821,7 @@ int __init bt_selftest_smp(void)
 		return PTR_ERR(tfm_cmac);
 	}
 
-	tfm_ecdh = crypto_alloc_kpp("ecdh", 0, 0);
+	tfm_ecdh = crypto_alloc_kpp("ecdh-nist-p256", 0, 0);
 	if (IS_ERR(tfm_ecdh)) {
 		BT_ERR("Unable to create ECDH crypto context");
 		crypto_free_shash(tfm_cmac);

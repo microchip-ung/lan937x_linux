@@ -24,9 +24,6 @@
 		i2c1 = &i2c1;
 		i2c2 = &i2c2;
 		i2c3 = &i2c3;
-		mmc0 = &sdmmc;
-		mmc1 = &emmc;
-		mmc2 = &sdio;
 		serial0 = &uart0;
 		serial1 = &uart1;
 		serial2 = &uart2;
@@ -247,7 +244,7 @@
 	};
 
 	wdt: watchdog@ff080000 {
-		compatible = "snps,dw-wdt";
+		compatible = "rockchip,rk3308-wdt", "snps,dw-wdt";
 		reg = <0x0 0xff080000 0x0 0x100>;
 		clocks = <&cru PCLK_WDT>;
 		interrupts = <GIC_SPI 10 IRQ_TYPE_LEVEL_HIGH>;
@@ -637,6 +634,28 @@
 		pinctrl-0 = <&flash_ale &flash_bus8 &flash_cle &flash_csn0
 			     &flash_rdn &flash_rdy &flash_wrn>;
 		pinctrl-names = "default";
+		status = "disabled";
+	};
+
+	gmac: ethernet@ff4e0000 {
+		compatible = "rockchip,rk3308-gmac";
+		reg = <0x0 0xff4e0000 0x0 0x10000>;
+		interrupts = <GIC_SPI 64 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "macirq";
+		clocks = <&cru SCLK_MAC>, <&cru SCLK_MAC_RX_TX>,
+			 <&cru SCLK_MAC_RX_TX>, <&cru SCLK_MAC_REF>,
+			 <&cru SCLK_MAC>, <&cru ACLK_MAC>,
+			 <&cru PCLK_MAC>, <&cru SCLK_MAC_RMII>;
+		clock-names = "stmmaceth", "mac_clk_rx",
+			      "mac_clk_tx", "clk_mac_ref",
+			      "clk_mac_refout", "aclk_mac",
+			      "pclk_mac", "clk_mac_speed";
+		phy-mode = "rmii";
+		pinctrl-names = "default";
+		pinctrl-0 = <&rmii_pins &mac_refclk_12ma>;
+		resets = <&cru SRST_MAC_A>;
+		reset-names = "stmmaceth";
+		rockchip,grf = <&grf>;
 		status = "disabled";
 	};
 

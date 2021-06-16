@@ -50,7 +50,8 @@ struct phylink_link_state;
 #define DSA_TAG_PROTO_OCELOT_8021Q_VALUE	20
 #define DSA_TAG_PROTO_SEVILLE_VALUE		21
 #define DSA_TAG_PROTO_BRCM_LEGACY_VALUE		22
-#define DSA_TAG_PROTO_LAN937X_VALUE		23
+#define DSA_TAG_PROTO_SJA1110_VALUE		23
+#define DSA_TAG_PROTO_LAN937X_VALUE		24
 
 enum dsa_tag_protocol {
 	DSA_TAG_PROTO_NONE		= DSA_TAG_PROTO_NONE_VALUE,
@@ -76,6 +77,7 @@ enum dsa_tag_protocol {
 	DSA_TAG_PROTO_XRS700X		= DSA_TAG_PROTO_XRS700X_VALUE,
 	DSA_TAG_PROTO_OCELOT_8021Q	= DSA_TAG_PROTO_OCELOT_8021Q_VALUE,
 	DSA_TAG_PROTO_SEVILLE		= DSA_TAG_PROTO_SEVILLE_VALUE,
+	DSA_TAG_PROTO_SJA1110		= DSA_TAG_PROTO_SJA1110_VALUE,
 	DSA_TAG_PROTO_LAN937X		= DSA_TAG_PROTO_LAN937X_VALUE,
 };
 
@@ -93,7 +95,8 @@ struct dsa_device_ops {
 	 * as regular on the master net device.
 	 */
 	bool (*filter)(const struct sk_buff *skb, struct net_device *dev);
-	unsigned int overhead;
+	unsigned int needed_headroom;
+	unsigned int needed_tailroom;
 	const char *name;
 	enum dsa_tag_protocol proto;
 	/* Some tagging protocols either mangle or shift the destination MAC
@@ -102,7 +105,6 @@ struct dsa_device_ops {
 	 * its RX filter.
 	 */
 	bool promisc_on_master;
-	bool tail_tag;
 };
 
 /* This structure defines the control interfaces that are overlayed by the
@@ -118,20 +120,6 @@ struct dsa_netdevice_ops {
 #define DSA_TAG_DRIVER_ALIAS "dsa_tag-"
 #define MODULE_ALIAS_DSA_TAG_DRIVER(__proto)				\
 	MODULE_ALIAS(DSA_TAG_DRIVER_ALIAS __stringify(__proto##_VALUE))
-
-struct dsa_skb_cb {
-	struct sk_buff *clone;
-};
-
-struct __dsa_skb_cb {
-	struct dsa_skb_cb cb;
-	u8 priv[48 - sizeof(struct dsa_skb_cb)];
-};
-
-#define DSA_SKB_CB(skb) ((struct dsa_skb_cb *)((skb)->cb))
-
-#define DSA_SKB_CB_PRIV(skb)			\
-	((void *)(skb)->cb + offsetof(struct __dsa_skb_cb, priv))
 
 struct dsa_switch_tree {
 	struct list_head	list;
@@ -742,8 +730,8 @@ struct dsa_switch_ops {
 				     struct ifreq *ifr);
 	int	(*port_hwtstamp_set)(struct dsa_switch *ds, int port,
 				     struct ifreq *ifr);
-	bool	(*port_txtstamp)(struct dsa_switch *ds, int port,
-				 struct sk_buff *clone, unsigned int type);
+	void	(*port_txtstamp)(struct dsa_switch *ds, int port,
+				 struct sk_buff *skb);
 	bool	(*port_rxtstamp)(struct dsa_switch *ds, int port,
 				 struct sk_buff *skb, unsigned int type);
 
@@ -942,7 +930,7 @@ static inline void dsa_tag_generic_flow_dissect(const struct sk_buff *skb,
 {
 #if IS_ENABLED(CONFIG_NET_DSA)
 	const struct dsa_device_ops *ops = skb->dev->dsa_ptr->tag_ops;
-	int tag_len = ops->overhead;
+	int tag_len = ops->needed_headroom;
 
 	*offset = tag_len;
 	*proto = ((__be16 *)skb->data)[(tag_len / 2) - 1];

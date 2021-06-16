@@ -4,36 +4,37 @@ new file mode 100644
 
 WARNING: DT binding docs and includes should be a separate patch. See: Documentation/devicetree/bindings/submitting-patches.rst
 
+WARNING: line length of 84 exceeds 80 columns
+#426: FILE: drivers/net/dsa/microchip/lan937x_dev.c:168:
++				       PORT_CTRL_ADDR(port, REG_PORT_MIB_CTRL_STAT),
+
 CHECK: Avoid CamelCase: <baseT_Half>
-#2093: FILE: drivers/net/dsa/microchip/lan937x_main.c:1112:
+#2232: FILE: drivers/net/dsa/microchip/lan937x_main.c:1176:
 +		phylink_set(mask, 10baseT_Half);
 
 CHECK: Avoid CamelCase: <baseT_Full>
-#2094: FILE: drivers/net/dsa/microchip/lan937x_main.c:1113:
+#2233: FILE: drivers/net/dsa/microchip/lan937x_main.c:1177:
 +		phylink_set(mask, 10baseT_Full);
 
 CHECK: Avoid CamelCase: <Autoneg>
-#2097: FILE: drivers/net/dsa/microchip/lan937x_main.c:1116:
+#2236: FILE: drivers/net/dsa/microchip/lan937x_main.c:1180:
 +		phylink_set(mask, Autoneg);
 
 CHECK: Avoid CamelCase: <Pause>
-#2099: FILE: drivers/net/dsa/microchip/lan937x_main.c:1118:
+#2238: FILE: drivers/net/dsa/microchip/lan937x_main.c:1182:
 +		phylink_set(mask, Pause);
 
 CHECK: Avoid CamelCase: <Asym_Pause>
-#2100: FILE: drivers/net/dsa/microchip/lan937x_main.c:1119:
+#2239: FILE: drivers/net/dsa/microchip/lan937x_main.c:1183:
 +		phylink_set(mask, Asym_Pause);
 
 CHECK: Avoid CamelCase: <baseT1_Full>
-#2111: FILE: drivers/net/dsa/microchip/lan937x_main.c:1130:
+#2248: FILE: drivers/net/dsa/microchip/lan937x_main.c:1192:
 +		phylink_set(mask, 100baseT1_Full);
 
-total: 0 errors, 2 warnings, 6 checks, 3604 lines checked
+total: 0 errors, 3 warnings, 6 checks, 3651 lines checked
 
-NOTE: For some of the reported defects, checkpatch may be able to
-      mechanically convert to the typical style using --fix or --fix-inplace.
-
-myfixes.patch has style problems, please review.
+my_fixes.patch has style problems, please review.
 
 NOTE: If any of the errors are false positives, please report
       them to the maintainer, see CHECKPATCH in MAINTAINERS.

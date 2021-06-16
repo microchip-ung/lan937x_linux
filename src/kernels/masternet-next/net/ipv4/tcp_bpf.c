@@ -184,11 +184,11 @@ static int tcp_bpf_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 msg_bytes_ready:
 	copied = sk_msg_recvmsg(sk, psock, msg, len, flags);
 	if (!copied) {
-		int data, err = 0;
 		long timeo;
+		int data;
 
 		timeo = sock_rcvtimeo(sk, nonblock);
-		data = sk_msg_wait_data(sk, psock, flags, timeo, &err);
+		data = sk_msg_wait_data(sk, psock, timeo);
 		if (data) {
 			if (!sk_psock_queue_empty(psock))
 				goto msg_bytes_ready;
@@ -196,14 +196,9 @@ msg_bytes_ready:
 			sk_psock_put(sk, psock);
 			return tcp_recvmsg(sk, msg, len, nonblock, flags, addr_len);
 		}
-		if (err) {
-			ret = err;
-			goto out;
-		}
 		copied = -EAGAIN;
 	}
 	ret = copied;
-out:
 	release_sock(sk);
 	sk_psock_put(sk, psock);
 	return ret;
@@ -499,9 +494,8 @@ static int tcp_bpf_assert_proto_ops(struct proto *ops)
 	       ops->sendpage == tcp_sendpage ? 0 : -ENOTSUPP;
 }
 
-int tcp_bpf_update_proto(struct sock *sk, bool restore)
+int tcp_bpf_update_proto(struct sock *sk, struct sk_psock *psock, bool restore)
 {
-	struct sk_psock *psock = sk_psock(sk);
 	int family = sk->sk_family == AF_INET6 ? TCP_BPF_IPV6 : TCP_BPF_IPV4;
 	int config = psock->progs.msg_parser   ? TCP_BPF_TX   : TCP_BPF_BASE;
 

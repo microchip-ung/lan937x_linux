@@ -367,39 +367,24 @@ static irqreturn_t marvell_handle_interrupt(struct phy_device *phydev)
 
 static int marvell_set_polarity(struct phy_device *phydev, int polarity)
 {
-	int reg;
-	int err;
-	int val;
+	u16 val;
 
-	/* get the current settings */
-	reg = phy_read(phydev, MII_M1011_PHY_SCR);
-	if (reg < 0)
-		return reg;
-
-	val = reg;
-	val &= ~MII_M1011_PHY_SCR_AUTO_CROSS;
 	switch (polarity) {
 	case ETH_TP_MDI:
-		val |= MII_M1011_PHY_SCR_MDI;
+		val = MII_M1011_PHY_SCR_MDI;
 		break;
 	case ETH_TP_MDI_X:
-		val |= MII_M1011_PHY_SCR_MDI_X;
+		val = MII_M1011_PHY_SCR_MDI_X;
 		break;
 	case ETH_TP_MDI_AUTO:
 	case ETH_TP_MDI_INVALID:
 	default:
-		val |= MII_M1011_PHY_SCR_AUTO_CROSS;
+		val = MII_M1011_PHY_SCR_AUTO_CROSS;
 		break;
 	}
 
-	if (val != reg) {
-		/* Set the new polarity value in the register */
-		err = phy_write(phydev, MII_M1011_PHY_SCR, val);
-		if (err)
-			return err;
-	}
-
-	return val != reg;
+	return phy_modify_changed(phydev, MII_M1011_PHY_SCR,
+				  MII_M1011_PHY_SCR_AUTO_CROSS, val);
 }
 
 static int marvell_config_aneg(struct phy_device *phydev)
@@ -978,22 +963,28 @@ static int m88e1111_get_downshift(struct phy_device *phydev, u8 *data)
 
 static int m88e1111_set_downshift(struct phy_device *phydev, u8 cnt)
 {
-	int val;
+	int val, err;
 
 	if (cnt > MII_M1111_PHY_EXT_CR_DOWNSHIFT_MAX)
 		return -E2BIG;
 
-	if (!cnt)
-		return phy_clear_bits(phydev, MII_M1111_PHY_EXT_CR,
-				      MII_M1111_PHY_EXT_CR_DOWNSHIFT_EN);
+	if (!cnt) {
+		err = phy_clear_bits(phydev, MII_M1111_PHY_EXT_CR,
+				     MII_M1111_PHY_EXT_CR_DOWNSHIFT_EN);
+	} else {
+		val = MII_M1111_PHY_EXT_CR_DOWNSHIFT_EN;
+		val |= FIELD_PREP(MII_M1111_PHY_EXT_CR_DOWNSHIFT_MASK, cnt - 1);
 
-	val = MII_M1111_PHY_EXT_CR_DOWNSHIFT_EN;
-	val |= FIELD_PREP(MII_M1111_PHY_EXT_CR_DOWNSHIFT_MASK, cnt - 1);
+		err = phy_modify(phydev, MII_M1111_PHY_EXT_CR,
+				 MII_M1111_PHY_EXT_CR_DOWNSHIFT_EN |
+				 MII_M1111_PHY_EXT_CR_DOWNSHIFT_MASK,
+				 val);
+	}
 
-	return phy_modify(phydev, MII_M1111_PHY_EXT_CR,
-			  MII_M1111_PHY_EXT_CR_DOWNSHIFT_EN |
-			  MII_M1111_PHY_EXT_CR_DOWNSHIFT_MASK,
-			  val);
+	if (err < 0)
+		return err;
+
+	return genphy_soft_reset(phydev);
 }
 
 static int m88e1111_get_tunable(struct phy_device *phydev,
@@ -1036,22 +1027,28 @@ static int m88e1011_get_downshift(struct phy_device *phydev, u8 *data)
 
 static int m88e1011_set_downshift(struct phy_device *phydev, u8 cnt)
 {
-	int val;
+	int val, err;
 
 	if (cnt > MII_M1011_PHY_SCR_DOWNSHIFT_MAX)
 		return -E2BIG;
 
-	if (!cnt)
-		return phy_clear_bits(phydev, MII_M1011_PHY_SCR,
-				      MII_M1011_PHY_SCR_DOWNSHIFT_EN);
+	if (!cnt) {
+		err = phy_clear_bits(phydev, MII_M1011_PHY_SCR,
+				     MII_M1011_PHY_SCR_DOWNSHIFT_EN);
+	} else {
+		val = MII_M1011_PHY_SCR_DOWNSHIFT_EN;
+		val |= FIELD_PREP(MII_M1011_PHY_SCR_DOWNSHIFT_MASK, cnt - 1);
 
-	val = MII_M1011_PHY_SCR_DOWNSHIFT_EN;
-	val |= FIELD_PREP(MII_M1011_PHY_SCR_DOWNSHIFT_MASK, cnt - 1);
+		err = phy_modify(phydev, MII_M1011_PHY_SCR,
+				 MII_M1011_PHY_SCR_DOWNSHIFT_EN |
+				 MII_M1011_PHY_SCR_DOWNSHIFT_MASK,
+				 val);
+	}
 
-	return phy_modify(phydev, MII_M1011_PHY_SCR,
-			  MII_M1011_PHY_SCR_DOWNSHIFT_EN |
-			  MII_M1011_PHY_SCR_DOWNSHIFT_MASK,
-			  val);
+	if (err < 0)
+		return err;
+
+	return genphy_soft_reset(phydev);
 }
 
 static int m88e1011_get_tunable(struct phy_device *phydev,
@@ -1076,6 +1073,38 @@ static int m88e1011_set_tunable(struct phy_device *phydev,
 	}
 }
 
+static int m88e1112_config_init(struct phy_device *phydev)
+{
+	int err;
+
+	err = m88e1011_set_downshift(phydev, 3);
+	if (err < 0)
+		return err;
+
+	return m88e1111_config_init(phydev);
+}
+
+static int m88e1111gbe_config_init(struct phy_device *phydev)
+{
+	int err;
+
+	err = m88e1111_set_downshift(phydev, 3);
+	if (err < 0)
+		return err;
+
+	return m88e1111_config_init(phydev);
+}
+
+static int marvell_1011gbe_config_init(struct phy_device *phydev)
+{
+	int err;
+
+	err = m88e1011_set_downshift(phydev, 3);
+	if (err < 0)
+		return err;
+
+	return marvell_config_init(phydev);
+}
 static int m88e1116r_config_init(struct phy_device *phydev)
 {
 	int err;
@@ -1156,6 +1185,9 @@ static int m88e1510_config_init(struct phy_device *phydev)
 		if (err < 0)
 			return err;
 	}
+	err = m88e1011_set_downshift(phydev, 3);
+	if (err < 0)
+		return err;
 
 	return m88e1318_config_init(phydev);
 }
@@ -1308,6 +1340,9 @@ static int m88e1145_config_init(struct phy_device *phydev)
 		if (err < 0)
 			return err;
 	}
+	err = m88e1111_set_downshift(phydev, 3);
+	if (err < 0)
+		return err;
 
 	err = marvell_of_reg_init(phydev);
 	if (err < 0)
@@ -2686,7 +2721,7 @@ static struct phy_driver marvell_drivers[] = {
 		.name = "Marvell 88E1112",
 		/* PHY_GBIT_FEATURES */
 		.probe = marvell_probe,
-		.config_init = m88e1111_config_init,
+		.config_init = m88e1112_config_init,
 		.config_aneg = marvell_config_aneg,
 		.config_intr = marvell_config_intr,
 		.handle_interrupt = marvell_handle_interrupt,
@@ -2706,7 +2741,7 @@ static struct phy_driver marvell_drivers[] = {
 		.name = "Marvell 88E1111",
 		/* PHY_GBIT_FEATURES */
 		.probe = marvell_probe,
-		.config_init = m88e1111_config_init,
+		.config_init = m88e1111gbe_config_init,
 		.config_aneg = m88e1111_config_aneg,
 		.read_status = marvell_read_status,
 		.config_intr = marvell_config_intr,
@@ -2727,7 +2762,7 @@ static struct phy_driver marvell_drivers[] = {
 		.name = "Marvell 88E1111 (Finisar)",
 		/* PHY_GBIT_FEATURES */
 		.probe = marvell_probe,
-		.config_init = m88e1111_config_init,
+		.config_init = m88e1111gbe_config_init,
 		.config_aneg = m88e1111_config_aneg,
 		.read_status = marvell_read_status,
 		.config_intr = marvell_config_intr,
@@ -2767,7 +2802,7 @@ static struct phy_driver marvell_drivers[] = {
 		.driver_data = DEF_MARVELL_HWMON_OPS(m88e1121_hwmon_ops),
 		/* PHY_GBIT_FEATURES */
 		.probe = marvell_probe,
-		.config_init = marvell_config_init,
+		.config_init = marvell_1011gbe_config_init,
 		.config_aneg = m88e1121_config_aneg,
 		.read_status = marvell_read_status,
 		.config_intr = marvell_config_intr,
@@ -2847,7 +2882,7 @@ static struct phy_driver marvell_drivers[] = {
 		.name = "Marvell 88E1240",
 		/* PHY_GBIT_FEATURES */
 		.probe = marvell_probe,
-		.config_init = m88e1111_config_init,
+		.config_init = m88e1112_config_init,
 		.config_aneg = marvell_config_aneg,
 		.config_intr = marvell_config_intr,
 		.handle_interrupt = marvell_handle_interrupt,
@@ -2858,6 +2893,8 @@ static struct phy_driver marvell_drivers[] = {
 		.get_sset_count = marvell_get_sset_count,
 		.get_strings = marvell_get_strings,
 		.get_stats = marvell_get_stats,
+		.get_tunable = m88e1011_get_tunable,
+		.set_tunable = m88e1011_set_tunable,
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1116R,
@@ -2915,7 +2952,7 @@ static struct phy_driver marvell_drivers[] = {
 		/* PHY_GBIT_FEATURES */
 		.flags = PHY_POLL_CABLE_TEST,
 		.probe = marvell_probe,
-		.config_init = marvell_config_init,
+		.config_init = marvell_1011gbe_config_init,
 		.config_aneg = m88e1510_config_aneg,
 		.read_status = marvell_read_status,
 		.config_intr = marvell_config_intr,
@@ -2941,7 +2978,7 @@ static struct phy_driver marvell_drivers[] = {
 		.probe = marvell_probe,
 		/* PHY_GBIT_FEATURES */
 		.flags = PHY_POLL_CABLE_TEST,
-		.config_init = marvell_config_init,
+		.config_init = marvell_1011gbe_config_init,
 		.config_aneg = m88e1510_config_aneg,
 		.read_status = marvell_read_status,
 		.config_intr = marvell_config_intr,
@@ -2986,7 +3023,7 @@ static struct phy_driver marvell_drivers[] = {
 		/* PHY_GBIT_FEATURES */
 		.flags = PHY_POLL_CABLE_TEST,
 		.probe = marvell_probe,
-		.config_init = marvell_config_init,
+		.config_init = marvell_1011gbe_config_init,
 		.config_aneg = m88e6390_config_aneg,
 		.read_status = marvell_read_status,
 		.config_intr = marvell_config_intr,
@@ -3012,7 +3049,7 @@ static struct phy_driver marvell_drivers[] = {
 		/* PHY_GBIT_FEATURES */
 		.flags = PHY_POLL_CABLE_TEST,
 		.probe = marvell_probe,
-		.config_init = marvell_config_init,
+		.config_init = marvell_1011gbe_config_init,
 		.config_aneg = m88e6390_config_aneg,
 		.read_status = marvell_read_status,
 		.config_intr = marvell_config_intr,
@@ -3038,7 +3075,7 @@ static struct phy_driver marvell_drivers[] = {
 		/* PHY_GBIT_FEATURES */
 		.flags = PHY_POLL_CABLE_TEST,
 		.probe = marvell_probe,
-		.config_init = marvell_config_init,
+		.config_init = marvell_1011gbe_config_init,
 		.config_aneg = m88e1510_config_aneg,
 		.read_status = marvell_read_status,
 		.config_intr = marvell_config_intr,
@@ -3063,7 +3100,7 @@ static struct phy_driver marvell_drivers[] = {
 		.driver_data = DEF_MARVELL_HWMON_OPS(m88e1510_hwmon_ops),
 		.probe = marvell_probe,
 		/* PHY_GBIT_FEATURES */
-		.config_init = marvell_config_init,
+		.config_init = marvell_1011gbe_config_init,
 		.config_aneg = m88e1510_config_aneg,
 		.read_status = marvell_read_status,
 		.config_intr = marvell_config_intr,
@@ -3085,7 +3122,7 @@ static struct phy_driver marvell_drivers[] = {
 		.driver_data = DEF_MARVELL_HWMON_OPS(m88e1510_hwmon_ops),
 		.probe = marvell_probe,
 		.features = PHY_GBIT_FIBRE_FEATURES,
-		.config_init = marvell_config_init,
+		.config_init = marvell_1011gbe_config_init,
 		.config_aneg = m88e1510_config_aneg,
 		.read_status = marvell_read_status,
 		.config_intr = marvell_config_intr,

@@ -6,6 +6,5 @@ net/dsa/tag_ksz.c
 Documentation/devicetree/bindings/net/dsa/microchip,lan937x.yaml
 MAINTAINERS
 include/net/dsa.h
-net/dsa/Kconfig                             
-net/dsa/tag_ksz.c
+net/dsa/Kconfig
 drivers/base/regmap/regmap-debugfs.c

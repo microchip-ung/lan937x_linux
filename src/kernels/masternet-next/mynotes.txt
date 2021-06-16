@@ -6,7 +6,9 @@ git reset --hard HEAD
 
 sudo ln -fs /usr/bin/python3 /usr/bin/python
 
-./~bashrc
+sudo ln -fs /usr/bin/python2 /usr/bin/python
+
+./~bashrc updates needed
 
 ./scripts/checkpatch.pl my_fixes.patch >output.txt
 
@@ -110,20 +112,9 @@ transactional logic from VLAN objects
 Error: Documentation/devicetree/bindings/net/dsa/microchip,lan937x.example.dts:22.9-18 syntax error
 FATAL ERROR: Unable to parse input tre
 
-git format-patch --cover-letter -s --subject-prefix=”RFC PATCH v2 net-next”
+git format-patch --cover-letter -s --subject-prefix=”PATCH v2 net-next” 5d869070569a23aa909c6e7e9d010fc438a492ef
 
---cc UNGLinuxDriver@microchip.com 
---cc andrew@lunn.ch  
---cc hkallweit1@gmail.com 
---cc linux@armlinux.org.uk
---cc davem@davemloft.net
---cc kuba@kernel.org
---cc netdev@vger.kernel.org
---cc linux-kernel@vger.kernel.org
---cc vivien.didelot@gmail.com
---cc f.fainelli@gmail.com
---cc olteanv@gmail.com
---cc robh+dt@kernel.org
---cc devicetree@vger.kernel.org
+git send-email --to --cc UNGLinuxDriver@microchip.com --to andrew@lunn.ch  --cc hkallweit1@gmail.com --cc linux@armlinux.org.uk --cc davem@davemloft.net --cc kuba@kernel.org --to netdev@vger.kernel.org --cc linux-kernel@vger.kernel.org --cc vivien.didelot@gmail.com --cc f.fainelli@gmail.com --to olteanv@gmail.com --to robh+dt@kernel.org --cc devicetree@vger.kernel.org *.patch
 
 
+--cc UNGLinuxDriver@microchip.com --to andrew@lunn.ch  --cc hkallweit1@gmail.com --cc linux@armlinux.org.uk --cc davem@davemloft.net --cc kuba@kernel.org --to netdev@vger.kernel.org --cc linux-kernel@vger.kernel.org --cc vivien.didelot@gmail.com --cc f.fainelli@gmail.com --to olteanv@gmail.com --to robh+dt@kernel.org --cc devicetree@vger.kernel.org

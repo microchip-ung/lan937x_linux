@@ -169,11 +169,11 @@ static const char emac_version_string[] = "TI DaVinci EMAC Linux v6.1";
 /* EMAC mac_status register */
 #define EMAC_MACSTATUS_TXERRCODE_MASK	(0xF00000)
 #define EMAC_MACSTATUS_TXERRCODE_SHIFT	(20)
-#define EMAC_MACSTATUS_TXERRCH_MASK	(0x7)
+#define EMAC_MACSTATUS_TXERRCH_MASK	(0x70000)
 #define EMAC_MACSTATUS_TXERRCH_SHIFT	(16)
 #define EMAC_MACSTATUS_RXERRCODE_MASK	(0xF000)
 #define EMAC_MACSTATUS_RXERRCODE_SHIFT	(12)
-#define EMAC_MACSTATUS_RXERRCH_MASK	(0x7)
+#define EMAC_MACSTATUS_RXERRCH_MASK	(0x700)
 #define EMAC_MACSTATUS_RXERRCH_SHIFT	(8)
 
 /* EMAC RX register masks */
@@ -1814,13 +1814,12 @@ static int davinci_emac_probe(struct platform_device *pdev)
 	priv->bus_freq_mhz = (u32)(emac_bus_frequency / 1000000);
 
 	/* Get EMAC platform data */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	priv->emac_base_phys = res->start + pdata->ctrl_reg_offset;
-	priv->remap_addr = devm_ioremap_resource(&pdev->dev, res);
+	priv->remap_addr = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(priv->remap_addr)) {
 		rc = PTR_ERR(priv->remap_addr);
 		goto no_pdata;
 	}
+	priv->emac_base_phys = res->start + pdata->ctrl_reg_offset;
 
 	res_ctrl = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 	if (res_ctrl) {

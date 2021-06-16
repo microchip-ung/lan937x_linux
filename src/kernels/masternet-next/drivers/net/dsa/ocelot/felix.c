@@ -940,6 +940,8 @@ static void felix_phylink_mac_link_up(struct dsa_switch *ds, int port,
 
 	ocelot_write_rix(ocelot, 0, ANA_POL_FLOWC, port);
 
+	ocelot_fields_write(ocelot, port, SYS_PAUSE_CFG_PAUSE_ENA, tx_pause);
+
 	/* Undo the effects of felix_phylink_mac_link_down:
 	 * enable MAC module
 	 */
@@ -1395,19 +1397,20 @@ static bool felix_rxtstamp(struct dsa_switch *ds, int port,
 	return false;
 }
 
-static bool felix_txtstamp(struct dsa_switch *ds, int port,
-			   struct sk_buff *clone, unsigned int type)
+static void felix_txtstamp(struct dsa_switch *ds, int port,
+			   struct sk_buff *skb)
 {
 	struct ocelot *ocelot = ds->priv;
-	struct ocelot_port *ocelot_port = ocelot->ports[port];
+	struct sk_buff *clone = NULL;
 
-	if (ocelot->ptp && (skb_shinfo(clone)->tx_flags & SKBTX_HW_TSTAMP) &&
-	    ocelot_port->ptp_cmd == IFH_REW_OP_TWO_STEP_PTP) {
-		ocelot_port_add_txtstamp_skb(ocelot, port, clone);
-		return true;
-	}
+	if (!ocelot->ptp)
+		return;
 
-	return false;
+	if (ocelot_port_txtstamp_request(ocelot, port, skb, &clone))
+		return;
+
+	if (clone)
+		OCELOT_SKB_CB(skb)->clone = clone;
 }
 
 static int felix_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
