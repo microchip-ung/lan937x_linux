@@ -197,7 +197,6 @@ static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
 	int ret;
 
 	ret = lan937x_internal_phy_read(dev, addr, reg, &val);
-
 	if (ret < 0)
 		return ret;
 
@@ -351,7 +350,6 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 	if (vlan->flags & BRIDGE_VLAN_INFO_PVID) {
 		ret = lan937x_pwrite16(dev, port, REG_PORT_DEFAULT_VID,
 				       vlan->vid);
-
 		if (ret < 0) {
 			NL_SET_ERR_MSG_MOD(extack, "Failed to set pvid\n");
 			return ret;
@@ -374,7 +372,6 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 	pvid &= 0xFFF;
 
 	ret = lan937x_get_vlan_table(dev, vlan->vid, &vlan_entry);
-
 	if (ret < 0) {
 		dev_err(dev->dev, "Failed to get vlan table\n");
 		return ret;
@@ -392,7 +389,6 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 	}
 
 	ret = lan937x_pwrite16(dev, port, REG_PORT_DEFAULT_VID, pvid);
-
 	if (ret < 0) {
 		dev_err(dev->dev, "Failed to set pvid\n");
 		return ret;
@@ -632,7 +628,6 @@ static int lan937x_port_fdb_dump(struct dsa_switch *ds, int port,
 		/* start ALU search */
 		ret = ksz_write32(dev, REG_SW_ALU_CTRL(i),
 				  (ALU_START | ALU_SEARCH));
-
 		if (ret < 0)
 			goto exit;
 
@@ -641,7 +636,6 @@ static int lan937x_port_fdb_dump(struct dsa_switch *ds, int port,
 			do {
 				ret = ksz_read32(dev, REG_SW_ALU_CTRL(i),
 						 &lan937x_data);
-
 				if (ret < 0)
 					goto exit;
 
@@ -800,7 +794,6 @@ static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
 
 		/* read ALU static table */
 		ret = lan937x_read_table(dev, static_table);
-
 		if (ret < 0)
 			goto exit;
 
@@ -944,7 +937,6 @@ static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 
 	/* read interface from REG_PORT_XMII_CTRL_1 register */
 	ret = lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
-
 	if (ret < 0)
 		return PHY_INTERFACE_MODE_NA;
 
@@ -983,36 +975,24 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 	for (i = 0; i < dev->port_cnt; i++) {
 		if (dsa_is_cpu_port(ds, i) && (dev->cpu_ports & (1 << i))) {
 			phy_interface_t interface;
-			const char *prev_msg;
-			const char *prev_mode;
 
 			dev->cpu_port = i;
 			dev->host_mask = (1 << dev->cpu_port);
 			dev->port_mask |= dev->host_mask;
 			p = &dev->ports[i];
 
-			/* Read from XMII register to determine host port
-			 * interface.  If set specifically in device tree
-			 * note the difference to help debugging.
+			/* Check if the device tree have specific interface
+			 * setting otherwise read & assign from XMII register
+			 * for host port interface 
 			 */
 			interface = lan937x_get_interface(dev, i);
 			if (!p->interface)
 				p->interface = interface;
 
-			if (interface && interface != p->interface) {
-				prev_msg = " instead of ";
-				prev_mode = phy_modes(interface);
-			} else {
-				prev_msg = "";
-				prev_mode = "";
-			}
-
 			dev_info(dev->dev,
-				 "Port%d: using phy mode %s%s%s\n",
+				 "Port%d: using phy mode %s\n",
 				 i,
-				 phy_modes(p->interface),
-				 prev_msg,
-				 prev_mode);
+				 phy_modes(p->interface));
 
 			/* enable cpu port */
 			lan937x_port_setup(dev, i, true);
@@ -1231,11 +1211,7 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 
 int lan937x_switch_register(struct ksz_device *dev)
 {
-	int ret;
-
-	ret = ksz_switch_register(dev, &lan937x_dev_ops);
-
-	return ret;
+	return ksz_switch_register(dev, &lan937x_dev_ops);
 }
 EXPORT_SYMBOL(lan937x_switch_register);
 

@@ -30,24 +30,20 @@
 #define	PHYACC_ATTR_MODE_READ		0
 #define	PHYACC_ATTR_MODE_WRITE		1
 #define	PHYACC_ATTR_MODE_MODIFY		2
-#define PHYACC_ATTR_MODE_POLL		3
+#define	PHYACC_ATTR_MODE_POLL		3
 
 #define	PHYACC_ATTR_BANK_SMI		0
 #define	PHYACC_ATTR_BANK_MISC		1
 #define	PHYACC_ATTR_BANK_PCS		2
 #define	PHYACC_ATTR_BANK_AFE		3
-#define PHYACC_ATTR_BANK_DSP		4
+#define	PHYACC_ATTR_BANK_DSP		4
 #define	PHYACC_ATTR_BANK_MAX		7
 
-#define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
-#define DRIVER_DESC	"Microchip LAN87XX/LAN937X T1 PHY driver"
-
 #define T1_M_CTRL_REG			0x09
-
 #define T1_M_CFG			BIT(11)
 
 #define T1_MODE_STAT_REG		0x11
-#define T1_DSCR_LOCK_STATUS_MSK		BIT(3)
+#define T1_DSCR_LOCK_STATUS_MSK 	BIT(3)
 #define T1_LINK_UP_MSK			BIT(0)
 
 #define T1_REG_BANK_SEL_MASK		0x7
@@ -55,9 +51,8 @@
 #define T1_REG_ADDR_MASK		0xFF
 
 #define T1_M_STATUS_REG			0x0A
-
-#define T1_LOCAL_RX_OK			BIT(13)
-#define T1_REMOTE_RX_OK			BIT(12)
+#define T1_LOCAL_RX_OK  		BIT(13)
+#define T1_REMOTE_RX_OK 		BIT(12)
 
 #define LAN87XX_PHY_ID			0x0007c150
 #define LAN937X_T1_PHY_ID		0x0007c181
@@ -67,8 +62,8 @@
 /* T1 Registers */
 #define T1_AFE_PORT_CFG1_REG		0x0B
 #define T1_POWER_DOWN_CONTROL_REG	0x1A
-#define T1_SLV_FD_MULT_CFG_REG		0x18
-#define T1_CDR_CFG_PRE_LOCK_REG		0x05
+#define T1_SLV_FD_MULT_CFG_REG  	0x18
+#define T1_CDR_CFG_PRE_LOCK_REG 	0x05
 #define T1_CDR_CFG_POST_LOCK_REG	0x06
 #define T1_LCK_STG2_MUFACT_CFG_REG	0x1A
 #define T1_LCK_STG3_MUFACT_CFG_REG	0x1B
@@ -77,9 +72,11 @@
 #define T1_TX_LPF_FIR_CFG_REG		0x55
 #define T1_SQI_CONFIG_REG		0x2E
 #define T1_MDIO_CONTROL2_REG		0x10
-#define T1_INTERRUPT_SOURCE_REG		0x18
+#define T1_INTERRUPT_SOURCE_REG 	0x18
 #define T1_INTERRUPT2_SOURCE_REG	0x08
 
+#define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
+#define DRIVER_DESC	"Microchip LAN87XX/LAN937X T1 PHY driver"
 
 struct access_ereg_val {
 	u8  mode;
@@ -188,7 +185,7 @@ static int access_ereg_clr_poll_timeout(struct phy_device *phydev, u8 bank,
 				     150, 30000, true);
 }
 
-static int mchp_t1_phy_config_init(struct phy_device *phydev)
+static int lan87xx_phy_init(struct phy_device *phydev)
 {
 	static const struct access_ereg_val init[] = {
 		/* TXPD/TXAMP6 Configs*/
@@ -387,7 +384,7 @@ static irqreturn_t lan87xx_handle_interrupt(struct phy_device *phydev)
 
 static int lan87xx_config_init(struct phy_device *phydev)
 {
-	int rc = mchp_t1_phy_config_init(phydev);
+	int rc = lan87xx_phy_init(phydev);
 
 	if (rc < 0)
 		phydev_err(phydev, "failed to initialize phy\n");

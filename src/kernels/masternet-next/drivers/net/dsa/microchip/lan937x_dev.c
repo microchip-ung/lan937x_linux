@@ -242,7 +242,6 @@ static int lan937x_switch_detect(struct ksz_device *dev)
 
 	/* Read Chip ID */
 	ret = ksz_read32(dev, REG_CHIP_ID0__1, &id32);
-
 	if (ret)
 		return ret;
 

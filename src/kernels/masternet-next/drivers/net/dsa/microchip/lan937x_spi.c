@@ -75,7 +75,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		.port_cnt = 5,
 	},
 	{
-		.chip_id = 0x00937400,
+		.chip_id = 0x00937410,
 		.dev_name = "LAN9374",
 		.num_vlans = 4096,
 		.num_alus = 1024,
@@ -115,7 +115,6 @@ static int lan937x_spi_probe(struct spi_device *spi)
 		dev->pdata = spi->dev.platform_data;
 
 	ret = lan937x_switch_register(dev);
-
 	/* Main DSA driver may not be started yet. */
 	if (ret)
 		return ret;
