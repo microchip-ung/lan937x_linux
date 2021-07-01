@@ -57,6 +57,7 @@ ktime_t ksz_tstamp_reconstruct(struct ksz_device_ptp_shared *ksz,
 				   ktime_t tstamp);
 
 struct ksz_skb_cb {
+	struct sk_buff *clone;
 	unsigned int ptp_type;
 	/* Do not cache pointer to PTP header between ksz9477_ptp_port_txtstamp
 	 * and ksz9xxx_xmit() (will become invalid during dsa_realloc_skb()).
@@ -65,6 +66,6 @@ struct ksz_skb_cb {
 };
 
 #define KSZ_SKB_CB(skb) \
-	((struct ksz_skb_cb *)DSA_SKB_CB_PRIV(skb))
+	((struct ksz_skb_cb *)((skb)->cb))
 
 #endif /* _NET_DSA_KSZ_COMMON_H_ */

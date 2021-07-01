@@ -99,7 +99,8 @@ struct sk_psock {
 	void (*saved_close)(struct sock *sk, long timeout);
 	void (*saved_write_space)(struct sock *sk);
 	void (*saved_data_ready)(struct sock *sk);
-	int  (*psock_update_sk_prot)(struct sock *sk, bool restore);
+	int  (*psock_update_sk_prot)(struct sock *sk, struct sk_psock *psock,
+				     bool restore);
 	struct proto			*sk_proto;
 	struct mutex			work_mutex;
 	struct sk_psock_work_state	work_state;
@@ -125,8 +126,7 @@ int sk_msg_zerocopy_from_iter(struct sock *sk, struct iov_iter *from,
 			      struct sk_msg *msg, u32 bytes);
 int sk_msg_memcopy_from_iter(struct sock *sk, struct iov_iter *from,
 			     struct sk_msg *msg, u32 bytes);
-int sk_msg_wait_data(struct sock *sk, struct sk_psock *psock, int flags,
-		     long timeo, int *err);
+int sk_msg_wait_data(struct sock *sk, struct sk_psock *psock, long timeo);
 int sk_msg_recvmsg(struct sock *sk, struct sk_psock *psock, struct msghdr *msg,
 		   int len, int flags);
 
@@ -404,7 +404,7 @@ static inline void sk_psock_restore_proto(struct sock *sk,
 					  struct sk_psock *psock)
 {
 	if (psock->psock_update_sk_prot)
-		psock->psock_update_sk_prot(sk, true);
+		psock->psock_update_sk_prot(sk, psock, true);
 }
 
 static inline void sk_psock_set_state(struct sk_psock *psock,

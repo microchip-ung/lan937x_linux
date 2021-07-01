@@ -1,0 +1,33 @@
+  CALL    scripts/checksyscalls.sh
+  CALL    scripts/atomic/check-atomics.sh
+  CHK     include/generated/compile.h
+  CC      drivers/net/phy/microchip_t1.o
+  AR      drivers/net/phy/built-in.a
+  AR      drivers/net/built-in.a
+  AR      drivers/built-in.a
+  GEN     .version
+  CHK     include/generated/compile.h
+  UPD     include/generated/compile.h
+  CC      init/version.o
+  AR      init/built-in.a
+  LD      vmlinux.o
+  MODPOST vmlinux.symvers
+  MODINFO modules.builtin.modinfo
+  GEN     modules.builtin
+  LD      .tmp_vmlinux.kallsyms1
+  KSYMS   .tmp_vmlinux.kallsyms1.S
+  AS      .tmp_vmlinux.kallsyms1.S
+  LD      .tmp_vmlinux.kallsyms2
+  KSYMS   .tmp_vmlinux.kallsyms2.S
+  AS      .tmp_vmlinux.kallsyms2.S
+  LD      vmlinux
+  SORTTAB vmlinux
+  SYSMAP  System.map
+  OBJCOPY arch/arm/boot/Image
+  Kernel: arch/arm/boot/Image is ready
+  GZIP    arch/arm/boot/compressed/piggy_data
+  AS      arch/arm/boot/compressed/piggy.o
+  LD      arch/arm/boot/compressed/vmlinux
+  OBJCOPY arch/arm/boot/zImage
+  Kernel: arch/arm/boot/zImage is ready
+  MODPOST Module.symvers

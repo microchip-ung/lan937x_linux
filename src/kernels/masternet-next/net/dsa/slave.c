@@ -20,7 +20,6 @@
 #include <linux/if_bridge.h>
 #include <linux/if_hsr.h>
 #include <linux/netpoll.h>
-#include <linux/ptp_classify.h>
 
 #include "dsa_priv.h"
 
@@ -556,26 +555,14 @@ static void dsa_skb_tx_timestamp(struct dsa_slave_priv *p,
 				 struct sk_buff *skb)
 {
 	struct dsa_switch *ds = p->dp->ds;
-	struct sk_buff *clone;
-	unsigned int type;
 
-	type = ptp_classify_raw(skb);
-	if (type == PTP_CLASS_NONE)
+	if (!(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP))
 		return;
 
 	if (!ds->ops->port_txtstamp)
 		return;
 
-	clone = skb_clone_sk(skb);
-	if (!clone)
-		return;
-
-	if (ds->ops->port_txtstamp(ds, p->dp->index, clone, type)) {
-		DSA_SKB_CB(skb)->clone = clone;
-		return;
-	}
-
-	kfree_skb(clone);
+	ds->ops->port_txtstamp(ds, p->dp->index, skb);
 }
 
 netdev_tx_t dsa_enqueue_skb(struct sk_buff *skb, struct net_device *dev)
@@ -627,11 +614,9 @@ static netdev_tx_t dsa_slave_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	dev_sw_netstats_tx_add(dev, 1, skb->len);
 
-	DSA_SKB_CB(skb)->clone = NULL;
+	memset(skb->cb, 0, sizeof(skb->cb));
 
-	/* Identify PTP protocol packets, clone them, and pass them to the
-	 * switch driver
-	 */
+	/* Handle tx timestamp if any */
 	dsa_skb_tx_timestamp(p, skb);
 
 	if (dsa_realloc_skb(skb, dev)) {
@@ -791,13 +776,15 @@ static int dsa_slave_get_sset_count(struct net_device *dev, int sset)
 	struct dsa_switch *ds = dp->ds;
 
 	if (sset == ETH_SS_STATS) {
-		int count;
+		int count = 0;
 
-		count = 4;
-		if (ds->ops->get_sset_count)
-			count += ds->ops->get_sset_count(ds, dp->index, sset);
+		if (ds->ops->get_sset_count) {
+			count = ds->ops->get_sset_count(ds, dp->index, sset);
+			if (count < 0)
+				return count;
+		}
 
-		return count;
+		return count + 4;
 	} else if (sset ==  ETH_SS_TEST) {
 		return net_selftest_get_count();
 	}
@@ -1582,7 +1569,7 @@ int dsa_slave_change_mtu(struct net_device *dev, int new_mtu)
 
 	mtu_limit = min_t(int, master->max_mtu, dev->max_mtu);
 	old_master_mtu = master->mtu;
-	new_master_mtu = largest_mtu + cpu_dp->tag_ops->overhead;
+	new_master_mtu = largest_mtu + dsa_tag_protocol_overhead(cpu_dp->tag_ops);
 	if (new_master_mtu > mtu_limit)
 		return -ERANGE;
 
@@ -1618,7 +1605,7 @@ int dsa_slave_change_mtu(struct net_device *dev, int new_mtu)
 out_port_failed:
 	if (new_master_mtu != old_master_mtu)
 		dsa_port_mtu_change(cpu_dp, old_master_mtu -
-				    cpu_dp->tag_ops->overhead,
+				    dsa_tag_protocol_overhead(cpu_dp->tag_ops),
 				    true);
 out_cpu_failed:
 	if (new_master_mtu != old_master_mtu)
@@ -1762,7 +1749,8 @@ static void dsa_slave_phylink_fixed_state(struct phylink_config *config,
 }
 
 /* slave device setup *******************************************************/
-static int dsa_slave_phy_connect(struct net_device *slave_dev, int addr)
+static int dsa_slave_phy_connect(struct net_device *slave_dev, int addr,
+				 u32 flags)
 {
 	struct dsa_port *dp = dsa_slave_to_port(slave_dev);
 	struct dsa_switch *ds = dp->ds;
@@ -1772,6 +1760,8 @@ static int dsa_slave_phy_connect(struct net_device *slave_dev, int addr)
 		netdev_err(slave_dev, "no phy at %d\n", addr);
 		return -ENODEV;
 	}
+
+	slave_dev->phydev->dev_flags |= flags;
 
 	return phylink_connect_phy(dp->pl, slave_dev->phydev);
 }
@@ -1817,7 +1807,7 @@ static int dsa_slave_phy_setup(struct net_device *slave_dev)
 		/* We could not connect to a designated PHY or SFP, so try to
 		 * use the switch internal MDIO bus instead
 		 */
-		ret = dsa_slave_phy_connect(slave_dev, dp->index);
+		ret = dsa_slave_phy_connect(slave_dev, dp->index, phy_flags);
 		if (ret) {
 			netdev_err(slave_dev,
 				   "failed to connect to port %d: %d\n",
@@ -1837,10 +1827,8 @@ void dsa_slave_setup_tagger(struct net_device *slave)
 	const struct dsa_port *cpu_dp = dp->cpu_dp;
 	struct net_device *master = cpu_dp->master;
 
-	if (cpu_dp->tag_ops->tail_tag)
-		slave->needed_tailroom = cpu_dp->tag_ops->overhead;
-	else
-		slave->needed_headroom = cpu_dp->tag_ops->overhead;
+	slave->needed_headroom = cpu_dp->tag_ops->needed_headroom;
+	slave->needed_tailroom = cpu_dp->tag_ops->needed_tailroom;
 	/* Try to save one extra realloc later in the TX path (in the master)
 	 * by also inheriting the master's needed headroom and tailroom.
 	 * The 8021q driver also does this.

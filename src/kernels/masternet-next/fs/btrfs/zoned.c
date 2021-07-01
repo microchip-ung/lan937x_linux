@@ -342,6 +342,13 @@ int btrfs_get_dev_zone_info(struct btrfs_device *device)
 	if (!IS_ALIGNED(nr_sectors, zone_sectors))
 		zone_info->nr_zones++;
 
+	if (bdev_is_zoned(bdev) && zone_info->max_zone_append_size == 0) {
+		btrfs_err(fs_info, "zoned: device %pg does not support zone append",
+			  bdev);
+		ret = -EINVAL;
+		goto out;
+	}
+
 	zone_info->seq_zones = bitmap_zalloc(zone_info->nr_zones, GFP_KERNEL);
 	if (!zone_info->seq_zones) {
 		ret = -ENOMEM;
@@ -1119,6 +1126,11 @@ int btrfs_load_block_group_zone_info(struct btrfs_block_group *cache, bool new)
 			goto out;
 		}
 
+		if (zone.type == BLK_ZONE_TYPE_CONVENTIONAL) {
+			ret = -EIO;
+			goto out;
+		}
+
 		switch (zone.cond) {
 		case BLK_ZONE_COND_OFFLINE:
 		case BLK_ZONE_COND_READONLY:
@@ -1266,7 +1278,7 @@ void btrfs_free_redirty_list(struct btrfs_transaction *trans)
 	spin_unlock(&trans->releasing_ebs_lock);
 }
 
-bool btrfs_use_zone_append(struct btrfs_inode *inode, struct extent_map *em)
+bool btrfs_use_zone_append(struct btrfs_inode *inode, u64 start)
 {
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 	struct btrfs_block_group *cache;
@@ -1281,7 +1293,7 @@ bool btrfs_use_zone_append(struct btrfs_inode *inode, struct extent_map *em)
 	if (!is_data_inode(&inode->vfs_inode))
 		return false;
 
-	cache = btrfs_lookup_block_group(fs_info, em->block_start);
+	cache = btrfs_lookup_block_group(fs_info, start);
 	ASSERT(cache);
 	if (!cache)
 		return false;

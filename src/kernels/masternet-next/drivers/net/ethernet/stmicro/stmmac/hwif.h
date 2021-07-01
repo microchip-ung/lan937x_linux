@@ -348,7 +348,8 @@ struct stmmac_ops {
 	void (*pcs_rane)(void __iomem *ioaddr, bool restart);
 	void (*pcs_get_adv_lp)(void __iomem *ioaddr, struct rgmii_adv *adv);
 	/* Safety Features */
-	int (*safety_feat_config)(void __iomem *ioaddr, unsigned int asp);
+	int (*safety_feat_config)(void __iomem *ioaddr, unsigned int asp,
+				  struct stmmac_safety_feature_cfg *safety_cfg);
 	int (*safety_feat_irq_status)(struct net_device *ndev,
 			void __iomem *ioaddr, unsigned int asp,
 			struct stmmac_safety_stats *stats);
@@ -564,7 +565,6 @@ struct stmmac_mode_ops {
 #define stmmac_clean_desc3(__priv, __args...) \
 	stmmac_do_void_callback(__priv, mode, clean_desc3, __args)
 
-struct stmmac_priv;
 struct tc_cls_u32_offload;
 struct tc_cbs_qopt_offload;
 struct flow_cls_offload;
@@ -612,18 +612,6 @@ struct stmmac_mmc_ops {
 	stmmac_do_void_callback(__priv, mmc, intr_all_mask, __args)
 #define stmmac_mmc_read(__priv, __args...) \
 	stmmac_do_void_callback(__priv, mmc, read, __args)
-
-/* XPCS callbacks */
-#define stmmac_xpcs_validate(__priv, __args...) \
-	stmmac_do_callback(__priv, xpcs, validate, __args)
-#define stmmac_xpcs_config(__priv, __args...) \
-	stmmac_do_callback(__priv, xpcs, config, __args)
-#define stmmac_xpcs_get_state(__priv, __args...) \
-	stmmac_do_callback(__priv, xpcs, get_state, __args)
-#define stmmac_xpcs_link_up(__priv, __args...) \
-	stmmac_do_callback(__priv, xpcs, link_up, __args)
-#define stmmac_xpcs_probe(__priv, __args...) \
-	stmmac_do_callback(__priv, xpcs, probe, __args)
 
 struct stmmac_regs_off {
 	u32 ptp_off;

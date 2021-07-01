@@ -370,9 +370,9 @@ static int efx_ef10_get_mac_address_vf(struct efx_nic *efx, u8 *mac_address)
 	return 0;
 }
 
-static ssize_t efx_ef10_show_link_control_flag(struct device *dev,
-					       struct device_attribute *attr,
-					       char *buf)
+static ssize_t link_control_flag_show(struct device *dev,
+				      struct device_attribute *attr,
+				      char *buf)
 {
 	struct efx_nic *efx = dev_get_drvdata(dev);
 
@@ -382,9 +382,9 @@ static ssize_t efx_ef10_show_link_control_flag(struct device *dev,
 		       ? 1 : 0);
 }
 
-static ssize_t efx_ef10_show_primary_flag(struct device *dev,
-					  struct device_attribute *attr,
-					  char *buf)
+static ssize_t primary_flag_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf)
 {
 	struct efx_nic *efx = dev_get_drvdata(dev);
 
@@ -519,9 +519,8 @@ static void efx_ef10_cleanup_vlans(struct efx_nic *efx)
 	mutex_unlock(&nic_data->vlan_lock);
 }
 
-static DEVICE_ATTR(link_control_flag, 0444, efx_ef10_show_link_control_flag,
-		   NULL);
-static DEVICE_ATTR(primary_flag, 0444, efx_ef10_show_primary_flag, NULL);
+static DEVICE_ATTR_RO(link_control_flag);
+static DEVICE_ATTR_RO(primary_flag);
 
 static int efx_ef10_probe(struct efx_nic *efx)
 {
@@ -2944,8 +2943,7 @@ efx_ef10_handle_tx_event(struct efx_channel *channel, efx_qword_t *event)
 
 	/* Get the transmit queue */
 	tx_ev_q_label = EFX_QWORD_FIELD(*event, ESF_DZ_TX_QLABEL);
-	tx_queue = efx_channel_get_tx_queue(channel,
-					    tx_ev_q_label % EFX_MAX_TXQ_PER_CHANNEL);
+	tx_queue = channel->tx_queue + (tx_ev_q_label % EFX_MAX_TXQ_PER_CHANNEL);
 
 	if (!tx_queue->timestamping) {
 		/* Transmit completion */

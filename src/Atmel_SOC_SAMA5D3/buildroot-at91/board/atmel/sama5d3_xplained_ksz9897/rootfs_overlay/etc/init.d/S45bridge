@@ -27,7 +27,7 @@ create_br_dev() {
         ETHDEV=lan
         START=1
         p=2
-        while [ -e "sys/class/net/lan$p" ]; do
+        while [ -e "/sys/class/net/lan$p" ]; do
             let p=$p+1
         done
         PORTS=$p
@@ -49,11 +49,20 @@ create_br_dev() {
     MAC_5=$(echo $MAC | cut -d":" -f5)
     MAC_6=$(echo $MAC | cut -d":" -f6)
 
+    MAC_1_5=$(echo $MAC | cut -d":" -f1-5)
+    MAC__6=$(echo $MAC | cut -d":" -f6)
+   
+    #Get eth0 mac address and increment by 1
+    MAC_START=$(echo $MAC__6+1|bc)
+
     p=$START
     while [ $p -lt $PORTS ]; do
+        #Concatenate 1-5th position mac address and 6th position mac addr
+        MAC=$(echo "$MAC_1_5:$MAC_START")
         ifconfig $ETHDEV$p hw ether $MAC
         ifconfig $ETHDEV$p 0.0.0.0
         let p=$p+1
+        let MAC_START=$MAC_START+1
     done
 
     brctl addbr br0

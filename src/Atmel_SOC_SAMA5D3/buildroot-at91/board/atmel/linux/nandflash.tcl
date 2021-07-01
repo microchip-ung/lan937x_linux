@@ -317,7 +317,7 @@ lappend u_boot_variables \
     "stderr=serial" \
     "bootargs=console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,512k(uboot)ro,256k(env),256k(env_redundant),256k(spare),512k(dtb),6M(kernel)ro,-(rootfs) rootfstype=ubifs ubi.mtd=7 root=ubi0:rootfs rw $videoMode" \
     "_bootargs=console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,512k(uboot)ro,256k(env),256k(env_redundant),256k(spare),512k(dtb),6M(kernel)ro,-(rootfs) rootfstype=ubifs ubi.mtd=7 root=ubi0:rootfs rw $videoMode " \
-    "ethaddr=00:10:A1:93:74:11" \
+    "ethaddr=00:10:A1:93:74:10" \
     "ipaddr=192.168.0.111" \
     "serverip=192.168.0.100" \
     "subst_var=0" \

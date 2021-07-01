@@ -2834,7 +2834,7 @@ static void cxgb_down(struct adapter *adapter)
 /*
  * net_device operations
  */
-int cxgb_open(struct net_device *dev)
+static int cxgb_open(struct net_device *dev)
 {
 	struct port_info *pi = netdev_priv(dev);
 	struct adapter *adapter = pi->adapter;
@@ -2882,7 +2882,7 @@ out_unlock:
 	return err;
 }
 
-int cxgb_close(struct net_device *dev)
+static int cxgb_close(struct net_device *dev)
 {
 	struct port_info *pi = netdev_priv(dev);
 	struct adapter *adapter = pi->adapter;
@@ -3894,7 +3894,6 @@ static const struct net_device_ops cxgb4_mgmt_netdev_ops = {
 	.ndo_set_vf_vlan        = cxgb4_mgmt_set_vf_vlan,
 	.ndo_set_vf_link_state	= cxgb4_mgmt_set_vf_link_state,
 };
-#endif
 
 static void cxgb4_mgmt_get_drvinfo(struct net_device *dev,
 				   struct ethtool_drvinfo *info)
@@ -3909,6 +3908,7 @@ static void cxgb4_mgmt_get_drvinfo(struct net_device *dev,
 static const struct ethtool_ops cxgb4_mgmt_ethtool_ops = {
 	.get_drvinfo       = cxgb4_mgmt_get_drvinfo,
 };
+#endif
 
 static void notify_fatal_err(struct work_struct *work)
 {
@@ -6480,9 +6480,9 @@ static void cxgb4_ktls_dev_del(struct net_device *netdev,
 
 	adap->uld[CXGB4_ULD_KTLS].tlsdev_ops->tls_dev_del(netdev, tls_ctx,
 							  direction);
-	cxgb4_set_ktls_feature(adap, FW_PARAMS_PARAM_DEV_KTLS_HW_DISABLE);
 
 out_unlock:
+	cxgb4_set_ktls_feature(adap, FW_PARAMS_PARAM_DEV_KTLS_HW_DISABLE);
 	mutex_unlock(&uld_mutex);
 }
 

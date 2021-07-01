@@ -115,7 +115,6 @@ examples:
         };
 
         mdio {
-          compatible = "microchip,lan937x-mdio";
           #address-cells = <1>;
           #size-cells = <0>;
 

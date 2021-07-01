@@ -381,23 +381,26 @@ int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct ifreq *ifr)
 	return ret;
 }
 
-bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
-			   struct sk_buff *clone, unsigned int type)
+void lan937x_port_txtstamp(struct dsa_switch *ds, int port,
+			   struct sk_buff *skb)
 {
 	struct ksz_device *dev	= ds->priv;
 	struct ksz_port *prt = &dev->ports[port];
 	struct ptp_header *hdr;
+	struct sk_buff *clone;
+	unsigned int type;
 	u8 ptp_msg_type;
 
-	if (!(skb_shinfo(clone)->tx_flags & SKBTX_HW_TSTAMP))
-		return false;
-
 	if (!prt->hwts_tx_en)
-		return false;
+		return;
 
-	hdr = ptp_parse_header(clone, type);
+	type = ptp_classify_raw(skb);
+	if (type == PTP_CLASS_NONE)
+		return;
+
+	hdr = ptp_parse_header(skb, type);
 	if (!hdr)
-		return false;
+		return;
 
 	ptp_msg_type = ptp_get_msgtype(hdr, type);
 
@@ -408,13 +411,15 @@ bool lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 		break;
 
 	default:
-		return false;  /* free cloned skb */
+		return;
 	}
+
+	clone = skb_clone_sk(skb);
+	if (!clone)
+		return;
 
 	KSZ_SKB_CB(clone)->ptp_type = type;
 	KSZ_SKB_CB(clone)->ptp_msg_type = ptp_msg_type;
-
-	return true;
 }
 
 //These are function related to the ptp clock info
@@ -864,7 +869,7 @@ static void lan937x_sync_deferred_xmit(struct kthread_work *work)
 	struct sk_buff *skb;
 
 	while ((skb = skb_dequeue(&prt_ptp_shared->sync_queue)) != NULL) {
-		struct sk_buff *clone = DSA_SKB_CB(skb)->clone;
+		struct sk_buff *clone = KSZ_SKB_CB(skb)->clone;
 
 		reinit_completion(&prt->tstamp_sync_comp);
 
@@ -885,7 +890,7 @@ static void lan937x_pdelayreq_deferred_xmit(struct kthread_work *work)
 	struct sk_buff *skb;
 
 	while ((skb = skb_dequeue(&prt_ptp_shared->pdelayreq_queue)) != NULL) {
-		struct sk_buff *clone = DSA_SKB_CB(skb)->clone;
+		struct sk_buff *clone = KSZ_SKB_CB(skb)->clone;
 
 		reinit_completion(&prt->tstamp_pdelayreq_comp);
 
@@ -906,7 +911,7 @@ static void lan937x_pdelayrsp_deferred_xmit(struct kthread_work *work)
 	struct sk_buff *skb;
 
 	while ((skb = skb_dequeue(&prt_ptp_shared->pdelayrsp_queue)) != NULL) {
-		struct sk_buff *clone = DSA_SKB_CB(skb)->clone;
+		struct sk_buff *clone = KSZ_SKB_CB(skb)->clone;
 
 		reinit_completion(&prt->tstamp_pdelayrsp_comp);
 

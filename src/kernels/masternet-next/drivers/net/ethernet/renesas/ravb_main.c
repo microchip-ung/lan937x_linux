@@ -913,31 +913,20 @@ static int ravb_poll(struct napi_struct *napi, int budget)
 	int q = napi - priv->napi;
 	int mask = BIT(q);
 	int quota = budget;
-	u32 ris0, tis;
 
-	for (;;) {
-		tis = ravb_read(ndev, TIS);
-		ris0 = ravb_read(ndev, RIS0);
-		if (!((ris0 & mask) || (tis & mask)))
-			break;
+	/* Processing RX Descriptor Ring */
+	/* Clear RX interrupt */
+	ravb_write(ndev, ~(mask | RIS0_RESERVED), RIS0);
+	if (ravb_rx(ndev, &quota, q))
+		goto out;
 
-		/* Processing RX Descriptor Ring */
-		if (ris0 & mask) {
-			/* Clear RX interrupt */
-			ravb_write(ndev, ~(mask | RIS0_RESERVED), RIS0);
-			if (ravb_rx(ndev, &quota, q))
-				goto out;
-		}
-		/* Processing TX Descriptor Ring */
-		if (tis & mask) {
-			spin_lock_irqsave(&priv->lock, flags);
-			/* Clear TX interrupt */
-			ravb_write(ndev, ~(mask | TIS_RESERVED), TIS);
-			ravb_tx_free(ndev, q, true);
-			netif_wake_subqueue(ndev, q);
-			spin_unlock_irqrestore(&priv->lock, flags);
-		}
-	}
+	/* Processing RX Descriptor Ring */
+	spin_lock_irqsave(&priv->lock, flags);
+	/* Clear TX interrupt */
+	ravb_write(ndev, ~(mask | TIS_RESERVED), TIS);
+	ravb_tx_free(ndev, q, true);
+	netif_wake_subqueue(ndev, q);
+	spin_unlock_irqrestore(&priv->lock, flags);
 
 	napi_complete(napi);
 
@@ -2058,13 +2047,6 @@ static int ravb_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	/* Get base address */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		dev_err(&pdev->dev, "invalid resource\n");
-		return -EINVAL;
-	}
-
 	ndev = alloc_etherdev_mqs(sizeof(struct ravb_private),
 				  NUM_TX_QUEUE, NUM_RX_QUEUE);
 	if (!ndev)
@@ -2075,9 +2057,6 @@ static int ravb_probe(struct platform_device *pdev)
 
 	pm_runtime_enable(&pdev->dev);
 	pm_runtime_get_sync(&pdev->dev);
-
-	/* The Ether-specific entries in the device structure. */
-	ndev->base_addr = res->start;
 
 	chip_id = (enum ravb_chip_id)of_device_get_match_data(&pdev->dev);
 
@@ -2100,11 +2079,14 @@ static int ravb_probe(struct platform_device *pdev)
 	priv->num_rx_ring[RAVB_BE] = BE_RX_RING_SIZE;
 	priv->num_tx_ring[RAVB_NC] = NC_TX_RING_SIZE;
 	priv->num_rx_ring[RAVB_NC] = NC_RX_RING_SIZE;
-	priv->addr = devm_ioremap_resource(&pdev->dev, res);
+	priv->addr = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(priv->addr)) {
 		error = PTR_ERR(priv->addr);
 		goto out_release;
 	}
+
+	/* The Ether-specific entries in the device structure. */
+	ndev->base_addr = res->start;
 
 	spin_lock_init(&priv->lock);
 	INIT_WORK(&priv->work, ravb_tx_timeout_work);

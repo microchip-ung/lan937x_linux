@@ -428,6 +428,9 @@ mt76_alloc_device(struct device *pdev, unsigned int size,
 	mutex_init(&dev->mcu.mutex);
 	dev->tx_worker.fn = mt76_tx_worker;
 
+	spin_lock_init(&dev->token_lock);
+	idr_init(&dev->token);
+
 	INIT_LIST_HEAD(&dev->txwi_cache);
 
 	for (i = 0; i < ARRAY_SIZE(dev->q_rx); i++)
@@ -511,10 +514,36 @@ EXPORT_SYMBOL_GPL(mt76_free_device);
 static void mt76_rx_release_amsdu(struct mt76_phy *phy, enum mt76_rxq_id q)
 {
 	struct sk_buff *skb = phy->rx_amsdu[q].head;
+	struct mt76_rx_status *status = (struct mt76_rx_status *)skb->cb;
 	struct mt76_dev *dev = phy->dev;
 
 	phy->rx_amsdu[q].head = NULL;
 	phy->rx_amsdu[q].tail = NULL;
+
+	/*
+	 * Validate if the amsdu has a proper first subframe.
+	 * A single MSDU can be parsed as A-MSDU when the unauthenticated A-MSDU
+	 * flag of the QoS header gets flipped. In such cases, the first
+	 * subframe has a LLC/SNAP header in the location of the destination
+	 * address.
+	 */
+	if (skb_shinfo(skb)->frag_list) {
+		int offset = 0;
+
+		if (!(status->flag & RX_FLAG_8023)) {
+			offset = ieee80211_get_hdrlen_from_skb(skb);
+
+			if ((status->flag &
+			     (RX_FLAG_DECRYPTED | RX_FLAG_IV_STRIPPED)) ==
+			    RX_FLAG_DECRYPTED)
+				offset += 8;
+		}
+
+		if (ether_addr_equal(skb->data + offset, rfc1042_header)) {
+			dev_kfree_skb(skb);
+			return;
+		}
+	}
 	__skb_queue_tail(&dev->rx_skb[q], skb);
 }
 

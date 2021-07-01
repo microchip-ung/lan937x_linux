@@ -380,14 +380,14 @@ static struct sk_buff *page_to_skb(struct virtnet_info *vi,
 				   struct page *page, unsigned int offset,
 				   unsigned int len, unsigned int truesize,
 				   bool hdr_valid, unsigned int metasize,
-				   unsigned int headroom)
+				   bool whole_page)
 {
 	struct sk_buff *skb;
 	struct virtio_net_hdr_mrg_rxbuf *hdr;
 	unsigned int copy, hdr_len, hdr_padded_len;
 	struct page *page_to_free = NULL;
 	int tailroom, shinfo_size;
-	char *p, *hdr_p;
+	char *p, *hdr_p, *buf;
 
 	p = page_address(page) + offset;
 	hdr_p = p;
@@ -398,16 +398,27 @@ static struct sk_buff *page_to_skb(struct virtnet_info *vi,
 	else
 		hdr_padded_len = sizeof(struct padded_vnet_hdr);
 
-	/* If headroom is not 0, there is an offset between the beginning of the
+	/* If whole_page, there is an offset between the beginning of the
 	 * data and the allocated space, otherwise the data and the allocated
 	 * space are aligned.
+	 *
+	 * Buffers with headroom use PAGE_SIZE as alloc size, see
+	 * add_recvbuf_mergeable() + get_mergeable_buf_len()
 	 */
-	if (headroom) {
-		/* The actual allocated space size is PAGE_SIZE. */
+	if (whole_page) {
+		/* Buffers with whole_page use PAGE_SIZE as alloc size,
+		 * see add_recvbuf_mergeable() + get_mergeable_buf_len()
+		 */
 		truesize = PAGE_SIZE;
-		tailroom = truesize - len - offset;
+
+		/* page maybe head page, so we should get the buf by p, not the
+		 * page
+		 */
+		tailroom = truesize - len - offset_in_page(p);
+		buf = (char *)((unsigned long)p & PAGE_MASK);
 	} else {
 		tailroom = truesize - len;
+		buf = p;
 	}
 
 	len -= hdr_len;
@@ -416,11 +427,13 @@ static struct sk_buff *page_to_skb(struct virtnet_info *vi,
 
 	shinfo_size = SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
 
+	/* copy small packet so we can reuse these pages */
 	if (!NET_IP_ALIGN && len > GOOD_COPY_LEN && tailroom >= shinfo_size) {
-		skb = build_skb(p, truesize);
+		skb = build_skb(buf, truesize);
 		if (unlikely(!skb))
 			return NULL;
 
+		skb_reserve(skb, p - buf);
 		skb_put(skb, len);
 		goto ok;
 	}
@@ -720,6 +733,12 @@ static struct sk_buff *receive_small(struct net_device *dev,
 	len -= vi->hdr_len;
 	stats->bytes += len;
 
+	if (unlikely(len > GOOD_PACKET_LEN)) {
+		pr_debug("%s: rx error: len %u exceeds max size %d\n",
+			 dev->name, len, GOOD_PACKET_LEN);
+		dev->stats.rx_length_errors++;
+		goto err_len;
+	}
 	rcu_read_lock();
 	xdp_prog = rcu_dereference(rq->xdp_prog);
 	if (xdp_prog) {
@@ -823,6 +842,7 @@ err:
 err_xdp:
 	rcu_read_unlock();
 	stats->xdp_drops++;
+err_len:
 	stats->drops++;
 	put_page(page);
 xdp_xmit:
@@ -876,6 +896,12 @@ static struct sk_buff *receive_mergeable(struct net_device *dev,
 	head_skb = NULL;
 	stats->bytes += len - vi->hdr_len;
 
+	if (unlikely(len > truesize)) {
+		pr_debug("%s: rx error: len %u exceeds truesize %lu\n",
+			 dev->name, len, (unsigned long)ctx);
+		dev->stats.rx_length_errors++;
+		goto err_skb;
+	}
 	rcu_read_lock();
 	xdp_prog = rcu_dereference(rq->xdp_prog);
 	if (xdp_prog) {
@@ -952,7 +978,7 @@ static struct sk_buff *receive_mergeable(struct net_device *dev,
 				put_page(page);
 				head_skb = page_to_skb(vi, rq, xdp_page, offset,
 						       len, PAGE_SIZE, false,
-						       metasize, headroom);
+						       metasize, true);
 				return head_skb;
 			}
 			break;
@@ -1002,15 +1028,8 @@ static struct sk_buff *receive_mergeable(struct net_device *dev,
 	}
 	rcu_read_unlock();
 
-	if (unlikely(len > truesize)) {
-		pr_debug("%s: rx error: len %u exceeds truesize %lu\n",
-			 dev->name, len, (unsigned long)ctx);
-		dev->stats.rx_length_errors++;
-		goto err_skb;
-	}
-
 	head_skb = page_to_skb(vi, rq, page, offset, len, truesize, !xdp_prog,
-			       metasize, headroom);
+			       metasize, !!headroom);
 	curr_skb = head_skb;
 
 	if (unlikely(!curr_skb))
@@ -1617,7 +1636,7 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 	if (virtio_net_hdr_from_skb(skb, &hdr->hdr,
 				    virtio_is_little_endian(vi->vdev), false,
 				    0))
-		BUG();
+		return -EPROTO;
 
 	if (vi->mergeable_rx_bufs)
 		hdr->num_buffers = 0;
@@ -2864,9 +2883,13 @@ static int virtnet_alloc_queues(struct virtnet_info *vi)
 {
 	int i;
 
-	vi->ctrl = kzalloc(sizeof(*vi->ctrl), GFP_KERNEL);
-	if (!vi->ctrl)
-		goto err_ctrl;
+	if (vi->has_cvq) {
+		vi->ctrl = kzalloc(sizeof(*vi->ctrl), GFP_KERNEL);
+		if (!vi->ctrl)
+			goto err_ctrl;
+	} else {
+		vi->ctrl = NULL;
+	}
 	vi->sq = kcalloc(vi->max_queue_pairs, sizeof(*vi->sq), GFP_KERNEL);
 	if (!vi->sq)
 		goto err_sq;

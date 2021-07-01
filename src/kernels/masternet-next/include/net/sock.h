@@ -1118,6 +1118,7 @@ struct inet_hashinfo;
 struct raw_hashinfo;
 struct smc_hashinfo;
 struct module;
+struct sk_psock;
 
 /*
  * caches using SLAB_TYPESAFE_BY_RCU should let .next pointer from nulls nodes
@@ -1189,7 +1190,9 @@ struct proto {
 	void			(*rehash)(struct sock *sk);
 	int			(*get_port)(struct sock *sk, unsigned short snum);
 #ifdef CONFIG_BPF_SYSCALL
-	int			(*psock_update_sk_prot)(struct sock *sk, bool restore);
+	int			(*psock_update_sk_prot)(struct sock *sk,
+							struct sk_psock *psock,
+							bool restore);
 #endif
 
 	/* Keeping track of sockets in use */
@@ -2228,13 +2231,15 @@ static inline void skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
 	sk_mem_charge(sk, skb->truesize);
 }
 
-static inline void skb_set_owner_sk_safe(struct sk_buff *skb, struct sock *sk)
+static inline __must_check bool skb_set_owner_sk_safe(struct sk_buff *skb, struct sock *sk)
 {
 	if (sk && refcount_inc_not_zero(&sk->sk_refcnt)) {
 		skb_orphan(skb);
 		skb->destructor = sock_efree;
 		skb->sk = sk;
+		return true;
 	}
+	return false;
 }
 
 void sk_reset_timer(struct sock *sk, struct timer_list *timer,
@@ -2738,6 +2743,9 @@ static inline bool sk_dev_equal_l3scope(struct sock *sk, int dif)
 void sock_def_readable(struct sock *sk);
 
 int sock_bindtoindex(struct sock *sk, int ifindex, bool lock_sk);
+void sock_set_timestamp(struct sock *sk, int optname, bool valbool);
+int sock_set_timestamping(struct sock *sk, int optname, int val);
+
 void sock_enable_timestamps(struct sock *sk);
 void sock_no_linger(struct sock *sk);
 void sock_set_keepalive(struct sock *sk);

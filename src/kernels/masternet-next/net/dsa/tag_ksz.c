@@ -79,8 +79,7 @@ static const struct dsa_device_ops ksz8795_netdev_ops = {
 	.proto	= DSA_TAG_PROTO_KSZ8795,
 	.xmit	= ksz8795_xmit,
 	.rcv	= ksz8795_rcv,
-	.overhead = KSZ_INGRESS_TAG_LEN,
-	.tail_tag = true,
+	.needed_tailroom = KSZ_INGRESS_TAG_LEN,
 };
 
 DSA_TAG_DRIVER(ksz8795_netdev_ops);
@@ -151,8 +150,7 @@ static const struct dsa_device_ops ksz9477_netdev_ops = {
 	.proto	= DSA_TAG_PROTO_KSZ9477,
 	.xmit	= ksz9477_xmit,
 	.rcv	= ksz9477_rcv,
-	.overhead = KSZ9477_INGRESS_TAG_LEN,
-	.tail_tag = true,
+	.needed_tailroom = KSZ9477_INGRESS_TAG_LEN,
 };
 
 DSA_TAG_DRIVER(ksz9477_netdev_ops);
@@ -185,8 +183,7 @@ static const struct dsa_device_ops ksz9893_netdev_ops = {
 	.proto	= DSA_TAG_PROTO_KSZ9893,
 	.xmit	= ksz9893_xmit,
 	.rcv	= ksz9477_rcv,
-	.overhead = KSZ_INGRESS_TAG_LEN,
-	.tail_tag = true,
+	.needed_tailroom = KSZ_INGRESS_TAG_LEN,
 };
 
 DSA_TAG_DRIVER(ksz9893_netdev_ops);
@@ -206,14 +203,15 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
  * tag0 : zero-based value represents port
  *	  (eg, 0x00=port1, 0x02=port3, 0x07=port8)
  */
-#define LAN937X_INGRESS_TAG_LEN		2
+#define LAN937X_EGRESS_TAG_LEN		2
 #define LAN937X_PTP_TAG_LEN		4
 
 #define LAN937X_PTP_TAG_INDICATION	BIT(7)
-#define LAN937X_TAIL_TAG_OVERRIDE	BIT(11)
-#define LAN937X_TAIL_TAG_LOOKUP		BIT(12)
-#define LAN937X_TAIL_TAG_VALID		BIT(13)
-#define LAN937X_TAIL_TAG_PORT_MASK	7
+
+#define LAN937X_TAIL_TAG_BLOCKING_OVERRIDE	BIT(11)
+#define LAN937X_TAIL_TAG_LOOKUP			BIT(12)
+#define LAN937X_TAIL_TAG_VALID			BIT(13)
+#define LAN937X_TAIL_TAG_PORT_MASK		7
 
 ktime_t ksz_tstamp_reconstruct(struct ksz_device_ptp_shared *ksz, ktime_t tstamp)
 {
@@ -250,7 +248,7 @@ static struct sk_buff *lan937x_defer_xmit(struct dsa_port *dp,
 					  struct sk_buff *skb)
 {
 	struct lan937x_port_ptp_shared *ptp_shared = dp->priv;
-	struct sk_buff *clone = DSA_SKB_CB(skb)->clone;
+	struct sk_buff *clone = KSZ_SKB_CB(skb)->clone;
 	u8 ptp_msg_type;
 
 	if (!clone)
@@ -277,7 +275,7 @@ static struct sk_buff *lan937x_defer_xmit(struct dsa_port *dp,
 
 	default:
 		kfree_skb(clone);
-		DSA_SKB_CB(skb)->clone = NULL;
+		KSZ_SKB_CB(skb)->clone = NULL;
 		return skb;
 	}
 
@@ -309,21 +307,20 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	struct dsa_port *dp = dsa_slave_to_port(dev);
 	struct lan937x_port_ptp_shared *port_ptp_shared = dp->priv;
 	struct ksz_device_ptp_shared *ptp_shared = port_ptp_shared->dev;
+	const struct ethhdr *hdr = eth_hdr(skb);
 	__be16 *tag;
-	u8 *addr;
 	u16 val;
 
 	/* Tag encoding */
 	if (test_bit(LAN937X_HWTS_EN, &ptp_shared->state))
 		lan937x_xmit_timestamp(skb);
 
-	tag = skb_put(skb, LAN937X_INGRESS_TAG_LEN);
-	addr = skb_mac_header(skb);
+	tag = skb_put(skb, LAN937X_EGRESS_TAG_LEN);
 
 	val = BIT(dp->index);
 
-	if (is_link_local_ether_addr(addr))
-		val |= LAN937X_TAIL_TAG_OVERRIDE;
+	if (is_link_local_ether_addr(hdr->h_dest))
+		val |= LAN937X_TAIL_TAG_BLOCKING_OVERRIDE;
 
 	/* Tail tag valid bit - This bit should always be set by the CPU*/
 	val |= LAN937X_TAIL_TAG_VALID;
@@ -355,8 +352,9 @@ static const struct dsa_device_ops lan937x_netdev_ops = {
 	.proto	= DSA_TAG_PROTO_LAN937X,
 	.xmit	= lan937x_xmit,
 	.rcv	= lan937x_rcv,
-	.overhead = LAN937X_INGRESS_TAG_LEN + LAN937X_PTP_TAG_LEN,
-	.tail_tag = true,
+	//.overhead = LAN937X_EGRESS_TAG_LEN + LAN937X_PTP_TAG_LEN,
+	//.tail_tag = true,
+	.needed_tailroom = LAN937X_EGRESS_TAG_LEN + LAN937X_PTP_TAG_LEN,
 };
 
 DSA_TAG_DRIVER(lan937x_netdev_ops);

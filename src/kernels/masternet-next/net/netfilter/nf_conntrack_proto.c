@@ -42,8 +42,6 @@
 #include <net/ipv6.h>
 #include <net/inet_frag.h>
 
-extern unsigned int nf_conntrack_net_id;
-
 static DEFINE_MUTEX(nf_ct_proto_mutex);
 
 #ifdef CONFIG_SYSCTL
@@ -446,7 +444,7 @@ static struct nf_ct_bridge_info *nf_ct_bridge_info;
 
 static int nf_ct_netns_do_get(struct net *net, u8 nfproto)
 {
-	struct nf_conntrack_net *cnet = net_generic(net, nf_conntrack_net_id);
+	struct nf_conntrack_net *cnet = nf_ct_pernet(net);
 	bool fixup_needed = false, retry = true;
 	int err = 0;
 retry:
@@ -531,20 +529,24 @@ retry:
 
 static void nf_ct_netns_do_put(struct net *net, u8 nfproto)
 {
-	struct nf_conntrack_net *cnet = net_generic(net, nf_conntrack_net_id);
+	struct nf_conntrack_net *cnet = nf_ct_pernet(net);
 
 	mutex_lock(&nf_ct_proto_mutex);
 	switch (nfproto) {
 	case NFPROTO_IPV4:
-		if (cnet->users4 && (--cnet->users4 == 0))
+		if (cnet->users4 && (--cnet->users4 == 0)) {
 			nf_unregister_net_hooks(net, ipv4_conntrack_ops,
 						ARRAY_SIZE(ipv4_conntrack_ops));
+			nf_defrag_ipv4_disable(net);
+		}
 		break;
 #if IS_ENABLED(CONFIG_IPV6)
 	case NFPROTO_IPV6:
-		if (cnet->users6 && (--cnet->users6 == 0))
+		if (cnet->users6 && (--cnet->users6 == 0)) {
 			nf_unregister_net_hooks(net, ipv6_conntrack_ops,
 						ARRAY_SIZE(ipv6_conntrack_ops));
+			nf_defrag_ipv6_disable(net);
+		}
 		break;
 #endif
 	case NFPROTO_BRIDGE:
@@ -660,7 +662,7 @@ int nf_conntrack_proto_init(void)
 
 #if IS_ENABLED(CONFIG_IPV6)
 cleanup_sockopt:
-	nf_unregister_sockopt(&so_getorigdst6);
+	nf_unregister_sockopt(&so_getorigdst);
 #endif
 	return ret;
 }

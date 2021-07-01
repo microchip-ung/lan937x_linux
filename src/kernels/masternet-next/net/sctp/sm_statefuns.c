@@ -361,7 +361,7 @@ enum sctp_disposition sctp_sf_do_5_1B_init(struct net *net,
 
 	/* If the INIT is coming toward a closing socket, we'll send back
 	 * and ABORT.  Essentially, this catches the race of INIT being
-	 * backloged to the socket at the same time as the user isses close().
+	 * backloged to the socket at the same time as the user issues close().
 	 * Since the socket and all its associations are going away, we
 	 * can treat this OOTB
 	 */
@@ -608,8 +608,8 @@ enum sctp_disposition sctp_sf_do_5_1C_ack(struct net *net,
 	sctp_add_cmd_sf(commands, SCTP_CMD_NEW_STATE,
 			SCTP_STATE(SCTP_STATE_COOKIE_ECHOED));
 
-	/* SCTP-AUTH: genereate the assocition shared keys so that
-	 * we can potentially signe the COOKIE-ECHO.
+	/* SCTP-AUTH: generate the association shared keys so that
+	 * we can potentially sign the COOKIE-ECHO.
 	 */
 	sctp_add_cmd_sf(commands, SCTP_CMD_ASSOC_SHKEY, SCTP_NULL());
 
@@ -787,7 +787,7 @@ enum sctp_disposition sctp_sf_do_5_1D_ce(struct net *net,
 		goto nomem_init;
 
 	/* SCTP-AUTH:  Now that we've populate required fields in
-	 * sctp_process_init, set up the assocaition shared keys as
+	 * sctp_process_init, set up the association shared keys as
 	 * necessary so that we can potentially authenticate the ACK
 	 */
 	error = sctp_auth_asoc_init_active_key(new_asoc, GFP_ATOMIC);
@@ -838,7 +838,7 @@ enum sctp_disposition sctp_sf_do_5_1D_ce(struct net *net,
 
 	/* Add all the state machine commands now since we've created
 	 * everything.  This way we don't introduce memory corruptions
-	 * during side-effect processing and correclty count established
+	 * during side-effect processing and correctly count established
 	 * associations.
 	 */
 	sctp_add_cmd_sf(commands, SCTP_CMD_NEW_ASOC, SCTP_ASOC(new_asoc));
@@ -923,7 +923,7 @@ enum sctp_disposition sctp_sf_do_5_1E_ca(struct net *net,
 						  commands);
 
 	/* Reset init error count upon receipt of COOKIE-ACK,
-	 * to avoid problems with the managemement of this
+	 * to avoid problems with the management of this
 	 * counter in stale cookie situations when a transition back
 	 * from the COOKIE-ECHOED state to the COOKIE-WAIT
 	 * state is performed.
@@ -1773,6 +1773,30 @@ enum sctp_disposition sctp_sf_do_5_2_3_initack(
 		return sctp_sf_discard_chunk(net, ep, asoc, type, arg, commands);
 }
 
+static int sctp_sf_do_assoc_update(struct sctp_association *asoc,
+				   struct sctp_association *new,
+				   struct sctp_cmd_seq *cmds)
+{
+	struct net *net = asoc->base.net;
+	struct sctp_chunk *abort;
+
+	if (!sctp_assoc_update(asoc, new))
+		return 0;
+
+	abort = sctp_make_abort(asoc, NULL, sizeof(struct sctp_errhdr));
+	if (abort) {
+		sctp_init_cause(abort, SCTP_ERROR_RSRC_LOW, 0);
+		sctp_add_cmd_sf(cmds, SCTP_CMD_REPLY, SCTP_CHUNK(abort));
+	}
+	sctp_add_cmd_sf(cmds, SCTP_CMD_SET_SK_ERR, SCTP_ERROR(ECONNABORTED));
+	sctp_add_cmd_sf(cmds, SCTP_CMD_ASSOC_FAILED,
+			SCTP_PERR(SCTP_ERROR_RSRC_LOW));
+	SCTP_INC_STATS(net, SCTP_MIB_ABORTEDS);
+	SCTP_DEC_STATS(net, SCTP_MIB_CURRESTAB);
+
+	return -ENOMEM;
+}
+
 /* Unexpected COOKIE-ECHO handler for peer restart (Table 2, action 'A')
  *
  * Section 5.2.4
@@ -1852,20 +1876,22 @@ static enum sctp_disposition sctp_sf_do_dupcook_a(
 			SCTP_TO(SCTP_EVENT_TIMEOUT_T4_RTO));
 	sctp_add_cmd_sf(commands, SCTP_CMD_PURGE_ASCONF_QUEUE, SCTP_NULL());
 
-	repl = sctp_make_cookie_ack(new_asoc, chunk);
+	/* Update the content of current association. */
+	if (sctp_sf_do_assoc_update((struct sctp_association *)asoc, new_asoc, commands))
+		goto nomem;
+
+	repl = sctp_make_cookie_ack(asoc, chunk);
 	if (!repl)
 		goto nomem;
 
 	/* Report association restart to upper layer. */
 	ev = sctp_ulpevent_make_assoc_change(asoc, 0, SCTP_RESTART, 0,
-					     new_asoc->c.sinit_num_ostreams,
-					     new_asoc->c.sinit_max_instreams,
+					     asoc->c.sinit_num_ostreams,
+					     asoc->c.sinit_max_instreams,
 					     NULL, GFP_ATOMIC);
 	if (!ev)
 		goto nomem_ev;
 
-	/* Update the content of current association. */
-	sctp_add_cmd_sf(commands, SCTP_CMD_UPDATE_ASSOC, SCTP_ASOC(new_asoc));
 	sctp_add_cmd_sf(commands, SCTP_CMD_EVENT_ULP, SCTP_ULPEVENT(ev));
 	if ((sctp_state(asoc, SHUTDOWN_PENDING) ||
 	     sctp_state(asoc, SHUTDOWN_SENT)) &&
@@ -1925,14 +1951,17 @@ static enum sctp_disposition sctp_sf_do_dupcook_b(
 	if (!sctp_auth_chunk_verify(net, chunk, new_asoc))
 		return SCTP_DISPOSITION_DISCARD;
 
-	/* Update the content of current association.  */
-	sctp_add_cmd_sf(commands, SCTP_CMD_UPDATE_ASSOC, SCTP_ASOC(new_asoc));
 	sctp_add_cmd_sf(commands, SCTP_CMD_NEW_STATE,
 			SCTP_STATE(SCTP_STATE_ESTABLISHED));
-	SCTP_INC_STATS(net, SCTP_MIB_CURRESTAB);
+	if (asoc->state < SCTP_STATE_ESTABLISHED)
+		SCTP_INC_STATS(net, SCTP_MIB_CURRESTAB);
 	sctp_add_cmd_sf(commands, SCTP_CMD_HB_TIMERS_START, SCTP_NULL());
 
-	repl = sctp_make_cookie_ack(new_asoc, chunk);
+	/* Update the content of current association.  */
+	if (sctp_sf_do_assoc_update((struct sctp_association *)asoc, new_asoc, commands))
+		goto nomem;
+
+	repl = sctp_make_cookie_ack(asoc, chunk);
 	if (!repl)
 		goto nomem;
 
@@ -2921,7 +2950,7 @@ enum sctp_disposition sctp_sf_do_9_2_reshutack(
 						  commands);
 
 	/* Since we are not going to really process this INIT, there
-	 * is no point in verifying chunk boundries.  Just generate
+	 * is no point in verifying chunk boundaries.  Just generate
 	 * the SHUTDOWN ACK.
 	 */
 	reply = sctp_make_shutdown_ack(asoc, chunk);
@@ -3531,7 +3560,7 @@ enum sctp_disposition sctp_sf_do_9_2_final(struct net *net,
 		goto nomem_chunk;
 
 	/* Do all the commands now (after allocation), so that we
-	 * have consistent state if memory allocation failes
+	 * have consistent state if memory allocation fails
 	 */
 	sctp_add_cmd_sf(commands, SCTP_CMD_EVENT_ULP, SCTP_ULPEVENT(ev));
 
@@ -3718,7 +3747,7 @@ static enum sctp_disposition sctp_sf_shut_8_4_5(
 		return sctp_sf_pdiscard(net, ep, asoc, type, arg, commands);
 
 	/* We need to discard the rest of the packet to prevent
-	 * potential bomming attacks from additional bundled chunks.
+	 * potential boomming attacks from additional bundled chunks.
 	 * This is documented in SCTP Threats ID.
 	 */
 	return sctp_sf_pdiscard(net, ep, asoc, type, arg, commands);
@@ -4228,7 +4257,7 @@ gen_shutdown:
 }
 
 /*
- * SCTP-AUTH Section 6.3 Receiving authenticated chukns
+ * SCTP-AUTH Section 6.3 Receiving authenticated chunks
  *
  *    The receiver MUST use the HMAC algorithm indicated in the HMAC
  *    Identifier field.  If this algorithm was not specified by the
@@ -4783,7 +4812,7 @@ static enum sctp_disposition sctp_sf_violation_ctsn(
 
 /* Handle protocol violation of an invalid chunk bundling.  For example,
  * when we have an association and we receive bundled INIT-ACK, or
- * SHUDOWN-COMPLETE, our peer is clearly violationg the "MUST NOT bundle"
+ * SHUTDOWN-COMPLETE, our peer is clearly violating the "MUST NOT bundle"
  * statement from the specs.  Additionally, there might be an attacker
  * on the path and we may not want to continue this communication.
  */
@@ -5179,7 +5208,7 @@ enum sctp_disposition sctp_sf_cookie_wait_prm_shutdown(
  * Inputs
  * (endpoint, asoc)
  *
- * The RFC does not explcitly address this issue, but is the route through the
+ * The RFC does not explicitly address this issue, but is the route through the
  * state table when someone issues a shutdown while in COOKIE_ECHOED state.
  *
  * Outputs
@@ -5903,7 +5932,7 @@ enum sctp_disposition sctp_sf_t1_cookie_timer_expire(
 /* RFC2960 9.2 If the timer expires, the endpoint must re-send the SHUTDOWN
  * with the updated last sequential TSN received from its peer.
  *
- * An endpoint should limit the number of retransmissions of the
+ * An endpoint should limit the number of retransmission of the
  * SHUTDOWN chunk to the protocol parameter 'Association.Max.Retrans'.
  * If this threshold is exceeded the endpoint should destroy the TCB and
  * MUST report the peer endpoint unreachable to the upper layer (and
@@ -5981,7 +6010,7 @@ nomem:
 }
 
 /*
- * ADDIP Section 4.1 ASCONF CHunk Procedures
+ * ADDIP Section 4.1 ASCONF Chunk Procedures
  * If the T4 RTO timer expires the endpoint should do B1 to B5
  */
 enum sctp_disposition sctp_sf_t4_timer_expire(
@@ -6412,7 +6441,7 @@ static int sctp_eat_data(const struct sctp_association *asoc,
 		chunk->ecn_ce_done = 1;
 
 		if (af->is_ce(sctp_gso_headskb(chunk->skb))) {
-			/* Do real work as sideffect. */
+			/* Do real work as side effect. */
 			sctp_add_cmd_sf(commands, SCTP_CMD_ECN_CE,
 					SCTP_U32(tsn));
 		}
