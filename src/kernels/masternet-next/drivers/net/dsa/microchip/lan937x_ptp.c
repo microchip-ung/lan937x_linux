@@ -418,6 +418,7 @@ void lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 	if (!clone)
 		return;
 
+	KSZ_SKB_CB(skb)->clone = clone;
 	KSZ_SKB_CB(clone)->ptp_type = type;
 	KSZ_SKB_CB(clone)->ptp_msg_type = ptp_msg_type;
 }

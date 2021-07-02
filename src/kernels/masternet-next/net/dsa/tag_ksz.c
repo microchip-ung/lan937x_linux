@@ -352,8 +352,6 @@ static const struct dsa_device_ops lan937x_netdev_ops = {
 	.proto	= DSA_TAG_PROTO_LAN937X,
 	.xmit	= lan937x_xmit,
 	.rcv	= lan937x_rcv,
-	//.overhead = LAN937X_EGRESS_TAG_LEN + LAN937X_PTP_TAG_LEN,
-	//.tail_tag = true,
 	.needed_tailroom = LAN937X_EGRESS_TAG_LEN + LAN937X_PTP_TAG_LEN,
 };
 

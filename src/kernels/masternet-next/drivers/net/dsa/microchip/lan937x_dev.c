@@ -754,9 +754,12 @@ static int lan937x_switch_init(struct ksz_device *dev)
 
 static void lan937x_switch_exit(struct ksz_device *dev)
 {
-	if (dev->irq > 0)
-		lan937x_enable_port_interrupts(dev, false);
 	lan937x_reset_switch(dev);
+	if (dev->mdio_np) {
+               mdiobus_unregister(dev->ds->slave_mii_bus);
+               of_node_put(dev->mdio_np);
+       }
+
 }
 
 static int lan937x_init(struct ksz_device *dev)
