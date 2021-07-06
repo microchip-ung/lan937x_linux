@@ -112,11 +112,17 @@ static int lan937x_setup_tc_taprio(struct dsa_switch *ds, int port,
 	struct ksz_device *dev = ds->priv;
 	unsigned int event;
 	int ret = 0;
+	u32 event_cnt;
 	u8 val;
 	u8 i;
 
 	if (!qopt->enable)
-		return 0;
+	{
+		ret =  lan937x_port_cfg(dev, port, REG_PORT_TAS_GATE_CTRL__1,
+					TAS_GATE_ENABLE, false);
+
+		return ret;
+	}
 
 	//if (qopt->cycle_time_extension)
 	//	return -ENOTSUPP;
@@ -136,8 +142,9 @@ static int lan937x_setup_tc_taprio(struct dsa_switch *ds, int port,
 		if (ret)
 			return ret;
 
+		event_cnt = qopt->entries[i].interval / 12;
 		event = qopt->entries[i].gate_mask << TAS_GATE_CMD_S;
-		event |= (qopt->entries[i].interval & TAS_GATE_CYCLE_M);
+		event |= (event_cnt & TAS_GATE_CYCLE_M);
 
 		pr_err("qopt entry 0x%x", event);
 
@@ -175,9 +182,8 @@ static int lan937x_setup_tc_taprio(struct dsa_switch *ds, int port,
 
 	/*Poll for bit to clear */
 	dev->tas_port = port;
-	ret = readx_poll_timeout(lan937x_tas_read_cfg_status, dev, val,
-				 !(val & TAS_CFG_CHANGE),
-				 10, 100000);
+//	ret = readx_poll_timeout(lan937x_tas_read_cfg_status, dev, val,
+//				 !(val & TAS_CFG_CHANGE), 10, 100000);
 
 	pr_err("cfg bit %x", lan937x_tas_read_cfg_status(dev));
 	pr_err("poll bit success %x", ret);
