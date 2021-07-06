@@ -96,6 +96,96 @@ static int lan937x_setup_tc_cbs(struct dsa_switch *ds, int port,
 	return ret;
 }
 
+static u8 lan937x_tas_read_cfg_status(struct ksz_device *dev)
+{
+	u8 val = 0;
+
+	lan937x_pread8(dev, dev->tas_port, REG_PORT_TAS_GATE_CTRL__1, &val);
+
+	return val;
+}
+
+static int lan937x_setup_tc_taprio(struct dsa_switch *ds, int port,
+				   struct tc_taprio_qopt_offload *qopt)
+{
+	struct timespec64 ts = ktime_to_timespec64(qopt->base_time);
+	struct ksz_device *dev = ds->priv;
+	unsigned int event;
+	int ret = 0;
+	u8 val;
+	u8 i;
+
+	if (!qopt->enable)
+		return 0;
+
+	//if (qopt->cycle_time_extension)
+	//	return -ENOTSUPP;
+
+	/* Enable Gating */
+	ret =  lan937x_port_cfg(dev, port, REG_PORT_TAS_GATE_CTRL__1,
+				TAS_GATE_ENABLE, true);	
+	if (ret)
+		return ret;
+
+	pr_err("base time %llx nsec %lx", ts.tv_sec, ts.tv_nsec);
+	pr_err("enabling gating");
+
+	/*Schedule entry */
+	for (i=0; i<qopt->num_entries; i++) {
+		ret = lan937x_pwrite8(dev, port, REG_PORT_TAS_EVENT_INDEX__1, i);
+		if (ret)
+			return ret;
+
+		event = qopt->entries[i].gate_mask << TAS_GATE_CMD_S;
+		event |= (qopt->entries[i].interval & TAS_GATE_CYCLE_M);
+
+		pr_err("qopt entry 0x%x", event);
+
+		ret = lan937x_pwrite32(dev, port, REG_PORT_TAS_EVENT__4, event);
+		if (ret)
+			return ret;
+	}
+
+	/* Last schedule entry */
+	ret = lan937x_pwrite16(dev, port, REG_PORT_TAS_GCL_LAST_INDEX__2, qopt->num_entries -1);
+	if (ret)
+		return ret;
+
+	/*PTP Cycle time*/
+	ret = lan937x_pwrite32(dev, port, REG_PORT_TAS_CYCLE_TIME__4, qopt->cycle_time);
+	if (ret)
+		return ret;
+
+	/*PTP Base time */
+	ret = lan937x_pwrite32(dev, port, REG_PORT_TAS_TRIG_NSEC__4, ts.tv_nsec);
+	if (ret)
+		return ret;
+
+	ret = lan937x_pwrite32(dev, port, REG_PORT_TAS_TRIG_SEC__4, ts.tv_sec);
+	if (ret)
+		return ret;
+
+	pr_err("last schedule entry");
+
+	/*Set the config change bit */
+	ret =  lan937x_port_cfg(dev, port, REG_PORT_TAS_GATE_CTRL__1,
+				TAS_CFG_CHANGE, true);
+	if (ret)
+		return ret;
+
+	/*Poll for bit to clear */
+	dev->tas_port = port;
+	ret = readx_poll_timeout(lan937x_tas_read_cfg_status, dev, val,
+				 !(val & TAS_CFG_CHANGE),
+				 10, 100000);
+
+	pr_err("cfg bit %x", lan937x_tas_read_cfg_status(dev));
+	pr_err("poll bit success %x", ret);
+	pr_err("poll bit success %x", ret);
+
+	return ret;
+}
+
 int lan937x_setup_tc(struct dsa_switch *ds, int port,
 		     enum tc_setup_type type, void *type_data)
 {
@@ -104,6 +194,8 @@ int lan937x_setup_tc(struct dsa_switch *ds, int port,
 		return lan937x_setup_tc_mqprio(ds, port, type_data);
 	case TC_SETUP_QDISC_CBS:
 		return lan937x_setup_tc_cbs(ds, port, type_data);
+	case TC_SETUP_QDISC_TAPRIO:
+		return lan937x_setup_tc_taprio(ds, port, type_data);
 	default:
 		return -EOPNOTSUPP;
 	}
