@@ -29,7 +29,7 @@ static inline irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int
 
 static inline int lan937x_ptp_init(struct ksz_device *dev)
 {
-	return -EOPNOTSUPP;
+	return 0;
 }
 
 static inline void lan937x_ptp_deinit(struct ksz_device *dev){}
@@ -51,10 +51,7 @@ static inline int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct i
 
 
 static inline void lan937x_port_txtstamp(struct dsa_switch *ds, int port,
-					   struct sk_buff *skb)
-{
-	return false;
-}
+					 struct sk_buff *skb){}
 
 #endif  /* End of CONFIG_NET_DSA_MICROCHIOP_LAN937X_PTP */
 
