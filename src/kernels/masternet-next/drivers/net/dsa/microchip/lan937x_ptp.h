@@ -17,6 +17,7 @@ void lan937x_port_txtstamp(struct dsa_switch *ds, int port,
 irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port);
 int lan937x_ptp_init(struct ksz_device *dev);
 void lan937x_ptp_deinit(struct ksz_device *dev);
+int lan937x_ptp_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts);
 
 #else
 

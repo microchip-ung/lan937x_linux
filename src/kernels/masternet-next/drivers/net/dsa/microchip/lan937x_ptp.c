@@ -483,8 +483,7 @@ static int _lan937x_ptp_gettime(struct ksz_device *dev, struct timespec64 *ts)
 	return 0;
 }
 
-static int lan937x_ptp_gettime(struct ptp_clock_info *ptp,
-			       struct timespec64 *ts)
+int lan937x_ptp_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)
 {
 	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
 	int ret;
