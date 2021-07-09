@@ -15,6 +15,8 @@
 #include "ksz_common.h"
 #include "lan937x_dev.h"
 #include "lan937x_tc.h"
+#include "lan937x_flower.h"
+
 
 static int lan937x_wait_vlan_ctrl_ready(struct ksz_device *dev)
 {

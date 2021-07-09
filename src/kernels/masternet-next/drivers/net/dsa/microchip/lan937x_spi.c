@@ -9,6 +9,8 @@
 #include <linux/of_device.h>
 
 #include "ksz_common.h"
+#include "lan937x_flower.h"
+#include "lan937x_acl.h"
 
 #define SPI_ADDR_SHIFT 24
 #define SPI_ADDR_ALIGN 3
@@ -122,6 +124,8 @@ static int lan937x_spi_probe(struct spi_device *spi)
 		return ret;
 
 	spi_set_drvdata(spi, dev);
+
+	lan937x_flower_setup(dev->ds);
 
 	return 0;
 }
