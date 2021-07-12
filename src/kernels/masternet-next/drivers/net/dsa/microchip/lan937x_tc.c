@@ -103,14 +103,14 @@ static bool lan937x_tas_validate_gcl(struct tc_taprio_qopt_offload *qopt)
 
 	/* cycle time can only be 32bit */
 	if (qopt->cycle_time > (u32)-1)
-		return false;
+		return -EOPNOTSUPP;
 
 	/* Only set command is supported */
 	for (i = 0; i < qopt->num_entries; ++i)
 		if (qopt->entries[i].command != TC_TAPRIO_CMD_SET_GATES)
-			return false;
+			return -EOPNOTSUPP;
 
-	return true;
+	return 0;
 }
 
 static void lan937x_tas_set_basetime(struct ksz_device *dev, ktime_t base_time,
@@ -128,9 +128,14 @@ static void lan937x_tas_set_basetime(struct ksz_device *dev, ktime_t base_time,
 
 	if (base_time < current_time) {
 		u64 nr_of_cycles = current_time - base_time;
+		u32 add_cycles = 0;
+
+		/*Reserve 1ms for programming and activating */
+		if(cycle_time < 1000000)
+			add_cycles = 1000000 / cycle_time;
 
 		do_div(nr_of_cycles, cycle_time);
-		new_base_time += cycle_time * (nr_of_cycles + 1);
+		new_base_time += cycle_time * (nr_of_cycles + add_cycles + 1);
 	}
 
 	*new_base_ts = ktime_to_timespec64(new_base_time);
@@ -141,9 +146,9 @@ static int lan937x_setup_tc_taprio(struct dsa_switch *ds, int port,
 {
 	struct ksz_device *dev = ds->priv;
 	struct timespec64 base_ts;
-	unsigned int event;
-	u32 event_cnt;
+	u32 cycle_cnt;
 	int ret = 0;
+	u32 event;
 	u8 i;
 
 	if (!qopt->enable)
@@ -156,7 +161,7 @@ static int lan937x_setup_tc_taprio(struct dsa_switch *ds, int port,
 	/*Validate GCL */
 	ret = lan937x_tas_validate_gcl(qopt);
 	if (ret)
-		return -EOPNOTSUPP;
+		return ret;
 
 	/* Enable Gating */
 	ret =  lan937x_port_cfg(dev, port, REG_PORT_TAS_GATE_CTRL__1,
@@ -172,9 +177,9 @@ static int lan937x_setup_tc_taprio(struct dsa_switch *ds, int port,
 			return ret;
 
 		/*1 Cycle count equals 12ns. 1/83.3Mhz*/
-		event_cnt = qopt->entries[i].interval / 12;
 		event = qopt->entries[i].gate_mask << TAS_GATE_CMD_S;
-		event |= (event_cnt & TAS_GATE_CYCLE_M);
+		cycle_cnt = qopt->entries[i].interval / 12;
+		event |= (cycle_cnt & TAS_GATE_CYCLE_M);
 
 		ret = lan937x_pwrite32(dev, port, REG_PORT_TAS_EVENT__4, event);
 		if (ret)
