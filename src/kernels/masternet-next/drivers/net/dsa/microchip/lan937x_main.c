@@ -1219,7 +1219,8 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.port_hwtstamp_set      = lan937x_hwtstamp_set,
 	.port_txtstamp		= lan937x_port_txtstamp,
 	.get_ts_info            = lan937x_get_ts_info,
-        .port_setup_tc          = lan937x_setup_tc
+    .port_setup_tc          = lan937x_setup_tc,
+	.cls_flower_add	=lan937x_tc_flower_add
 };
 
 

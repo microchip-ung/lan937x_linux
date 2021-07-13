@@ -314,7 +314,7 @@ struct lan937x_acl_entry{
 
 struct lan937x_acl_rfr{ 
 	bool rfr_valid;
-	enum lan937x_acl_dissector_type type;
+	u16 dissectors_covered;
 	bool rng_match_en;
 	bool l4;
 	bool l3;

@@ -129,7 +129,7 @@ void lan937x_flower_setup(struct dsa_switch *ds);
 
 
 int lan937x_init_acl_parsers(struct ksz_device *dev,int port);
-int lan937x_acl_program_entry(struct ksz_device *dev, int port, u8 parser_idx,\
+int lan937x_acl_program_entry(struct ksz_device *dev, int port,\
 					struct lan937x_rule *rule);
 
 

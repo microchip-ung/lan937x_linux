@@ -164,16 +164,18 @@ int lan937x_readback(struct ksz_device *dev, int port,
 
 
 static int lan937x_find_free_tcam_rule_slot (struct ksz_device *dev,
-												int port, u8 *slot )
+												int port, u8 *slot)
 {
-	int i;
+	u8 entry_idx = 0;
 
-	for (i = 0; i < LAN937X_NUM_TCAM_ENTRIES_PER_PORT; i++)
-		if (!dev->flower_block[port].tcam_entry_slots_used[i]) {
-			slot = i;
-			pr_info("lan937x_find_free_tcam_rule_slot %d",i);
+	while (entry_idx < LAN937X_NUM_TCAM_ENTRIES_PER_PORT) {
+		if (!dev->flower_block[port].tcam_entry_slots_used[entry_idx]) {
+			*slot = entry_idx;
+			pr_info("lan937x_find_free_tcam_rule_slot %d",entry_idx);
 			return 0;
 		}
+		entry_idx++;
+	}
 	return -1;
 }
 
@@ -186,6 +188,9 @@ static int lan937x_acl_entry_write(struct ksz_device *dev,
 	reg_offset= LAN937X_ACL_CTRL_BASE_ADDR + LAN937X_ACL_PORT_ADR_REG;
 	struct lan937x_acl_access_ctl_reg tcam_access_ctl;
 	struct lan937x_acl_byte_enable_reg byte_en_cfg;
+	u8 start_index = 0;
+
+
 
 	pr_info("ACL MASK:");
 	for (i=0;i<48;i++) {
@@ -266,10 +271,20 @@ static int lan937x_acl_fill_entry_layout (struct ksz_device *dev,
 {
 	struct lan937x_acl_rfr *rfr_ptr = dev->rfr_table[port].rfr_entries[parser_idx];
 	int i;
+	u8 *ptr_acl_mask = &acl_entry->acl_mask[0];
+	u8 *ptr_acl_data = &acl_entry->acl_data[0];
+
+	if (parser_idx) {
+		ptr_acl_mask = &acl_entry->acl_mask[1];
+		ptr_acl_data = &acl_entry->acl_data[1];
+	}
+
+
 	pr_info("lan937x_acl_fill_entry_layout");
+
 	for (i=0; i<MAX_RFR_PER_PARSER;i++) {
 		if(rfr_ptr[i].rfr_valid) {
-			if(rfr_ptr[i].type ==dissector_type) {
+			if(rfr_ptr[i].dissectors_covered & BIT(dissector_type)) {
 				switch (dissector_type) {
 					case acl_dst_mac_dissector:
 					/**Problems here,
@@ -278,14 +293,42 @@ static int lan937x_acl_fill_entry_layout (struct ksz_device *dev,
 					 * that should be configurable
 					*/
 						pr_info("acl_dst_mac_dissector");
-						u64_to_ether_addr(key->dst_mac.mask,acl_entry->acl_mask);
-						u64_to_ether_addr(key->dst_mac.value,acl_entry->acl_data);
+						u64_to_ether_addr(key->dst_mac.mask,ptr_acl_mask);
+						u64_to_ether_addr(key->dst_mac.value,ptr_acl_data);
 					break;
 
 					case acl_src_mac_dissector:
 						pr_info("acl_src_mac_dissector");
-						u64_to_ether_addr(key->src_mac.mask,&acl_entry->acl_mask[6]);
-						u64_to_ether_addr(key->src_mac.value,&acl_entry->acl_data[6]);
+						u64_to_ether_addr(key->src_mac.mask,&ptr_acl_mask[6]);
+						u64_to_ether_addr(key->src_mac.value,&ptr_acl_data[6]);
+					break;
+
+					case acl_vlan_id_dissector:
+						pr_info("acl_vlan_id_dissector");
+						ptr_acl_mask[14] |= (key->vlan_id.mask & 0x0F00) >> 8;
+						ptr_acl_mask[15] |= (key->vlan_id.mask);
+						ptr_acl_data[14] |= (key->vlan_id.value & 0x0F00) >> 8;
+						ptr_acl_data[15] |= (key->vlan_id.value);						
+					break;
+
+					case acl_vlan_pcp_dissector:
+						pr_info("acl_vlan_pcp_dissector");
+						ptr_acl_mask[14] |= (key->vlan_prio.mask & 0x07) << 5;
+						ptr_acl_data[14] |= (key->vlan_prio.value & 0x07) << 5;
+					break;
+
+					case acl_ethtype_dissector:
+						pr_info("acl_ethtype_dissector");
+						u8 idx = 12;	/**Parser Properties to be defined*/
+						if (parser_idx == 0x01)
+							if (rfr_ptr[i].dissectors_covered &
+								 (BIT(acl_vlan_id_dissector) | BIT(acl_vlan_pcp_dissector)))
+								 idx += 4; //Compensate the Vlan tag presence
+
+						ptr_acl_mask[idx] |= (key->ethtype.mask & 0xFF00) >> 8;
+						ptr_acl_mask[idx+1] |= (key->ethtype.mask & 0x00FF);
+						ptr_acl_data[idx] |= (key->ethtype.value & 0xFF00) >> 5;
+						ptr_acl_data[idx+1] |= (key->ethtype.mask & 0x00FF);
 					break;
 				}
 				return 0;
@@ -295,8 +338,7 @@ static int lan937x_acl_fill_entry_layout (struct ksz_device *dev,
 	return EINVAL;
 }
 
-int lan937x_acl_program_entry (struct ksz_device *dev, int port, u8 parser_idx,
-					struct lan937x_rule *rule )
+int lan937x_acl_program_entry (struct ksz_device *dev, int port, struct lan937x_rule *rule )
 {
 	u16 acl_dissector_map = rule->filter.key.acl_dissector_map;
 	struct lan937x_key *key = &rule->filter.key;
@@ -304,8 +346,12 @@ int lan937x_acl_program_entry (struct ksz_device *dev, int port, u8 parser_idx,
 	struct lan937x_acl_rfr* rfr;
 	int rc = EINVAL;
 	struct lan937x_acl_entry acl_entry;
+	u8 parser_idx = 0;
 
 	memset(&acl_entry, 0, sizeof(acl_entry));
+
+	if(rule->filter.key_type == LAN937x_KEY_VLAN_AWARE)
+		parser_idx = 0x01;
 
 	pr_info("acl_dissector_map %x",acl_dissector_map);
 	//acl_num_dissectors - 5
@@ -336,6 +382,10 @@ int lan937x_acl_program_entry (struct ksz_device *dev, int port, u8 parser_idx,
 		acl_entry.acl_action[4] = ((rule->acl_action.map_mode << TCAM_AAR_MM_L_DATA_POS) & LAN937X_ACL_PORT_AAR_MM_L);
 		acl_entry.acl_action[4] |= ((rule->acl_action.dst_port >> TCAM_AAR_PORT_DATA_H_POS) & LAN937X_ACL_PORT_AAR_DPORT_H);
 		acl_entry.acl_action[5] = ((rule->acl_action.dst_port << TCAM_AAR_PORT_DATA_L_POS) & LAN937X_ACL_PORT_AAR_DPORT_L);
+	}
+	if (parser_idx) {
+		acl_entry.acl_mask[0]|= 0x00;
+		acl_entry.acl_data[0]|= 0x00;//parser_idx << 6;
 	}
 
 	return lan937x_acl_entry_write(dev, port, &acl_entry);
@@ -456,7 +506,7 @@ static int lan937x_set_rfr_entry(struct ksz_device *dev, int port, u8 parser_idx
 	<< TCAM_RFR_LEN_POS) & TCAM_RFR_LEN);
 	rfr_data.u32value|= ((rfr_entry.rng_ofst 
 	<< TCAM_RFR_RNG_POS) & TCAM_RFR_RNG_OFST);
-	pr_info("Parser=%hu,rfr_idx=%hu, reg_val=%x\r\n",parser_idx,rfr_idx,rfr_data.u32value);
+	pr_info("Offset:%x,Parser=%hu,rfr_idx=%hu, reg_val=%x\r\n",reg_offset,parser_idx,rfr_idx,rfr_data.u32value);
 
 	rc = lan937x_pwrite32(dev, port,reg_offset, rfr_data.u32value);
 	// if (rc == 0) {
@@ -510,7 +560,7 @@ static int lan937x_program_rfrs(struct ksz_device *dev,
 		/*Test Code*/
 		tcam_access_ctl.tcam_req = TCAM_REQ_TYPE_READ_RFR;
 		lan937x_readback(dev, port,
-	 			&tcam_access_ctl,10);
+	 			&tcam_access_ctl,20);
 	}
 
 
@@ -527,21 +577,41 @@ int lan937x_init_acl_parsers(struct ksz_device *dev, int port)
 
 	/*1st RFR to match Destination address*/
 	struct lan937x_acl_rfr *rfr = &dev->rfr_table[port].rfr_entries[0][0];
-	rfr->type = acl_dst_mac_dissector;
+	rfr->dissectors_covered = BIT(acl_dst_mac_dissector);
 	lan937x_set_rfr_data (rfr, false,false,true,false,0x00,0x03,0x00);/*3 Words*/
 	rfr->rfr_valid = true;
 
 	/*2nd RFR to match Source address*/
 	rfr = &dev->rfr_table[port].rfr_entries[0][1];
-	rfr->type = acl_src_mac_dissector;
-	lan937x_set_rfr_data (rfr, false,false,true,false,0x06,0x03,0x00);/*3 Words*/
+	rfr->dissectors_covered = BIT(acl_src_mac_dissector);
+	lan937x_set_rfr_data (rfr, false,false,true,false,0x03,0x03,0x00);/*3 Words*/
 	rfr->rfr_valid = true;
+
+	/**Parser -1 : VLAN Aware*/
+	rfr = &dev->rfr_table[port].rfr_entries[1][0];
+	rfr->dissectors_covered = BIT(acl_dst_mac_dissector);
+	lan937x_set_rfr_data (rfr, false,false,false,false,0x00,0x03,0x00);/*3 Words*/
+	rfr->rfr_valid = true;
+
+	/*2nd RFR to match Source address*/
+	rfr = &dev->rfr_table[port].rfr_entries[1][1];
+	rfr->dissectors_covered = BIT(acl_src_mac_dissector);
+	lan937x_set_rfr_data (rfr, false,false,false,false,0x03,0x03,0x00);/*3 Words*/
+	rfr->rfr_valid = true;
+
+	rfr = &dev->rfr_table[port].rfr_entries[1][2];
+	rfr->dissectors_covered = BIT(acl_vlan_id_dissector) | BIT(acl_vlan_pcp_dissector);	/* This will cover both VLAN ID and PCP */
+	lan937x_set_rfr_data (rfr, false,false,false,false,0x06,0x02,0x00);/*1 Words*/
+	rfr->rfr_valid = true;
+
 
 	/* 3rd RFR to match vlan tag and vlan pcp */
 	// rfr = &dev->rfr_table.rfr_entries[0][2];
 	// rfr.type = acl_vlan_id_dissector;
 	// lan937x_set_rfr_data (rfr, false,false,true,false,14,1,0x00);/*1 Words*/
 	rc = lan937x_program_rfrs(dev, port);
+
+	rc = lan937x_pwrite32(dev, port,LAN937X_ACL_CTRL_BASE_ADDR+LAN937X_ACL_PORT_PCTRL_REG, (BIT(30)|BIT(18)|BIT(26)|BIT(14)));
 
 	rc = lan937x_pwrite8(dev, port,REG_PORT_RX_AUTH_CTL, (BIT(2) | BIT(1)));
 	

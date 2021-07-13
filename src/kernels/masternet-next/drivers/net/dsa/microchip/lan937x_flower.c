@@ -172,7 +172,7 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		if(dmac!=U64_MAX) {
 			filter->key.acl_dissector_map |= (1<<acl_dst_mac_dissector);
 			filter->key.dst_mac.value = dmac;
-			filter->key.dst_mac.mask = ~(dmac & dmac_mask);		
+			filter->key.dst_mac.mask = ~(dmac & dmac_mask);
 		}
 		if(vid!=U16_MAX) {
 			filter->key.acl_dissector_map |= (1<<acl_vlan_id_dissector);
@@ -250,7 +250,7 @@ static int lan937x_setup_action_redirect (struct ksz_device *dev, struct netlink
 
 	/*To do: to know what the cookie exactly used for, why should we look into the existing rules database*/
 	bool new_rule = false;
-	int rc;
+	int rc=0;
 
 	pr_info("Cookie:%lu",cookie);
 
@@ -264,18 +264,20 @@ static int lan937x_setup_action_redirect (struct ksz_device *dev, struct netlink
 		new_rule = true;
 	}
 
+	if (rule->type == LAN937X_RULE_DROP) {
+		NL_SET_ERR_MSG_MOD(extack, "Drop action cannot go with other actions");
+		rc = -EINVAL;
+		goto  out;
+	}
 	/** To-Do: Should this be done only using TCAM?
 	 *  can it not be implementable using ALU table modifications ?, if the classifier involves only the dst addr*/
 	rule->acl_action.map_mode = 0x03;//bypass the ALU table
 	rule->acl_action.dst_port = dest_port;//drop
 
 	memcpy(&rule->filter, filter, sizeof(struct lan937x_filter));
+	
 
-	if (rule->type == LAN937X_RULE_DROP) {
-		NL_SET_ERR_MSG_MOD(extack, "Drop action cannot go with other actions");
-		rc = -EINVAL;
-	}
-
+out:
 	if (rc == 0 && new_rule) {
 		list_add(&rule->list, &(dev->flower_block[port].rules));
 	} else if (new_rule) {
@@ -295,7 +297,7 @@ static int lan937x_setup_action_drop (struct ksz_device *dev, struct netlink_ext
 
 	/*To do: to know what the cookie exactly used for, why should we look into the existing rules database*/
 	bool new_rule = false;
-	int rc;
+	int rc = 0;
 
 	pr_info("Cookie:%lu",cookie);
 
@@ -309,6 +311,11 @@ static int lan937x_setup_action_drop (struct ksz_device *dev, struct netlink_ext
 		new_rule = true;
 	}
 
+	if (rule->type!=LAN937X_RULE_DROP) {
+		NL_SET_ERR_MSG_MOD(extack, "Drop action cannot go with other actions");
+		rc = -EINVAL;
+		goto out;
+	}
 	/** To-Do: Should this be done only using TCAM?
 	 *  can it not be implementable using ALU table modifications ?, if the classifier involves only the dst addr*/
 	rule->acl_action.map_mode = 0x03;//bypass the ALU table
@@ -316,11 +323,7 @@ static int lan937x_setup_action_drop (struct ksz_device *dev, struct netlink_ext
 
 	memcpy(&rule->filter, filter, sizeof(struct lan937x_filter));
 
-	if (rule->type!=LAN937X_RULE_DROP) {
-		NL_SET_ERR_MSG_MOD(extack, "Drop action cannot go with other actions");
-		rc = -EINVAL;
-	}
-
+out:
 	if (rc == 0 && new_rule) {
 		list_add(&rule->list, &(dev->flower_block[port].rules));
 	} else if (new_rule) {
@@ -602,7 +605,7 @@ int lan937x_tc_flower_add(struct dsa_switch *ds, int port,
 
 	/** Reserve the hardware Resources */
 	entry_rule = lan937x_rule_find(dev, port, cookie);
-	rc = lan937x_acl_program_entry(dev, port, 0,\
+	rc = lan937x_acl_program_entry(dev, port,\
 					entry_rule);
 	if (rc){
 		pr_info("Error!!!!");
