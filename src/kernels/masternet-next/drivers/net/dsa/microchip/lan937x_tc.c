@@ -26,6 +26,10 @@ static int lan937x_setup_tc_mqprio(struct dsa_switch *ds, int port,
 	return 0;
 }
 
+/* Bandwidth is calculated by idle slope/transmission speed. Then the Bandwidth
+ * is converted to Hex-decimal using the successive multiplication method. On
+ * every step, integer part is taken and decimal part is carry forwarded.
+ */
 static int cinc_cal(s32 idle_slope, s32 send_slope)
 {
 	int cinc = 0;
@@ -38,7 +42,8 @@ static int cinc_cal(s32 idle_slope, s32 send_slope)
 
 	rate = idle_slope;
 
-	for (i = 0; i < 6; i++) {  //24 bit register
+	/* 24 bit register */
+	for (i = 0; i < 6; i++) {
 		rate = rate * 16;
 
 		temp = rate / txrate;
@@ -61,6 +66,7 @@ static int lan937x_setup_tc_cbs(struct dsa_switch *ds, int port,
 	if (qopt->queue > LAN937X_NUM_TC)
 		return -EINVAL;
 
+	/* Queue Selection */
 	ret = lan937x_pwrite32(dev, port, REG_PORT_MTI_QUEUE_INDEX__4,
 			       qopt->queue);
 	if(ret)
@@ -72,26 +78,27 @@ static int lan937x_setup_tc_cbs(struct dsa_switch *ds, int port,
 		return 0;
 	}
 
-	bw = cinc_cal(qopt->idleslope, qopt->sendslope);
-
 	ret = lan937x_pwrite8(dev, port, REG_PORT_MTI_QUEUE_CTRL_0,
 			      LAN937X_CBS_ENABLE);
 	if(ret)
 		return ret;
 
-
+	/* High Credit */
 	ret = lan937x_pwrite16(dev, port, REG_PORT_MTI_HI_WATER_MARK,
-			       qopt->hicredit); //high credit
+			       qopt->hicredit);
 	if(ret)
 		return ret;
 
 
+	/* Low Credit */
 	ret = lan937x_pwrite16(dev, port, REG_PORT_MTI_LO_WATER_MARK,
-			       qopt->locredit); //low credit
+			       qopt->locredit);
 	if(ret)
 		return ret;
 
 	/* Credit Increment Register */
+	bw = cinc_cal(qopt->idleslope, qopt->sendslope);
+
 	ret = lan937x_pwrite32(dev, port, REG_PORT_MTI_CREDIT_INCREMENT, bw);
 
 	return ret;
