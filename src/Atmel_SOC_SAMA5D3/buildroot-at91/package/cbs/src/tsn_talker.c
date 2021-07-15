@@ -76,6 +76,16 @@ int main(int argc, char *argv[])
 	};
 
 	//argp_parse(&argp, argc, argv, 0, NULL, NULL);
+	if(argc != 3)
+	{
+		printf("invalid argument");
+		return 1;
+	}
+
+	sscanf(argv[1], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+			&macaddr[0], &macaddr[1], &macaddr[2],
+			&macaddr[3], &macaddr[4], &macaddr[5]);
+	priority = atoi(argv[2]);
 
 	fd = socket(AF_PACKET, SOCK_DGRAM, htons(ETH_P_TSN));
 	if (fd < 0) {
@@ -89,13 +99,6 @@ int main(int argc, char *argv[])
 		perror("Couldn't get interface index");
 		goto err;
 	}
-
-	macaddr[0] = 0x02;
-	macaddr[1] = 0x52;
-	macaddr[2] = 0x66;
-	macaddr[3] = 0xe1;
-	macaddr[4] = 0x22;
-	macaddr[5] = 0x74;
 
 	sk_addr.sll_ifindex = req.ifr_ifindex;
 	memcpy(&sk_addr.sll_addr, macaddr, ETH_ALEN);

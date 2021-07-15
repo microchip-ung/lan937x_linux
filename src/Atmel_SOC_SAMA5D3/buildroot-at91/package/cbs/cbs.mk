@@ -13,8 +13,8 @@ define CBS_BUILD_CMDS
 endef
 
 define CBS_INSTALL_TARGET_CMDS
-    $(INSTALL) -D -m 0755 $(@D)/tsn_talker $(TARGET_DIR)/usr/bin
-    $(INSTALL) -D -m 0755 $(@D)/tsn_listener $(TARGET_DIR)/usr/bin
+    $(INSTALL) -D -m 0755 $(@D)/tsn_talker $(TARGET_DIR)/root
+    $(INSTALL) -D -m 0755 $(@D)/tsn_listener $(TARGET_DIR)/root
     $(INSTALL) -D -m 0755 $(@D)/dsa_ver $(TARGET_DIR)/root
     $(INSTALL) -D -m 777 $(CBS_PKGDIR)/jira_tl30.cfg $(TARGET_DIR)/root
 endef
