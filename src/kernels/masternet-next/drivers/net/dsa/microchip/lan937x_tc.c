@@ -15,17 +15,6 @@
 #define LAN937X_CBS_DISABLE ((MTI_SCHEDULE_WRR << MTI_SCHEDULE_MODE_S) |\
 			     (MTI_SHAPING_OFF << MTI_SHAPING_S))
 
-static int lan937x_setup_tc_mqprio(struct dsa_switch *ds, int port,
-				   struct tc_mqprio_qopt_offload *m)
-{
-	m->qopt.hw = TC_MQPRIO_HW_OFFLOAD_TCS;
-
-	if (m->qopt.num_tc != LAN937X_NUM_TC)
-		return -EINVAL;
-
-	return 0;
-}
-
 /* Bandwidth is calculated by idle slope/transmission speed. Then the Bandwidth
  * is converted to Hex-decimal using the successive multiplication method. On
  * every step, integer part is taken and decimal part is carry forwarded.
@@ -230,8 +219,6 @@ int lan937x_setup_tc(struct dsa_switch *ds, int port,
 		     enum tc_setup_type type, void *type_data)
 {
 	switch (type) {
-	case TC_SETUP_QDISC_MQPRIO:
-		return lan937x_setup_tc_mqprio(ds, port, type_data);
 	case TC_SETUP_QDISC_CBS:
 		return lan937x_setup_tc_cbs(ds, port, type_data);
 	case TC_SETUP_QDISC_TAPRIO:

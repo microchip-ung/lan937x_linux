@@ -307,6 +307,8 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	struct dsa_port *dp = dsa_slave_to_port(dev);
 	struct lan937x_port_ptp_shared *port_ptp_shared = dp->priv;
 	struct ksz_device_ptp_shared *ptp_shared = port_ptp_shared->dev;
+	u16 queue_mapping = skb_get_queue_mapping(skb);
+	u8 prio = netdev_txq_to_tc(dev, queue_mapping);
 	const struct ethhdr *hdr = eth_hdr(skb);
 	__be16 *tag;
 	u16 val;
@@ -318,6 +320,9 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	tag = skb_put(skb, LAN937X_EGRESS_TAG_LEN);
 
 	val = BIT(dp->index);
+
+	/* priority */
+	val |= (prio<<8);
 
 	if (is_link_local_ether_addr(hdr->h_dest))
 		val |= LAN937X_TAIL_TAG_BLOCKING_OVERRIDE;
