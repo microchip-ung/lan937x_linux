@@ -1,7 +1,11 @@
 #!/bin/sh
 
 if [ $1 = "1" ]; then
-	tc qdisc add dev lan3 root handle 1: mqprio num_tc 8 map 0 1 2 3 4 5 6 7 hw 1
+	tc qdisc add dev lan3 root handle 1: mqprio \
+		num_tc 8 \
+		map 0 1 2 3 4 5 6 7 \
+		queues 1@0 1@1 1@2 1@3 1@4 1@5 1@6 1@7 \
+		hw 0
 elif [ $1 = "2" ]; then
 	tc qdisc replace dev lan3 parent 1:1 handle 11 cbs idleslope 10000 sendslope -90000 locredit 0x0606 hicredit 0x606 offload 1
         tc qdisc replace dev lan3 parent 1:2 handle 22 cbs idleslope 20000 sendslope -80000 locredit 0x0606 hicredit 0x606 offload 1
@@ -21,7 +25,11 @@ elif [ $1 = "5" ]; then
 	bridge vlan add dev lan3 vid 5 pvid untagged
 	bridge vlan show
 elif [ $1 == "6" ]; then 
-	tc qdisc add dev lan3 root handle 1: mqprio num_tc 8 map 0 1 2 3 4 5 6 7 hw 1
+	tc qdisc add dev lan3 root handle 1: mqprio \
+		num_tc 8 \
+		map 0 1 2 3 4 5 6 7 \
+		queues 1@0 1@1 1@2 1@3 1@4 1@5 1@6 1@7 \
+		hw 0
 	tc qdisc replace dev lan3 root handle 100: taprio \
 		num_tc 8 \
 		map 0 1 2 3 4 5 6 7 \
