@@ -17,6 +17,7 @@
 #include <net/dsa.h>
 
 #include "lan937x_acl.h"
+#include "lan937x_tc.h"
 
 #define LAN937X_NUM_TCAM_ENTRIES_PER_PORT 64
 #define LAN937X_MAX_PORTS		8
@@ -38,11 +39,17 @@ struct ksz_port_mib {
 	u64 *counters;
 };
 
-struct lan937x_flower_block {
-	struct list_head rules;	/**Element type: lan937x_rule*/
-	bool tcam_entry_slots_used[LAN937X_NUM_TCAM_ENTRIES_PER_PORT];
+struct lan937x_port_resources{
+	bool tcam_entries_used[LAN937X_NUM_TCAM_ENTRIES_PER_PORT];
 	bool stream_filters_used[LAN937X_NUM_STREAM_FILTERS_PER_PORT];
 	bool gate_used[LAN937X_NUM_GATES_PER_PORT];
+	bool tc_policers_used[LAN937X_NUM_TC];
+	bool broadcast_pol_used;
+};
+
+struct lan937x_flower_block{
+	struct list_head rules;	/**Element type: lan937x_rule*/
+	struct lan937x_port_resources flow_resources;
 };
 
 struct ksz_port {
@@ -135,10 +142,7 @@ struct ksz_device {
 	enum ksz_ptp_tou_mode ptp_tou_mode;
 #endif
 
-#if 1
 	struct lan937x_flower_block flower_block[LAN937X_MAX_PORTS];
-	struct lan937x_acl_rfr_table rfr_table[LAN937X_MAX_PORTS];
-#endif
 };
 
 struct alu_struct {

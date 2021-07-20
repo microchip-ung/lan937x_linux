@@ -306,13 +306,14 @@ struct lan937x_acl_action {
 	u8 dst_port;
 };
 
-struct lan937x_acl_entry{
+struct lan937x_acl_entry {
+	u8 acl_entry_index;
 	u8 acl_mask[MAX_ACL_DATA_MASK_SIZE];
 	u8 acl_data[MAX_ACL_DATA_MASK_SIZE];
 	u8 acl_action[MAX_ACL_ACTION_SIZE];
 };
 
-struct lan937x_acl_rfr{ 
+struct lan937x_acl_rfr {
 	bool rfr_valid;
 	u16 dissectors_covered;
 	bool rng_match_en;
@@ -324,7 +325,7 @@ struct lan937x_acl_rfr{
 	u8 rng_ofst;
 };
 
-struct lan937x_acl_rfr_table{ 
+struct lan937x_acl_rfr_table { 
  struct lan937x_acl_rfr rfr_entries[MAX_PARSER_PER_ENTRY][MAX_RFR_PER_PARSER];
 };
 
@@ -392,5 +393,6 @@ struct lan937x_acl_interrupt_cfg{
  bool frm_cnt_int[MAX_ACL_FRAME_COUNT];
  bool tcm_op_done;
 };
+
 
 #endif

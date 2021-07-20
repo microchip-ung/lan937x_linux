@@ -9,8 +9,6 @@
 #include "lan937x_dev.h"
 #include "lan937x_tc.h"
 #include "lan937x_ptp.h"
-#include <linux/printk.h>
-#include "lan937x_flower.h"
 
 #define LAN937X_CBS_ENABLE ((MTI_SCHEDULE_STRICT_PRIO << MTI_SCHEDULE_MODE_S) | \
 			    (MTI_SHAPING_SRP << MTI_SHAPING_S))

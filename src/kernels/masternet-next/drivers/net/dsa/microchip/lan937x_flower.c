@@ -1,4 +1,3 @@
-#if 1
 // SPDX-License-Identifier: GPL-2.0
 /* Microchip LAN937X switch driver main logic
  * Copyright (C) 2019-2021 Microchip Technology Inc.
@@ -16,6 +15,7 @@
 #include "lan937x_dev.h"
 #include "lan937x_tc.h"
 #include "lan937x_flower.h"
+#include "lan937x_acl.h"
 
 
 void lan937x_flower_setup (struct dsa_switch *ds)
@@ -26,30 +26,70 @@ void lan937x_flower_setup (struct dsa_switch *ds)
 	for (port = 0; port < LAN937X_MAX_PORTS; port++) {
 		rc = lan937x_init_acl_parsers(dev,port);
 		INIT_LIST_HEAD(&dev->flower_block[port].rules);
-		memset(dev->flower_block[port].gate_used,0,LAN937X_NUM_GATES_PER_PORT);
-		memset(dev->flower_block[port].stream_filters_used,0,LAN937X_NUM_STREAM_FILTERS_PER_PORT);
-		memset(dev->flower_block[port].tcam_entry_slots_used,0,LAN937X_NUM_TCAM_ENTRIES_PER_PORT);
-		
+		memset(dev->flower_block[port].flow_resources.gate_used,0,LAN937X_NUM_GATES_PER_PORT);
+		memset(dev->flower_block[port].flow_resources.stream_filters_used,0,LAN937X_NUM_STREAM_FILTERS_PER_PORT);
+		memset(dev->flower_block[port].flow_resources.tcam_entries_used,0,LAN937X_NUM_TCAM_ENTRIES_PER_PORT);
+		memset(dev->flower_block[port].flow_resources.tc_policers_used,0,LAN937X_NUM_TCAM_ENTRIES_PER_PORT);
+		dev->flower_block[port].flow_resources.broadcast_pol_used = false;
 	}
 }
 
-static int lan937x_find_free_stream_filter(struct ksz_device *dev,
-						int port)
+static int lan937x_assign_stream_filter(struct ksz_device *dev,
+						int port, u8 *stream_idx)
 {
-	int i;
+	int i = 0;
 
-	for (i = 0; i < LAN937X_NUM_STREAM_FILTERS_PER_PORT; i++)
-		if (!dev->flower_block[port].stream_filters_used[i]) {
+	while (i < LAN937X_NUM_STREAM_FILTERS_PER_PORT) {
+		//pr_info("lan937x_find_free_stream_filter %d",i);
+		if (!(dev->flower_block[port].flow_resources.stream_filters_used[i])){
+			*stream_idx = i;
 			pr_info("lan937x_find_free_stream_filter %d",i);
-			return i;
+			return 0;
 		}
-	return NULL;
+		i++;
+	}
+	pr_info("Error");
+	return -ENOSPC;
 }
 
-struct lan937x_rule* lan937x_rule_find(struct ksz_device *dev, 
+static int lan937x_check_tc_pol_availability (struct ksz_device *dev,
+											 int port,
+											 int traffic_class) {
+	
+	if(dev->flower_block[port].flow_resources.tc_policers_used[traffic_class])
+				return -ENOSPC;
+	
+	return 0;
+}
+
+
+static int lan937x_assign_tcam_entries(struct ksz_device *dev,
+						int port,u8 num_entry_reqd, u8 *tcam_idx)
+{
+	int i,j,count;
+
+	for (i = 0; i < LAN937X_NUM_TCAM_ENTRIES_PER_PORT; i++) {
+		count = 0;
+		for (j = 0; j < num_entry_reqd; j++) {
+			if (!(dev->flower_block[port].flow_resources.tcam_entries_used[i+j])) {
+				pr_info("lan937x_assign_tcam_entries %d",i);
+				count++;
+			}
+		}
+
+		if(count == num_entry_reqd) {
+			pr_info("lan937x_assign_tcam_entries %d",i);			
+			*tcam_idx = i;
+			return 0;
+		}
+	}
+	return -ENOSPC;
+}
+
+struct lan937x_flower_rule *lan937x_rule_find (struct ksz_device *dev, 
 						int port, unsigned long cookie)
 {
-	struct lan937x_rule *rule;
+	struct lan937x_flower_rule *rule;
 
 	list_for_each_entry(rule, &dev->flower_block[port].rules, list)
 		if (rule->cookie == cookie) {
@@ -62,7 +102,7 @@ struct lan937x_rule* lan937x_rule_find(struct ksz_device *dev,
 
 static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 				    struct flow_cls_offload *cls,
-				    struct lan937x_filter *filter)
+				    struct lan937x_flower_filter *filter)
 {
 	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
 	struct flow_dissector *dissector = rule->match.dissector;
@@ -141,16 +181,15 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		}
 	}
 	
-	filter->key.acl_dissector_map = 0x0000;
 
 	if(vid == U16_MAX && pcp == U16_MAX) { /**Key has NO parameter from VLAN Tag */
 		if(smac!=U64_MAX) {
 			filter->key.acl_dissector_map |= (1<<acl_src_mac_dissector);
 			filter->key.src_mac.value = smac;
 			filter->key.src_mac.mask = ~(smac & smac_mask);
-			filter->key_type = LAN937x_KEY_VLAN_UNAWARE;
+			filter->filter_type = LAN937x_VLAN_UNAWARE_FILTER;
 		}else if(is_bcast_dmac) {
-			filter->key_type = LAN937x_KEY_BCAST;
+			filter->filter_type = LAN937x_BCAST_FILTER;
 			return 0;
 		}
 
@@ -158,7 +197,7 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 			filter->key.acl_dissector_map |= (1<<acl_dst_mac_dissector);
 			filter->key.dst_mac.value = dmac;
 			filter->key.dst_mac.mask = ~(dmac & dmac_mask);
-			filter->key_type = LAN937x_KEY_VLAN_UNAWARE;
+			filter->filter_type = LAN937x_VLAN_UNAWARE_FILTER;
 			pr_info("VLANunAw FieldPresence %X",filter->key.acl_dissector_map);
 		}
 
@@ -184,7 +223,7 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 			filter->key.vlan_prio.value = pcp;
 			filter->key.vlan_prio.mask = ~(pcp & pcp_mask);
 		}
-		filter->key_type = LAN937x_KEY_VLAN_AWARE;
+		filter->filter_type = LAN937x_VLAN_AWARE_FILTER;
 		pr_info("VlanAw FieldPresence %X",filter->key.acl_dissector_map);
 
 		return 0;
@@ -195,295 +234,221 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 }
 
 
-static int lan937x_setup_bcast_policer(struct ksz_device *dev, struct netlink_ext_ack *extack,
-				    unsigned long cookie, int port, 
+static int lan937x_setup_bcast_policer(struct ksz_device *dev,
+					struct netlink_ext_ack *extack,
+				    int port,
+					struct lan937x_flower_rule *rule,
 				    u64 rate_bytes_per_sec,
 				    u32 burst)
 {
-
-	/* Step 1: Check if rate-burst rule is programable or not 
-		if not programmable then invoke lan937x_setup_perstream_policer */
-
-	struct lan937x_rule *rule = lan937x_rule_find(dev, port, cookie);
-
-	/*To do: to know what the cookie exactly used for, why should we look into the existing rules database*/
-	bool new_rule = false;
+	struct lan937x_flower *flower = rule->pflower_params;
+	struct lan937x_rule_resource *rule_rsrc = rule->prule_resource;
 	int rc;
 
-	if (!rule) {
-		rule = kzalloc(sizeof(*rule), GFP_KERNEL);
-		if (!rule)
-			return -ENOMEM;
+	pr_info("lan937x_setup_bcast_policer");
 
-		rule->cookie = cookie;
-		rule->type = LAN937X_RULE_BCAST_POLICER;
-		new_rule = true;
-	}
-
-	rule->tc_policer_cfg.rate_bytes_per_sec = div_u64(rate_bytes_per_sec *
-						       					512, 1000000);
-
-	rule->tc_policer_cfg.burst = burst;
-
-
-	/** To-Do: Determine whether we want to proceed with TCAM configuration here itself
-	 * Note: There can be Gate action following this
-	// */
-	// rc = sja1105_static_config_reload(priv, SJA1105_BEST_EFFORT_POLICING);
-	rc = 0; ////Temporary
-out:
-	if (rc == 0 && new_rule) {
-		list_add(&rule->list, &(dev->flower_block[port].rules));
-	} else if (new_rule) {
-		kfree(rule);
-	}
-
-	return rc;
-}
-
-
-static int lan937x_setup_action_redirect (struct ksz_device *dev, struct netlink_ext_ack *extack,
-				    unsigned long cookie, int port, 
-					struct lan937x_filter *filter,int dest_port)
-{
-	struct lan937x_rule *rule = lan937x_rule_find(dev, port, cookie);
-
-	/*To do: to know what the cookie exactly used for, why should we look into the existing rules database*/
-	bool new_rule = false;
-	int rc=0;
-
-	pr_info("Cookie:%lu",cookie);
-
-	if (!rule) {	/*If there are multiple actions, and already rule was created in another action context*/
-		rule = kzalloc(sizeof(*rule), GFP_KERNEL);
-		if (!rule)
-			return -ENOMEM;
-		memset(rule, 0, sizeof(rule));
-		rule->cookie = cookie;
-		rule->type = LAN937X_REDIRECT_FLOW;
-		new_rule = true;
-	}
-
-	if (rule->type == LAN937X_RULE_DROP) {
-		NL_SET_ERR_MSG_MOD(extack, "Drop action cannot go with other actions");
-		rc = -EINVAL;
-		goto  out;
-	}
-	/** To-Do: Should this be done only using TCAM?
-	 *  can it not be implementable using ALU table modifications ?, if the classifier involves only the dst addr*/
-	rule->acl_action.map_mode = 0x03;//bypass the ALU table
-	rule->acl_action.dst_port = dest_port;//drop
-
-	memcpy(&rule->filter, filter, sizeof(struct lan937x_filter));
+	flower->action.actions_presence_mask |= BIT(LAN937X_ACTION_BCAST_POLICE);
 	
-
-out:
-	if (rc == 0 && new_rule) {
-		list_add(&rule->list, &(dev->flower_block[port].rules));
-	} else if (new_rule) {
-		kfree(rule);
-	} else {
-		list_del(&rule->list);	/*Why it doesnt require the list itself?*/
+	if(dev->flower_block[port].flow_resources.broadcast_pol_used) {
+		NL_SET_ERR_MSG_MOD(extack, "Broadcast Policer already exists");
+		return ENOSPC;
 	}
+		
+	flower->action.pol.rate_bytes_per_sec = rate_bytes_per_sec;//div_u64(rate_bytes_per_sec *\
+						       					//512, 1000000);
+	flower->action.pol.burst = burst;
+	//flower->action.pol.mtu = mtu;
+
+	rule_rsrc->resource_used_mask |= BIT(LAN937X_BROADCAST_POLICER);
 
 	return rc;
 }
 
-static int lan937x_setup_action_drop (struct ksz_device *dev, struct netlink_ext_ack *extack,
-				    unsigned long cookie, int port, 
-					struct lan937x_filter *filter)
+
+static int lan937x_setup_action_redirect (struct ksz_device *dev,
+				    struct netlink_ext_ack *extack,
+				    int port,
+					struct lan937x_flower_rule *rule,
+					unsigned long destport_mask)
 {
-	struct lan937x_rule *rule = lan937x_rule_find(dev, port, cookie);
+	struct lan937x_flower *flower = rule->pflower_params;
+	struct lan937x_rule_resource *rule_rsrc = rule->prule_resource;
+	int rc = EINVAL;
 
-	/*To do: to know what the cookie exactly used for, why should we look into the existing rules database*/
-	bool new_rule = false;
-	int rc = 0;
+	pr_info("lan937x_setup_stream_policer");
 
-	pr_info("Cookie:%lu",cookie);
+	flower->action.actions_presence_mask |= BIT(LAN937X_ACTION_REDIRECT_FLOW);
 
-	if (!rule) {	/*If there are multiple actions, and already rule was created in another action context*/
-		rule = kzalloc(sizeof(*rule), GFP_KERNEL);
-		if (!rule)
-			return -ENOMEM;
-		memset(rule, 0, sizeof(rule));
-		rule->cookie = cookie;
-		rule->type = LAN937X_RULE_DROP;
-		new_rule = true;
+	if(!rule_rsrc->resource.tcam.num_entries) {
+
+		rc = lan937x_get_acl_requirements(flower->filter.filter_type,\
+					&(rule_rsrc->resource.tcam.parser),\
+					&(rule_rsrc->resource.tcam.num_entries));
+		if(rc) {
+			return rc;
+		}
+		rc = lan937x_assign_tcam_entries(dev,\
+							port,\
+							rule_rsrc->resource.tcam.num_entries,\
+							&(rule_rsrc->resource.tcam.start_index));
+		if(rc) {
+			return rc;
+		}
 	}
 
-	if (rule->type!=LAN937X_RULE_DROP) {
-		NL_SET_ERR_MSG_MOD(extack, "Drop action cannot go with other actions");
-		rc = -EINVAL;
-		goto out;
-	}
-	/** To-Do: Should this be done only using TCAM?
-	 *  can it not be implementable using ALU table modifications ?, if the classifier involves only the dst addr*/
-	rule->acl_action.map_mode = 0x03;//bypass the ALU table
-	rule->acl_action.dst_port = 0x00;//drop
+	flower->action.redirect_port_mask  |= destport_mask;
 
-	memcpy(&rule->filter, filter, sizeof(struct lan937x_filter));
-
-out:
-	if (rc == 0 && new_rule) {
-		list_add(&rule->list, &(dev->flower_block[port].rules));
-	} else if (new_rule) {
-		kfree(rule);
-	} else {
-		list_del(&rule->list);	/*Why it doesnt require the list itself?*/
-	}
+	rule_rsrc->resource_used_mask |= BIT(LAN937X_TCAM_ENTRIES);
 
 	return rc;
 }
 
-static int lan937x_setup_tc_policer(struct ksz_device *dev, struct netlink_ext_ack *extack,
-				    unsigned long cookie, int port, 
-					struct lan937x_filter *filter,
+static int lan937x_setup_action_drop (struct ksz_device *dev,
+					struct netlink_ext_ack *extack,
+				    int port,
+					struct lan937x_flower_rule *rule)
+{
+	struct lan937x_flower *flower = rule->pflower_params;
+	struct lan937x_rule_resource *rule_rsrc = rule->prule_resource;
+	int rc = EINVAL;
+
+	pr_info("lan937x_setup_action_drop");
+	pr_info("%lu", rule);
+
+
+	flower->action.actions_presence_mask |= BIT(LAN937X_ACTION_DROP);
+
+	if(flower->action.num_actions == 1) {
+
+		rc = lan937x_get_acl_requirements(flower->filter.filter_type,\
+					&(rule_rsrc->resource.tcam.parser),\
+					&(rule_rsrc->resource.tcam.num_entries));
+		if(rc) {
+			return rc;
+		}
+		rc = lan937x_assign_tcam_entries(dev,\
+							port,\
+							rule_rsrc->resource.tcam.num_entries,\
+							&(rule_rsrc->resource.tcam.start_index));
+		if(rc) {
+			return rc;
+		}
+	}
+
+	rule_rsrc->resource_used_mask |= BIT(LAN937X_TCAM_ENTRIES);
+	return rc;
+}
+
+
+
+static int lan937x_setup_tc_policer(struct ksz_device *dev,
+					struct netlink_ext_ack *extack,
+				    int port,
+					struct lan937x_flower_rule *rule,
 				    u64 rate_bytes_per_sec,
 				    u32 burst)
 {
-
-	/* Step 1: Check if rate-burst rule is programable or not 
-		if not programmable then invoke lan937x_setup_perstream_policer */
-
-	struct lan937x_rule *rule = lan937x_rule_find(dev, port, cookie);
-
-	/*To do: to know what the cookie exactly used for, why should we look into the existing rules database*/
-	bool new_rule = false;
+	struct lan937x_flower *flower = rule->pflower_params;
+	struct lan937x_rule_resource *rule_rsrc = rule->prule_resource;
 	int rc;
 
-	if (!rule) {
-		rule = kzalloc(sizeof(*rule), GFP_KERNEL);
-		if (!rule)
-			return -ENOMEM;
+	pr_info("lan937x_setup_tc_policer");
 
-		rule->cookie = cookie;
-		rule->type = LAN937X_RULE_TC_POLICER;
-		rule->filter.key_type =  filter->key_type;
-		new_rule = true;
+	flower->action.actions_presence_mask |= BIT(LAN937X_ACTION_STREAM_POLICE);
+	
+	rc = lan937x_check_tc_pol_availability (dev, port, flower->filter.key.vlan_prio.value);
+
+	if(rc) {
+		NL_SET_ERR_MSG_MOD(extack, "TC Policer already exists");
+		return rc;
 	}
-
-	rule->tc_policer_cfg.rate_bytes_per_sec = div_u64(rate_bytes_per_sec *
+		
+	flower->action.pol.rate_bytes_per_sec = div_u64(rate_bytes_per_sec *\
 						       					512, 1000000);
+	flower->action.pol.burst = burst;
+	//flower->action.pol.mtu = mtu;
 
-	rule->tc_policer_cfg.burst = burst;
-
-
-
-	/** To-Do: Determine whether we want to proceed with TCAM configuration here itself
-	 * Note: There can be Gate action following this
-	// */
-	// rc = sja1105_static_config_reload(priv, SJA1105_BEST_EFFORT_POLICING);
-	rc = 0; ////Temporary
-
-out:
-	if (rc == 0 && new_rule) {
-		list_add(&rule->list, &(dev->flower_block[port].rules));
-	} else if (new_rule) {
-		kfree(rule);
-	}
+	rule_rsrc->resource_used_mask |= BIT(LAN937X_TC_POLICER);
 
 	return rc;
 }
 
 
-static int lan937x_setup_perstream_policer(struct ksz_device *dev, struct netlink_ext_ack *extack,
-				    unsigned long cookie, int port, 
-					struct lan937x_filter *filter,
+static int lan937x_setup_stream_policer(struct ksz_device *dev,
+					struct netlink_ext_ack *extack,
+				    int port,
+					struct lan937x_flower_rule *rule,
 				    u64 rate_bytes_per_sec,
 				    u32 burst,
 					u32 mtu)
 {
-	struct lan937x_rule *rule = lan937x_rule_find(dev, port, cookie);
+	struct lan937x_flower *flower = rule->pflower_params;
+	struct lan937x_rule_resource *rule_rsrc = rule->prule_resource;
+	int rc = 0;
 
-	/*To do: to know what the cookie exactly used for, why should we look into the existing rules database*/
-	bool new_rule = false;
-	int rc;
-	pr_info("Cookie:%lu",cookie);
+	pr_info("lan937x_setup_stream_policer");
 
-	if (!rule) {	/*If there are multiple actions, and already rule was created in another action context*/
-		rule = kzalloc(sizeof(*rule), GFP_KERNEL);
-		if (!rule)
-			return -ENOMEM;
-		memset(rule, 0, sizeof(rule));
-		rule->cookie = cookie;
-		rule->type = LAN937X_RULE_PSFP;
-		rule->strm_psfp_cfg.streamfilter_idx = lan937x_find_free_stream_filter(dev,port);
-		rule->strm_psfp_cfg.flowmeter_idx 	= rule->strm_psfp_cfg.streamfilter_idx;
-		rule->strm_psfp_cfg.flowmeter_en = true;
-		//rule->acl_action.str_en = true;
-		//rule->acl_action.str_idx = rule->strm_psfp_cfg.streamfilter_idx;
+	flower->action.actions_presence_mask |= BIT(LAN937X_ACTION_STREAM_POLICE);
+	
+	if(!rule_rsrc->resource.stream_filter.en) {
+		rc = lan937x_assign_stream_filter\
+				(dev,port,&rule_rsrc->resource.stream_filter.stream_index);
+		if(rc) {
+			return rc;
+		}
+	
+		rc = lan937x_get_acl_requirements(flower->filter.filter_type,\
+					&rule_rsrc->resource.tcam.parser,\
+					&rule_rsrc->resource.tcam.num_entries);
+		if(rc) {
+			return rc;
+		}
+		rc = lan937x_assign_tcam_entries(dev,\
+							port,\
+							rule_rsrc->resource.tcam.num_entries,\
+							&rule_rsrc->resource.tcam.start_index);
+		if(rc) {
+			return rc;
+		}
 
-		rule->acl_action.map_mode = 0x03;
-		rule->acl_action.dst_port = 0x00;
-		new_rule = true;
+		rule_rsrc->resource.stream_filter.en = true;		
 	}
 
-	memcpy(&rule->filter, filter, sizeof(struct lan937x_filter));
+	flower->action.pol.rate_bytes_per_sec = rate_bytes_per_sec;//div_u64(rate_bytes_per_sec *\
+						       					//512, 1000000);
+	flower->action.pol.burst = burst;
+	flower->action.pol.mtu = mtu;
 
-	if (rule->type!=LAN937X_RULE_PSFP) {
-		NL_SET_ERR_MSG_MOD(extack, "Actions does not go well together");
-		rc = -EINVAL;
-		goto out;		
-	}
-
-	if (rule->strm_psfp_cfg.streamfilter_idx == -1) {
-		NL_SET_ERR_MSG_MOD(extack, "All Stream filters already utilized");
-		rc = -ENOSPC;
-		goto out;
-	}
-
-	rule->strm_psfp_cfg.rate_bytes_per_sec = div_u64(rate_bytes_per_sec *
-						       					512, 1000000);
-	rule->strm_psfp_cfg.burst = burst;
-
-	rule->strm_psfp_cfg.mtu = mtu;
-
-	// /* TODO: support per-flow MTU */
-	// policing[rule->tc_pol.sharindx].maxlen = VLAN_ETH_FRAME_LEN +
-	// 					 ETH_FCS_LEN;
-
-	/** To-Do: Determine whether we want to proceed with TCAM configuration here itself
-	 * Note: There can be Gate action following this
-	// */
-	// rc = sja1105_static_config_reload(priv, SJA1105_BEST_EFFORT_POLICING);
-	rc = 0; ////Temporary
-out:
-	if (rc == 0 && new_rule) {
-		dev->flower_block[port].stream_filters_used[rule->strm_psfp_cfg.streamfilter_idx] = true;
-		list_add(&rule->list, &(dev->flower_block[port].rules));
-	} else if (new_rule) {
-		kfree(rule);
-	} else {
-		list_del(&rule->list);	/*Why it doesnt require the list itself?*/
-	}
-
+	rule_rsrc->resource_used_mask |= BIT(LAN937X_STREAM_FILTER) | BIT(LAN937X_TCAM_ENTRIES);
 	return rc;
 }
 
 
 static int lan937x_flower_policer(struct ksz_device *dev , struct netlink_ext_ack *extack, 
-					unsigned long cookie, int port,
-					struct lan937x_filter *filter,
+					int port,
+					struct lan937x_flower_rule *rule,
 				  	u64 rate_bytes_per_sec,
 				  	u32 burst,
 					u32 mtu)
 {
-	switch (filter->key_type) {
-	case LAN937x_KEY_BCAST:
-		pr_info("BCAST:%lu",cookie);
-		return lan937x_setup_bcast_policer(dev, extack, cookie, port,
+	struct lan937x_flower *flower = rule->pflower_params;
+	switch (flower->filter.filter_type){
+
+	case LAN937x_BCAST_FILTER:
+		return lan937x_setup_bcast_policer(dev, extack, port,rule,
 						rate_bytes_per_sec, burst);
-	case LAN937x_KEY_VLAN_AWARE:
-		if (filter->key.acl_dissector_map == acl_vlan_pcp_dissector) {
-			pr_info("AWARE:%lu",cookie);
-			return lan937x_setup_tc_policer(dev, extack, cookie, port,
-						filter, rate_bytes_per_sec,
-						burst);
+
+	case LAN937x_VLAN_AWARE_FILTER:
+		if(flower->action.num_actions == 1) {
+			if (flower->filter.key.acl_dissector_map == acl_vlan_pcp_dissector) {
+				return lan937x_setup_tc_policer(dev, extack, port,\
+							rule, rate_bytes_per_sec,\
+							burst);
+			}
 		}
-	case LAN937x_KEY_VLAN_UNAWARE:
-		pr_info("UNAWARE:%lu",cookie);
-		return lan937x_setup_perstream_policer(dev, extack, cookie, port,
-						filter, rate_bytes_per_sec,
+	case LAN937x_VLAN_UNAWARE_FILTER:
+		return lan937x_setup_stream_policer(dev, extack, port,
+						rule, rate_bytes_per_sec,
 						burst,mtu);
 	default:
 		NL_SET_ERR_MSG_MOD(extack, "Unknown keys for policing");
@@ -492,71 +457,53 @@ static int lan937x_flower_policer(struct ksz_device *dev , struct netlink_ext_ac
 }
 
 
-
-static int lan937x_psfp_configure(struct ksz_device *dev,
-				int port, struct lan937x_rule *rule)
+int lan937x_flower_rule_init (struct lan937x_flower_rule **flower_rule)
 {
-	/*1) PSFP rules require TCAM */
-	/* a) Identify the Free Entries */
-	/* b) Identify the data mask */
-	/* c) Identify the action setting */
+	(*flower_rule) = 
+		kzalloc(sizeof(struct lan937x_flower_rule), GFP_KERNEL);
+	
+	pr_info("%lu", *flower_rule);
 
-	/*2) Program TCAM */
-	/*3) Program PSFP */
-	/* Then get ready to bury this !!*/
+	if (!*flower_rule)
+		return -ENOMEM;
+
+	(*flower_rule)->pflower_params = 
+		kzalloc(sizeof(struct lan937x_flower), GFP_KERNEL);
+	
+	pr_info("%lu", (*flower_rule)->pflower_params);
+
+	if (!(*flower_rule)->pflower_params) {
+		kfree(*flower_rule);
+		return -ENOMEM;
+	}
+
+	(*flower_rule)->prule_resource = 
+		kzalloc(sizeof(struct lan937x_rule_resource), GFP_KERNEL);
+
+	pr_info("%lu", (*flower_rule)->prule_resource);
+
+	if (!(*flower_rule)->prule_resource) {
+		kfree((*flower_rule)->pflower_params);
+		kfree(*flower_rule);
+		return -ENOMEM;
+	}
+
 	return 0;
 }
 
-static int lan937x_flower_configure(struct ksz_device *dev, int port,
-				struct lan937x_filter *filter)
+static int lan937x_flower_parse_actions(struct ksz_device *dev,
+				struct netlink_ext_ack *extack,
+				int port,
+				struct flow_rule *rule,
+				struct lan937x_flower_rule *flower_rule)
 {
-	struct lan937x_rule *rule;// = lan937x_rule_find(dev, port, cookie);
-	int rc=0;
-
-	switch(rule->type) {
-	case LAN937X_TRAFFIC_CLASS_ASSIGNMENT:
-
-	break;
-	case LAN937X_REDIRECT_FLOW:
-
-	break;
-	case LAN937X_RULE_BCAST_POLICER:
-
-	break;
-	case LAN937X_RULE_TC_POLICER:
-
-	break;
-	case LAN937X_RULE_PSFP:
-		lan937x_psfp_configure(dev, port, rule);
-	break;
-	}
-	return rc;
-}
-
-
-int lan937x_tc_flower_add(struct dsa_switch *ds, int port,
-			   struct flow_cls_offload *cls, bool ingress)
-{
-	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
-	struct netlink_ext_ack *extack = cls->common.extack;	
-	struct ksz_device *dev = ds->priv;
-	const struct flow_action_entry *act;
-	unsigned long cookie = cls->cookie;
-	struct lan937x_filter *filter = kzalloc(sizeof(struct lan937x_filter), GFP_KERNEL);
-	struct lan937x_rule *entry_rule;
-
-	bool routing_rule = false;
-	bool gate_rule = false;
-	bool vl_rule = false;
-
 	int rc, i;
-	/**Parse the Keys*/
-	rc = lan937x_flower_parse_key(extack, cls, filter);
+	const struct flow_action_entry *act;
 
-	if (rc)
-		return rc;
+	flower_rule->pflower_params->action.num_actions = \
+					rule->action.num_entries;
 
-	/**Parse the actions*/
+	/**For every action identify the capability and hw resource availability*/
 	flow_action_for_each(i, act, &rule->action) {
 		switch (act->id) {
 		case FLOW_ACTION_POLICE: {
@@ -568,8 +515,8 @@ int lan937x_tc_flower_add(struct dsa_switch *ds, int port,
 			}
 			pr_info("FLOW_ACTION_POLICE %lu:%lu:%lu",act->police.rate_bytes_ps,act->police.burst,act->police.mtu);
 
-			rc = lan937x_flower_policer(dev, extack, cookie, port,
-						    filter,
+			rc = lan937x_flower_policer(dev, extack, port,
+						    flower_rule,
 						    act->police.rate_bytes_ps,
 						    act->police.burst,
 							act->police.mtu);
@@ -578,22 +525,24 @@ int lan937x_tc_flower_add(struct dsa_switch *ds, int port,
 			break;
 		}
 		case FLOW_ACTION_TRAP: {
-
 			break;
 		}
 		case FLOW_ACTION_REDIRECT: {
 			struct dsa_port *to_dp;
-
 			to_dp = dsa_port_from_netdev(act->dev);
 
+			rc = lan937x_setup_action_redirect (dev, extack,\
+				    port,\
+					flower_rule,\
+					BIT(to_dp->index));
 			break;
 		}
 		case FLOW_ACTION_DROP:
-			rc = lan937x_setup_action_drop(dev, extack, cookie, port,\
-						    filter);
+			rc = lan937x_setup_action_drop(dev, extack, port,\
+						    flower_rule);
 			break;
 		case FLOW_ACTION_GATE:
-
+			rc = -EOPNOTSUPP;
 			break;
 		default:
 			NL_SET_ERR_MSG_MOD(extack,
@@ -602,17 +551,136 @@ int lan937x_tc_flower_add(struct dsa_switch *ds, int port,
 			goto out;
 		}
 	}
-
-	/** Reserve the hardware Resources */
-	entry_rule = lan937x_rule_find(dev, port, cookie);
-	rc = lan937x_acl_program_entry(dev, port,\
-					entry_rule);
-	if (rc){
-		pr_info("Error!!!!");
-	}
 out:
-	kfree(filter);
 	return rc;
 }
 
-#endif
+static int lan937x_flower_hw_configuration (struct ksz_device *dev,
+				int port,
+				struct lan937x_flower_rule *rule)
+{
+	struct lan937x_key *key = &rule->pflower_params->filter.key;
+	struct lan937x_flower_action *action = &rule->pflower_params->action;
+	struct lan937x_rule_resource *resrc = rule->prule_resource;
+	u16 acl_dissector_map = key->acl_dissector_map;
+	u32 actions_presence_mask = action->actions_presence_mask;
+	int i;
+	int rc = 0;
+
+	for (i = 0; (actions_presence_mask!=0) && (i < LAN937X_NUM_ACTIONS_SUPPORTED); i++) {
+		if(actions_presence_mask & BIT(i)) {
+			actions_presence_mask &= ~BIT(i);
+			switch (i) {
+				case LAN937X_ACTION_TC_POLICE:
+
+				break;
+
+				case LAN937X_ACTION_BCAST_POLICE:
+
+				break;
+
+				case LAN937X_ACTION_STREAM_POLICE:
+					if(resrc->resource.stream_filter.en){
+						u8 stream_index = resrc->resource.stream_filter.stream_index;
+						u64 cir;
+						u16 burst;
+						u32 reg_val;
+
+						pr_info ("lan937x_flower_hw_configuration");
+						
+						rc= lan937x_pwrite8(dev, port, REG_PORT_RX_QCI_PTR, stream_index);
+						/*PSFP enable*/
+						rc= lan937x_pwrite8(dev, port, REG_PORT_RX_PSFP, BIT(0));
+
+						cir = div_u64(action->pol.rate_bytes_per_sec*5242,10000000);
+						pr_info ("cir %lu", cir);
+						reg_val = ((cir << 16) & 0xFFFF) | (cir & 0xFFFF);
+						rc= lan937x_pwrite32(dev, port, REG_PORT_RX_QCI_METER_SR,reg_val);
+
+						burst = action->pol.burst;
+						pr_info ("burst %lu", burst);
+						reg_val = ((burst << 16) & 0xFFFF) | (burst & 0xFFFF);
+						rc= lan937x_pwrite32(dev, port, REG_PORT_RX_QCI_METER_BS,reg_val);
+
+						/**Enable flow meter of Id same as stream ID*/
+						reg_val = BIT(11) | ((stream_index & 0x07) <<8);
+						rc= lan937x_pwrite32(dev, port, REG_PORT_RX_QCI_FS_CTL,reg_val);
+
+					}
+				break;
+				case LAN937X_ACTION_STREAM_GATE:
+
+				break;
+			}
+		}
+	}
+	return rc;
+}
+
+
+int lan937x_tc_flower_add (struct dsa_switch *ds, int port,
+			   struct flow_cls_offload *cls, bool ingress)
+{
+	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
+	struct netlink_ext_ack *extack = cls->common.extack;	
+	struct ksz_device *dev = ds->priv;
+	int rc, i;
+	struct lan937x_flower_rule *flower_rule;
+
+	if (lan937x_flower_rule_init(&flower_rule))
+		return -ENOMEM;
+	
+	flower_rule->cookie = cls->cookie;
+
+	/**Parse the Keys and identify the hw resouces required*/
+	rc = lan937x_flower_parse_key(extack, cls, 
+			&flower_rule->pflower_params->filter);
+	
+	if (rc)
+		goto err;
+
+	rc = lan937x_flower_parse_actions(dev,extack,\
+								port,rule,flower_rule);
+
+	if (rc)
+		goto err;
+
+	/** Configure the hardware Resources */
+	rc = lan937x_flower_hw_configuration(dev, port,\
+					flower_rule);
+	if (rc)
+		goto err;
+
+	rc = lan937x_acl_program_entry(dev, port,\
+					flower_rule);
+	if (rc) {
+		goto err;
+		pr_info("Error!!!!");
+	}
+
+	kfree(flower_rule->pflower_params);
+	flower_rule->pflower_params == NULL;
+	list_add(&flower_rule->list, &dev->flower_block[port].rules);
+	return rc;
+
+err:
+	kfree(flower_rule);
+	return rc;
+}
+
+
+
+int	lan937x_tc_flower_del(struct dsa_switch *ds, int port,
+				struct flow_cls_offload *cls, bool ingress)
+{
+	pr_info ("Flower Deletion: %lu", cls->cookie);
+	return 0;
+}
+
+int lan937x_tc_flower_stats(struct dsa_switch *ds, int port,
+				    struct flow_cls_offload *cls, bool ingress)
+{
+	pr_info ("Flower Status: %lu", cls->cookie);
+	return 0;	
+}
+

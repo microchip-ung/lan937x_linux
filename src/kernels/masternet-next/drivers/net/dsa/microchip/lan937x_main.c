@@ -1056,9 +1056,11 @@ static int lan937x_setup(struct dsa_switch *ds)
 
 	ret = lan937x_ptp_init(dev);
 	if (ret) 
-                goto error_ptp_deinit;
+        goto error_ptp_deinit;
         
-        lan937x_tc_queue_init(ds);
+    lan937x_tc_queue_init(ds);
+	
+	lan937x_flower_setup(ds);
 
 	/* start switch */
 	lan937x_cfg(dev, REG_SW_OPERATION, SW_START, true);
@@ -1220,7 +1222,9 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.port_txtstamp		= lan937x_port_txtstamp,
 	.get_ts_info            = lan937x_get_ts_info,
     .port_setup_tc          = lan937x_setup_tc,
-	.cls_flower_add	=lan937x_tc_flower_add
+	.cls_flower_add	=lan937x_tc_flower_add,
+	.cls_flower_del =lan937x_tc_flower_del,
+	.cls_flower_stats = lan937x_tc_flower_stats,
 };
 
 
