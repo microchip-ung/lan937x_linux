@@ -48,8 +48,8 @@ struct lan937x_port_resources{
 };
 
 struct lan937x_flower_block{
-	struct list_head rules;	/**Element type: lan937x_rule*/
-	struct lan937x_port_resources flow_resources;
+	struct list_head rules;	/**Element type: lan937x_flower_rule*/
+	struct lan937x_port_resources resrcs;
 };
 
 struct ksz_port {
