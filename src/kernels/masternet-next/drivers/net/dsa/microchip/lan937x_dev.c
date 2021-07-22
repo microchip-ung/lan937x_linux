@@ -209,15 +209,12 @@ int lan937x_reset_switch(struct ksz_device *dev)
 	if (ret < 0)
 		return ret;
 
-	/* default configuration */
 	ret = ksz_read8(dev, REG_SW_LUE_CTRL_1, &data8);
 	if (ret < 0)
 		return ret;
 
-	data8 = SW_AGING_ENABLE | SW_LINK_AUTO_AGING |
-	      SW_SRC_ADDR_FILTER;
-
-	ret = ksz_write8(dev, REG_SW_LUE_CTRL_1, data8);
+	/* Enable Auto Aging*/
+	ret = ksz_write8(dev, REG_SW_LUE_CTRL_1, data8 | SW_LINK_AUTO_AGING);
 	if (ret < 0)
 		return ret;
 
@@ -242,10 +239,10 @@ static int lan937x_switch_detect(struct ksz_device *dev)
 
 	/* Read Chip ID */
 	ret = ksz_read32(dev, REG_CHIP_ID0__1, &id32);
-	if (ret)
+	if (ret < 0)
 		return ret;
 
-	if (id32 != 0) {
+	if (id32 != 0 && id32 != 0xffffffff) {
 		dev->chip_id = id32;
 		dev_info(dev->dev, "Chip ID: 0x%x", id32);
 		ret = 0;
@@ -598,7 +595,6 @@ static int lan937x_mdio_register(struct dsa_switch *ds)
 	}
 
 	ds->slave_mii_bus = devm_mdiobus_alloc(ds->dev);
-
 	if (!ds->slave_mii_bus)
 		return -ENOMEM;
 
@@ -611,7 +607,6 @@ static int lan937x_mdio_register(struct dsa_switch *ds)
 	ds->slave_mii_bus->phy_mask = ~ds->phys_mii_mask;
 
 	ret = of_mdiobus_register(ds->slave_mii_bus, dev->mdio_np);
-
 	if (ret) {
 		dev_err(ds->dev, "unable to register MDIO bus %s\n",
 			ds->slave_mii_bus->id);
@@ -630,8 +625,7 @@ static int lan937x_switch_init(struct ksz_device *dev)
 
 	/* Check device tree */
 	ret = lan937x_check_device_id(dev);
-
-	if (ret)
+	if (ret < 0)
 		return ret;
 
 	dev->port_mask = (1 << dev->port_cnt) - 1;

@@ -116,7 +116,6 @@ static int lan937x_set_vlan_table(struct ksz_device *dev, u16 vid,
 	if (ret < 0)
 		goto exit;
 
-	ret = ksz_write8(dev, REG_SW_VLAN_CTRL, 0);
 exit:
 	mutex_unlock(&dev->vlan_mutex);
 
@@ -293,6 +292,7 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 	 */
 	if (forward != dev->member)
 		ksz_update_port_member(dev, port);
+
 	mutex_unlock(&dev->dev_mutex);
 }
 
@@ -303,12 +303,8 @@ static int lan937x_port_vlan_filtering(struct dsa_switch *ds, int port,
 	struct ksz_device *dev = ds->priv;
 	int ret;
 
-	if (flag)
-		ret = lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_VLAN_ENABLE,
-				  true);
-	else
-		ret = lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_VLAN_ENABLE,
-				  false);
+	ret = lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_VLAN_ENABLE,
+			  flag);
 
 	return ret;
 }
@@ -337,7 +333,6 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 	else
 		vlan_entry.untag_prtmap &= ~BIT(port);
 
-	vlan_entry.untag_prtmap &= ~(BIT(dev->cpu_port));
 	vlan_entry.fwd_map |= BIT(port);
 
 	ret = lan937x_set_vlan_table(dev, vlan->vid, &vlan_entry);
@@ -409,6 +404,7 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 
 	mutex_lock(&dev->alu_mutex);
 
+	/* Accessing two ALU tables through loop */ 
 	for (i = 0; i < ALU_STA_DYN_CNT; i++) {
 		/* find any entry with mac & fid */
 		data = fid << ALU_FID_INDEX_S;
@@ -416,33 +412,33 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 
 		ret = ksz_write32(dev, REG_SW_ALU_INDEX_0, data);
 		if (ret < 0)
-			goto exit;
+			break;
 
 		data = ((addr[2] << 24) | (addr[3] << 16));
 		data |= ((addr[4] << 8) | addr[5]);
 
 		ret = ksz_write32(dev, REG_SW_ALU_INDEX_1, data);
 		if (ret < 0)
-			goto exit;
+			break;
 
 		/* start read operation */
 		ret = ksz_write32(dev, REG_SW_ALU_CTRL(i),
 				  ALU_READ | ALU_START);
 		if (ret < 0)
-			goto exit;
+			break;
 
 		/* wait to be finished */
 		ret = lan937x_wait_alu_ready(i, dev);
 		if (ret < 0) {
 			dev_err(dev->dev, "Failed to read ALU\n");
-			goto exit;
+			break;
 		}
 
 		/* read ALU entry */
 		ret = lan937x_read_table(dev, alu_table);
 		if (ret < 0) {
 			dev_err(dev->dev, "Failed to read ALU\n");
-			goto exit;
+			break;
 		}
 
 		/* update ALU entry */
@@ -453,6 +449,7 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 
 		if (fid)
 			alu_table[1] |= ALU_V_USE_FID;
+
 		alu_table[2] = (fid << ALU_V_FID_S);
 		alu_table[2] |= ((addr[0] << 8) | addr[1]);
 		alu_table[3] = ((addr[2] << 24) | (addr[3] << 16));
@@ -460,24 +457,23 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 
 		ret = lan937x_write_table(dev, alu_table);
 		if (ret < 0)
-			goto exit;
+			break;
 
 		ret = ksz_write32(dev, REG_SW_ALU_CTRL(i),
 				  (ALU_WRITE | ALU_START));
 		if (ret < 0)
-			goto exit;
+			break;
 
 		/* wait to be finished */
 		ret = lan937x_wait_alu_ready(i, dev);
-
 		if (ret < 0) {
 			dev_err(dev->dev, "Failed to write ALU\n");
-			goto exit;
+			break;
 		}
 
 		ret = ksz_read8(dev, REG_SW_LUE_INT_STATUS__1, &val);
 		if (ret < 0)
-			goto exit;
+			break;
 
 		/* ALU write failed & do not return before checking ALU2*/
 		if (val & WRITE_FAIL_INT && i == 1)
@@ -489,13 +485,12 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 			ret = ksz_write8(dev, REG_SW_LUE_INT_STATUS__1,
 					 WRITE_FAIL_INT);
 			if (ret < 0)
-				goto exit;
+				break;
 		} else {
-			goto exit;
+			break;
 		}
 	}
 
-exit:
 	mutex_unlock(&dev->alu_mutex);
 
 	return ret;
@@ -512,43 +507,44 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 
 	mutex_lock(&dev->alu_mutex);
 
+	/* Accessing two ALU tables through loop */
 	for (i = 0; i < ALU_STA_DYN_CNT; i++) {
 		/* read any entry with mac & fid */
 		data = fid << ALU_FID_INDEX_S;
 		data |= ((addr[0] << 8) | addr[1]);
 		ret = ksz_write32(dev, REG_SW_ALU_INDEX_0, data);
 		if (ret < 0)
-			goto exit;
+			break;
 
 		data = ((addr[2] << 24) | (addr[3] << 16));
 		data |= ((addr[4] << 8) | addr[5]);
 		ret = ksz_write32(dev, REG_SW_ALU_INDEX_1, data);
 		if (ret < 0)
-			goto exit;
+			break;
 
 		/* start read operation */
 		ret = ksz_write32(dev, REG_SW_ALU_CTRL(i),
 				  (ALU_READ | ALU_START));
 		if (ret < 0)
-			goto exit;
+			break;
 
 		/* wait to be finished */
 		ret = lan937x_wait_alu_ready(i, dev);
 		if (ret < 0) {
 			dev_err(dev->dev, "Failed to read ALU\n");
-			goto exit;
+			break;
 		}
 
 		ret = ksz_read32(dev, REG_SW_ALU_VAL_A, &alu_table[0]);
 		if (ret < 0)
-			goto exit;
+			break;
 
 		if (alu_table[0] & ALU_V_STATIC_VALID) {
 			/* read ALU entry */
 			ret = lan937x_read_table(dev, alu_table);
 			if (ret < 0) {
-				dev_err(dev->dev, "Failed to read ALU\n");
-				goto exit;
+				dev_err(dev->dev, "Failed to read ALU table\n");
+				break;
 			}
 
 			/* clear forwarding port */
@@ -570,20 +566,21 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 
 		ret = lan937x_write_table(dev, alu_table);
 		if (ret < 0)
-			goto exit;
+			break;
 
 		ret = ksz_write32(dev, REG_SW_ALU_CTRL(i),
 				  (ALU_WRITE | ALU_START));
 		if (ret < 0)
-			goto exit;
+			break;
 
 		/* wait to be finished */
 		ret = lan937x_wait_alu_ready(i, dev);
-		if (ret < 0)
-			dev_err(dev->dev, "Failed to write ALU\n");
+		if (ret < 0) {
+			dev_err(dev->dev, "Failed to delete ALU Entries\n");
+			break;
+		}
 	}
 
-exit:
 	mutex_unlock(&dev->alu_mutex);
 
 	return ret;
@@ -624,6 +621,7 @@ static int lan937x_port_fdb_dump(struct dsa_switch *ds, int port,
 
 	mutex_lock(&dev->alu_mutex);
 
+	/* Accessing two ALU tables through loop */
 	for (i = 0; i < ALU_STA_DYN_CNT; i++) {
 		/* start ALU search */
 		ret = ksz_write32(dev, REG_SW_ALU_CTRL(i),
@@ -691,6 +689,7 @@ static int lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 
 	mutex_lock(&dev->alu_mutex);
 
+	/* Access the entries in the table */
 	for (index = 0; index < dev->num_statics; index++) {
 		/* find empty slot first */
 		data = (index << ALU_STAT_INDEX_S) |
@@ -777,8 +776,8 @@ static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
 
 	mutex_lock(&dev->alu_mutex);
 
+	/* Access the entries in the table */
 	for (index = 0; index < dev->num_statics; index++) {
-		/* find empty slot first */
 		data = (index << ALU_STAT_INDEX_S) |
 			ALU_STAT_READ | ALU_STAT_START;
 		ret = ksz_write32(dev, REG_SW_ALU_STAT_CTRL__4, data);
@@ -799,7 +798,6 @@ static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
 
 		if (static_table[0] & ALU_V_STATIC_VALID) {
 			/* check this has same fid & mac address */
-
 			if (((static_table[2] >> ALU_V_FID_S) == fid) &&
 			    ((static_table[2] & ALU_V_MAC_ADDR_HI) == mac_hi) &&
 			    static_table[3] == mac_lo) {
@@ -852,14 +850,13 @@ static int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
 	int ret, p;
 	u8 data;
 
-	/*Configure ingress/egress mirroring*/
+	/* Configure ingress/egress mirroring*/
 	if (ingress)
 		ret = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX,
 				       true);
 	else
 		ret = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX,
 				       true);
-
 	if (ret < 0)
 		return ret;
 
@@ -1039,8 +1036,8 @@ static int lan937x_setup(struct dsa_switch *ds)
 		    (SW_PAUSE_UNH_MODE | SW_NEW_BACKOFF | SW_AGGR_BACKOFF),
 		    true);
 
-	/* If this bit is set, the switch will not drop packets when 16
-	 * or more collisions occur
+	/* If NO_EXC_COLLISION_DROP bit is set, the switch will not drop 
+	 * packets when 16 or more collisions occur
 	 */
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_1, NO_EXC_COLLISION_DROP, true);
 
@@ -1149,6 +1146,18 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 	struct ksz_device *dev = ds->priv;
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(mask) = { 0, };
 
+	/* Check for unsupported interfaces */
+	if (!phy_interface_mode_is_rgmii(state->interface) && 
+	     state->interface != PHY_INTERFACE_MODE_RMII &&
+	     state->interface != PHY_INTERFACE_MODE_MII &&
+	     state->interface != PHY_INTERFACE_MODE_INTERNAL) {
+		bitmap_zero(supported, __ETHTOOL_LINK_MODE_MASK_NBITS);
+		dev_err(ds->dev, "Unsupported interface '%s' for port %d\n",
+			phy_modes(state->interface), port);
+		return;
+	}
+
+	/* For RGMII, RMII, MII and internal TX phy port */
 	if (phy_interface_mode_is_rgmii(state->interface) ||
 	    state->interface == PHY_INTERFACE_MODE_RMII ||
 	    state->interface == PHY_INTERFACE_MODE_MII ||
