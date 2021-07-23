@@ -475,11 +475,13 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 		if (ret < 0)
 			break;
 
-		/* ALU write failed & do not return before checking ALU2*/
+		/* ALU2 write failed */
 		if (val & WRITE_FAIL_INT && i == 1)
 			dev_err(dev->dev, "Failed to write ALU\n");
 
-		/* ALU1 write failed and attempt to write ALU2, otherwise exit*/
+		/* if ALU1 write is failed and attempt to write ALU2,
+		 * otherwise exit. Clear Write fail for both ALU1 & ALU2
+		 */
 		if (val & WRITE_FAIL_INT) {
 			/* Write to clear the Write Fail */
 			ret = ksz_write8(dev, REG_SW_LUE_INT_STATUS__1,
