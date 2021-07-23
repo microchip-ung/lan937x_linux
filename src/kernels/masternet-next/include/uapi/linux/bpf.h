@@ -324,9 +324,6 @@ union bpf_iter_link_info {
  *		**BPF_PROG_TYPE_SK_LOOKUP**
  *			*data_in* and *data_out* must be NULL.
  *
- *		**BPF_PROG_TYPE_XDP**
- *			*ctx_in* and *ctx_out* must be NULL.
- *
  *		**BPF_PROG_TYPE_RAW_TRACEPOINT**,
  *		**BPF_PROG_TYPE_RAW_TRACEPOINT_WRITABLE**
  *
@@ -527,6 +524,15 @@ union bpf_iter_link_info {
  *		Look up an element with the given *key* in the map referred to
  *		by the file descriptor *fd*, and if found, delete the element.
  *
+ *		For **BPF_MAP_TYPE_QUEUE** and **BPF_MAP_TYPE_STACK** map
+ *		types, the *flags* argument needs to be set to 0, but for other
+ *		map types, it may be specified as:
+ *
+ *		**BPF_F_LOCK**
+ *			Look up and delete the value of a spin-locked map
+ *			without returning the lock. This must be specified if
+ *			the elements contain a spinlock.
+ *
  *		The **BPF_MAP_TYPE_QUEUE** and **BPF_MAP_TYPE_STACK** map types
  *		implement this command as a "pop" operation, deleting the top
  *		element rather than one corresponding to *key*.
@@ -536,6 +542,10 @@ union bpf_iter_link_info {
  *		This command is only valid for the following map types:
  *		* **BPF_MAP_TYPE_QUEUE**
  *		* **BPF_MAP_TYPE_STACK**
+ *		* **BPF_MAP_TYPE_HASH**
+ *		* **BPF_MAP_TYPE_PERCPU_HASH**
+ *		* **BPF_MAP_TYPE_LRU_HASH**
+ *		* **BPF_MAP_TYPE_LRU_PERCPU_HASH**
  *
  *	Return
  *		Returns zero on success. On error, -1 is returned and *errno*
@@ -981,6 +991,8 @@ enum bpf_attach_type {
 	BPF_SK_LOOKUP,
 	BPF_XDP,
 	BPF_SK_SKB_VERDICT,
+	BPF_SK_REUSEPORT_SELECT,
+	BPF_SK_REUSEPORT_SELECT_OR_MIGRATE,
 	__MAX_BPF_ATTACH_TYPE
 };
 
@@ -2542,8 +2554,12 @@ union bpf_attr {
  * 		The lower two bits of *flags* are used as the return code if
  * 		the map lookup fails. This is so that the return value can be
  * 		one of the XDP program return codes up to **XDP_TX**, as chosen
- * 		by the caller. Any higher bits in the *flags* argument must be
- * 		unset.
+ * 		by the caller. The higher bits of *flags* can be set to
+ * 		BPF_F_BROADCAST or BPF_F_EXCLUDE_INGRESS as defined below.
+ *
+ * 		With BPF_F_BROADCAST the packet will be broadcasted to all the
+ * 		interfaces in the map, with BPF_F_EXCLUDE_INGRESS the ingress
+ * 		interface will be excluded when do broadcasting.
  *
  * 		See also **bpf_redirect**\ (), which only supports redirecting
  * 		to an ifindex, but doesn't require a map to do so.
@@ -3230,7 +3246,7 @@ union bpf_attr {
  * long bpf_sk_select_reuseport(struct sk_reuseport_md *reuse, struct bpf_map *map, void *key, u64 flags)
  *	Description
  *		Select a **SO_REUSEPORT** socket from a
- *		**BPF_MAP_TYPE_REUSEPORT_ARRAY** *map*.
+ *		**BPF_MAP_TYPE_REUSEPORT_SOCKARRAY** *map*.
  *		It checks the selected socket is matching the incoming
  *		request in the socket buffer.
  *	Return
@@ -4761,6 +4777,76 @@ union bpf_attr {
  * 		Execute close syscall for given FD.
  * 	Return
  * 		A syscall result.
+ *
+ * long bpf_timer_init(struct bpf_timer *timer, struct bpf_map *map, u64 flags)
+ *	Description
+ *		Initialize the timer.
+ *		First 4 bits of *flags* specify clockid.
+ *		Only CLOCK_MONOTONIC, CLOCK_REALTIME, CLOCK_BOOTTIME are allowed.
+ *		All other bits of *flags* are reserved.
+ *		The verifier will reject the program if *timer* is not from
+ *		the same *map*.
+ *	Return
+ *		0 on success.
+ *		**-EBUSY** if *timer* is already initialized.
+ *		**-EINVAL** if invalid *flags* are passed.
+ *		**-EPERM** if *timer* is in a map that doesn't have any user references.
+ *		The user space should either hold a file descriptor to a map with timers
+ *		or pin such map in bpffs. When map is unpinned or file descriptor is
+ *		closed all timers in the map will be cancelled and freed.
+ *
+ * long bpf_timer_set_callback(struct bpf_timer *timer, void *callback_fn)
+ *	Description
+ *		Configure the timer to call *callback_fn* static function.
+ *	Return
+ *		0 on success.
+ *		**-EINVAL** if *timer* was not initialized with bpf_timer_init() earlier.
+ *		**-EPERM** if *timer* is in a map that doesn't have any user references.
+ *		The user space should either hold a file descriptor to a map with timers
+ *		or pin such map in bpffs. When map is unpinned or file descriptor is
+ *		closed all timers in the map will be cancelled and freed.
+ *
+ * long bpf_timer_start(struct bpf_timer *timer, u64 nsecs, u64 flags)
+ *	Description
+ *		Set timer expiration N nanoseconds from the current time. The
+ *		configured callback will be invoked in soft irq context on some cpu
+ *		and will not repeat unless another bpf_timer_start() is made.
+ *		In such case the next invocation can migrate to a different cpu.
+ *		Since struct bpf_timer is a field inside map element the map
+ *		owns the timer. The bpf_timer_set_callback() will increment refcnt
+ *		of BPF program to make sure that callback_fn code stays valid.
+ *		When user space reference to a map reaches zero all timers
+ *		in a map are cancelled and corresponding program's refcnts are
+ *		decremented. This is done to make sure that Ctrl-C of a user
+ *		process doesn't leave any timers running. If map is pinned in
+ *		bpffs the callback_fn can re-arm itself indefinitely.
+ *		bpf_map_update/delete_elem() helpers and user space sys_bpf commands
+ *		cancel and free the timer in the given map element.
+ *		The map can contain timers that invoke callback_fn-s from different
+ *		programs. The same callback_fn can serve different timers from
+ *		different maps if key/value layout matches across maps.
+ *		Every bpf_timer_set_callback() can have different callback_fn.
+ *
+ *	Return
+ *		0 on success.
+ *		**-EINVAL** if *timer* was not initialized with bpf_timer_init() earlier
+ *		or invalid *flags* are passed.
+ *
+ * long bpf_timer_cancel(struct bpf_timer *timer)
+ *	Description
+ *		Cancel the timer and wait for callback_fn to finish if it was running.
+ *	Return
+ *		0 if the timer was not active.
+ *		1 if the timer was active.
+ *		**-EINVAL** if *timer* was not initialized with bpf_timer_init() earlier.
+ *		**-EDEADLK** if callback_fn tried to call bpf_timer_cancel() on its
+ *		own timer which would have led to a deadlock otherwise.
+ *
+ * u64 bpf_get_func_ip(void *ctx)
+ * 	Description
+ * 		Get address of the traced function (for tracing and kprobe programs).
+ * 	Return
+ * 		Address of the traced function.
  */
 #define __BPF_FUNC_MAPPER(FN)		\
 	FN(unspec),			\
@@ -4932,6 +5018,11 @@ union bpf_attr {
 	FN(sys_bpf),			\
 	FN(btf_find_by_name_kind),	\
 	FN(sys_close),			\
+	FN(timer_init),			\
+	FN(timer_set_callback),		\
+	FN(timer_start),		\
+	FN(timer_cancel),		\
+	FN(get_func_ip),		\
 	/* */
 
 /* integer value in 'imm' field of BPF_CALL instruction selects which helper
@@ -5107,6 +5198,12 @@ enum bpf_lwt_encap_mode {
 /* Flags for bpf_bprm_opts_set helper */
 enum {
 	BPF_F_BPRM_SECUREEXEC	= (1ULL << 0),
+};
+
+/* Flags for bpf_redirect_map helper */
+enum {
+	BPF_F_BROADCAST		= (1ULL << 3),
+	BPF_F_EXCLUDE_INGRESS	= (1ULL << 4),
 };
 
 #define __bpf_md_ptr(type, name)	\
@@ -5393,6 +5490,20 @@ struct sk_reuseport_md {
 	__u32 ip_protocol;	/* IP protocol. e.g. IPPROTO_TCP, IPPROTO_UDP */
 	__u32 bind_inany;	/* Is sock bound to an INANY address? */
 	__u32 hash;		/* A hash of the packet 4 tuples */
+	/* When reuse->migrating_sk is NULL, it is selecting a sk for the
+	 * new incoming connection request (e.g. selecting a listen sk for
+	 * the received SYN in the TCP case).  reuse->sk is one of the sk
+	 * in the reuseport group. The bpf prog can use reuse->sk to learn
+	 * the local listening ip/port without looking into the skb.
+	 *
+	 * When reuse->migrating_sk is not NULL, reuse->sk is closed and
+	 * reuse->migrating_sk is the socket that needs to be migrated
+	 * to another listening socket.  migrating_sk could be a fullsock
+	 * sk that is fully established or a reqsk that is in-the-middle
+	 * of 3-way handshake.
+	 */
+	__bpf_md_ptr(struct bpf_sock *, sk);
+	__bpf_md_ptr(struct bpf_sock *, migrating_sk);
 };
 
 #define BPF_TAG_SIZE	8
@@ -6037,6 +6148,11 @@ struct bpf_line_info {
 struct bpf_spin_lock {
 	__u32	val;
 };
+
+struct bpf_timer {
+	__u64 :64;
+	__u64 :64;
+} __attribute__((aligned(8)));
 
 struct bpf_sysctl {
 	__u32	write;		/* Sysctl is being read (= 0) or written (= 1).

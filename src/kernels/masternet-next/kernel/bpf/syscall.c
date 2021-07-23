@@ -260,8 +260,8 @@ static int bpf_map_copy_value(struct bpf_map *map, void *key, void *value,
 				copy_map_value_locked(map, value, ptr, true);
 			else
 				copy_map_value(map, value, ptr);
-			/* mask lock, since value wasn't zero inited */
-			check_and_init_map_lock(map, value);
+			/* mask lock and timer, since value wasn't zero inited */
+			check_and_init_map_value(map, value);
 		}
 		rcu_read_unlock();
 	}
@@ -623,7 +623,8 @@ static int bpf_map_mmap(struct file *filp, struct vm_area_struct *vma)
 	struct bpf_map *map = filp->private_data;
 	int err;
 
-	if (!map->ops->map_mmap || map_value_has_spin_lock(map))
+	if (!map->ops->map_mmap || map_value_has_spin_lock(map) ||
+	    map_value_has_timer(map))
 		return -ENOTSUPP;
 
 	if (!(vma->vm_flags & VM_SHARED))
@@ -793,6 +794,16 @@ static int map_check_btf(struct bpf_map *map, const struct btf *btf,
 		}
 	}
 
+	map->timer_off = btf_find_timer(btf, value_type);
+	if (map_value_has_timer(map)) {
+		if (map->map_flags & BPF_F_RDONLY_PROG)
+			return -EACCES;
+		if (map->map_type != BPF_MAP_TYPE_HASH &&
+		    map->map_type != BPF_MAP_TYPE_LRU_HASH &&
+		    map->map_type != BPF_MAP_TYPE_ARRAY)
+			return -EOPNOTSUPP;
+	}
+
 	if (map->ops->map_check_btf)
 		ret = map->ops->map_check_btf(map, btf, key_type, value_type);
 
@@ -844,6 +855,7 @@ static int map_create(union bpf_attr *attr)
 	mutex_init(&map->freeze_mutex);
 
 	map->spin_lock_off = -EINVAL;
+	map->timer_off = -EINVAL;
 	if (attr->btf_key_type_id || attr->btf_value_type_id ||
 	    /* Even the map's value is a kernel's struct,
 	     * the bpf_prog.o must have BTF to begin with
@@ -1484,7 +1496,7 @@ free_buf:
 	return err;
 }
 
-#define BPF_MAP_LOOKUP_AND_DELETE_ELEM_LAST_FIELD value
+#define BPF_MAP_LOOKUP_AND_DELETE_ELEM_LAST_FIELD flags
 
 static int map_lookup_and_delete_elem(union bpf_attr *attr)
 {
@@ -1500,6 +1512,9 @@ static int map_lookup_and_delete_elem(union bpf_attr *attr)
 	if (CHECK_ATTR(BPF_MAP_LOOKUP_AND_DELETE_ELEM))
 		return -EINVAL;
 
+	if (attr->flags & ~BPF_F_LOCK)
+		return -EINVAL;
+
 	f = fdget(ufd);
 	map = __bpf_map_get(f);
 	if (IS_ERR(map))
@@ -1510,24 +1525,47 @@ static int map_lookup_and_delete_elem(union bpf_attr *attr)
 		goto err_put;
 	}
 
+	if (attr->flags &&
+	    (map->map_type == BPF_MAP_TYPE_QUEUE ||
+	     map->map_type == BPF_MAP_TYPE_STACK)) {
+		err = -EINVAL;
+		goto err_put;
+	}
+
+	if ((attr->flags & BPF_F_LOCK) &&
+	    !map_value_has_spin_lock(map)) {
+		err = -EINVAL;
+		goto err_put;
+	}
+
 	key = __bpf_copy_key(ukey, map->key_size);
 	if (IS_ERR(key)) {
 		err = PTR_ERR(key);
 		goto err_put;
 	}
 
-	value_size = map->value_size;
+	value_size = bpf_map_value_size(map);
 
 	err = -ENOMEM;
 	value = kmalloc(value_size, GFP_USER | __GFP_NOWARN);
 	if (!value)
 		goto free_key;
 
+	err = -ENOTSUPP;
 	if (map->map_type == BPF_MAP_TYPE_QUEUE ||
 	    map->map_type == BPF_MAP_TYPE_STACK) {
 		err = map->ops->map_pop_elem(map, value);
-	} else {
-		err = -ENOTSUPP;
+	} else if (map->map_type == BPF_MAP_TYPE_HASH ||
+		   map->map_type == BPF_MAP_TYPE_PERCPU_HASH ||
+		   map->map_type == BPF_MAP_TYPE_LRU_HASH ||
+		   map->map_type == BPF_MAP_TYPE_LRU_PERCPU_HASH) {
+		if (!bpf_map_is_dev_bound(map)) {
+			bpf_disable_instrumentation();
+			rcu_read_lock();
+			err = map->ops->map_lookup_and_delete_elem(map, key, value, attr->flags);
+			rcu_read_unlock();
+			bpf_enable_instrumentation();
+		}
 	}
 
 	if (err)
@@ -1565,7 +1603,8 @@ static int map_freeze(const union bpf_attr *attr)
 	if (IS_ERR(map))
 		return PTR_ERR(map);
 
-	if (map->map_type == BPF_MAP_TYPE_STRUCT_OPS) {
+	if (map->map_type == BPF_MAP_TYPE_STRUCT_OPS ||
+	    map_value_has_timer(map)) {
 		fdput(f);
 		return -ENOTSUPP;
 	}
@@ -1673,6 +1712,8 @@ static int bpf_prog_alloc_id(struct bpf_prog *prog)
 
 void bpf_prog_free_id(struct bpf_prog *prog, bool do_idr_lock)
 {
+	unsigned long flags;
+
 	/* cBPF to eBPF migrations are currently not in the idr store.
 	 * Offloaded programs are removed from the store when their device
 	 * disappears - even if someone grabs an fd to them they are unusable,
@@ -1682,7 +1723,7 @@ void bpf_prog_free_id(struct bpf_prog *prog, bool do_idr_lock)
 		return;
 
 	if (do_idr_lock)
-		spin_lock_bh(&prog_idr_lock);
+		spin_lock_irqsave(&prog_idr_lock, flags);
 	else
 		__acquire(&prog_idr_lock);
 
@@ -1690,7 +1731,7 @@ void bpf_prog_free_id(struct bpf_prog *prog, bool do_idr_lock)
 	prog->aux->id = 0;
 
 	if (do_idr_lock)
-		spin_unlock_bh(&prog_idr_lock);
+		spin_unlock_irqrestore(&prog_idr_lock, flags);
 	else
 		__release(&prog_idr_lock);
 }
@@ -1726,14 +1767,32 @@ static void __bpf_prog_put_noref(struct bpf_prog *prog, bool deferred)
 	}
 }
 
+static void bpf_prog_put_deferred(struct work_struct *work)
+{
+	struct bpf_prog_aux *aux;
+	struct bpf_prog *prog;
+
+	aux = container_of(work, struct bpf_prog_aux, work);
+	prog = aux->prog;
+	perf_event_bpf_event(prog, PERF_BPF_EVENT_PROG_UNLOAD, 0);
+	bpf_audit_prog(prog, BPF_AUDIT_UNLOAD);
+	__bpf_prog_put_noref(prog, true);
+}
+
 static void __bpf_prog_put(struct bpf_prog *prog, bool do_idr_lock)
 {
-	if (atomic64_dec_and_test(&prog->aux->refcnt)) {
-		perf_event_bpf_event(prog, PERF_BPF_EVENT_PROG_UNLOAD, 0);
-		bpf_audit_prog(prog, BPF_AUDIT_UNLOAD);
+	struct bpf_prog_aux *aux = prog->aux;
+
+	if (atomic64_dec_and_test(&aux->refcnt)) {
 		/* bpf_prog_free_id() must be called first */
 		bpf_prog_free_id(prog, do_idr_lock);
-		__bpf_prog_put_noref(prog, true);
+
+		if (in_irq() || irqs_disabled()) {
+			INIT_WORK(&aux->work, bpf_prog_put_deferred);
+			schedule_work(&aux->work);
+		} else {
+			bpf_prog_put_deferred(&aux->work);
+		}
 	}
 }
 
@@ -1947,6 +2006,11 @@ static void bpf_prog_load_fixup_attach_type(union bpf_attr *attr)
 			attr->expected_attach_type =
 				BPF_CGROUP_INET_SOCK_CREATE;
 		break;
+	case BPF_PROG_TYPE_SK_REUSEPORT:
+		if (!attr->expected_attach_type)
+			attr->expected_attach_type =
+				BPF_SK_REUSEPORT_SELECT;
+		break;
 	}
 }
 
@@ -2030,6 +2094,14 @@ bpf_prog_load_check_attach(enum bpf_prog_type prog_type,
 		if (expected_attach_type == BPF_SK_LOOKUP)
 			return 0;
 		return -EINVAL;
+	case BPF_PROG_TYPE_SK_REUSEPORT:
+		switch (expected_attach_type) {
+		case BPF_SK_REUSEPORT_SELECT:
+		case BPF_SK_REUSEPORT_SELECT_OR_MIGRATE:
+			return 0;
+		default:
+			return -EINVAL;
+		}
 	case BPF_PROG_TYPE_SYSCALL:
 	case BPF_PROG_TYPE_EXT:
 		if (expected_attach_type)

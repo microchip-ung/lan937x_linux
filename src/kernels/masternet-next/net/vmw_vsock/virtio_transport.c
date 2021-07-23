@@ -360,7 +360,7 @@ static void virtio_vsock_reset_sock(struct sock *sk)
 	lock_sock(sk);
 	sk->sk_state = TCP_CLOSE;
 	sk->sk_err = ECONNRESET;
-	sk->sk_error_report(sk);
+	sk_error_report(sk);
 	release_sock(sk);
 }
 
@@ -498,9 +498,11 @@ static bool virtio_transport_seqpacket_allow(u32 remote_cid)
 	struct virtio_vsock *vsock;
 	bool seqpacket_allow;
 
+	seqpacket_allow = false;
 	rcu_read_lock();
 	vsock = rcu_dereference(the_virtio_vsock);
-	seqpacket_allow = vsock->seqpacket_allow;
+	if (vsock)
+		seqpacket_allow = vsock->seqpacket_allow;
 	rcu_read_unlock();
 
 	return seqpacket_allow;

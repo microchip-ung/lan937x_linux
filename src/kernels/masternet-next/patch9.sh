@@ -9,7 +9,8 @@ net: dsa: microchip: add support for vlan operations
 
 Support for VLAN add, del, prepare and filtering operations.
 
-It aligns with latest update of removing switchdev
-transactional logic from VLAN objects
+The VLAN aware is a global setting. Mixed vlan filterings 
+are not supported. vlan_filtering_is_global is made as true
+in lan937x_setup function.
 
 "

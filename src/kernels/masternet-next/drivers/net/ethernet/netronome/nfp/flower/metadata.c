@@ -290,8 +290,7 @@ nfp_check_mask_remove(struct nfp_app *app, char *mask_data, u32 mask_len,
 	return true;
 }
 
-int nfp_compile_flow_metadata(struct nfp_app *app,
-			      struct flow_cls_offload *flow,
+int nfp_compile_flow_metadata(struct nfp_app *app, u32 cookie,
 			      struct nfp_fl_payload *nfp_flow,
 			      struct net_device *netdev,
 			      struct netlink_ext_ack *extack)
@@ -310,7 +309,7 @@ int nfp_compile_flow_metadata(struct nfp_app *app,
 	}
 
 	nfp_flow->meta.host_ctx_id = cpu_to_be32(stats_cxt);
-	nfp_flow->meta.host_cookie = cpu_to_be64(flow->cookie);
+	nfp_flow->meta.host_cookie = cpu_to_be64(cookie);
 	nfp_flow->ingress_dev = netdev;
 
 	ctx_entry = kzalloc(sizeof(*ctx_entry), GFP_KERNEL);
@@ -357,7 +356,7 @@ int nfp_compile_flow_metadata(struct nfp_app *app,
 	priv->stats[stats_cxt].bytes = 0;
 	priv->stats[stats_cxt].used = jiffies;
 
-	check_entry = nfp_flower_search_fl_table(app, flow->cookie, netdev);
+	check_entry = nfp_flower_search_fl_table(app, cookie, netdev);
 	if (check_entry) {
 		NL_SET_ERR_MSG_MOD(extack, "invalid entry: cannot offload duplicate flow entry");
 		if (nfp_release_stats_entry(app, stats_cxt)) {
@@ -639,7 +638,35 @@ static void nfp_zone_table_entry_destroy(struct nfp_fl_ct_zone_entry *zt)
 		}
 	}
 
+	if (zt->nft) {
+		nf_flow_table_offload_del_cb(zt->nft,
+					     nfp_fl_ct_handle_nft_flow,
+					     zt);
+		zt->nft = NULL;
+	}
+
+	if (!list_empty(&zt->nft_flows_list)) {
+		struct rhashtable *m_table = &zt->priv->ct_map_table;
+		struct nfp_fl_ct_flow_entry *entry, *tmp;
+		struct nfp_fl_ct_map_entry *map;
+
+		WARN_ONCE(1, "nft_flows_list not empty as expected, cleaning up\n");
+		list_for_each_entry_safe(entry, tmp, &zt->nft_flows_list,
+					 list_node) {
+			map = rhashtable_lookup_fast(m_table,
+						     &entry->cookie,
+						     nfp_ct_map_params);
+			WARN_ON_ONCE(rhashtable_remove_fast(m_table,
+							    &map->hash_node,
+							    nfp_ct_map_params));
+			nfp_fl_ct_clean_flow_entry(entry);
+			kfree(map);
+		}
+	}
+
 	rhashtable_free_and_destroy(&zt->tc_merge_tb,
+				    nfp_check_rhashtable_empty, NULL);
+	rhashtable_free_and_destroy(&zt->nft_merge_tb,
 				    nfp_check_rhashtable_empty, NULL);
 
 	kfree(zt);

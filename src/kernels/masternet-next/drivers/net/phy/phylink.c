@@ -182,7 +182,8 @@ static int phylink_parse_fixedlink(struct phylink *pl,
 			pl->link_config.duplex = DUPLEX_FULL;
 
 		/* We treat the "pause" and "asym-pause" terminology as
-		 * defining the link partner's ability. */
+		 * defining the link partner's ability.
+		 */
 		if (fwnode_property_read_bool(fixed_node, "pause"))
 			__set_bit(ETHTOOL_LINK_MODE_Pause_BIT,
 				  pl->link_config.lp_advertising);
@@ -685,7 +686,8 @@ static void phylink_resolve(struct work_struct *w)
 			phylink_mac_pcs_get_state(pl, &link_state);
 
 			/* If we have a phy, the "up" state is the union of
-			 * both the PHY and the MAC */
+			 * both the PHY and the MAC
+			 */
 			if (pl->phydev)
 				link_state.link &= pl->phy_state.link;
 
@@ -694,7 +696,8 @@ static void phylink_resolve(struct work_struct *w)
 				link_state.interface = pl->phy_state.interface;
 
 				/* If we have a PHY, we need to update with
-				 * the PHY flow control bits. */
+				 * the PHY flow control bits.
+				 */
 				link_state.pause = pl->phy_state.pause;
 				mac_config = true;
 			}
@@ -939,10 +942,11 @@ static void phylink_phy_change(struct phy_device *phydev, bool up)
 
 	phylink_run_resolve(pl);
 
-	phylink_dbg(pl, "phy link %s %s/%s/%s\n", up ? "up" : "down",
+	phylink_dbg(pl, "phy link %s %s/%s/%s/%s\n", up ? "up" : "down",
 		    phy_modes(phydev->interface),
 		    phy_speed_to_str(phydev->speed),
-		    phy_duplex_to_str(phydev->duplex));
+		    phy_duplex_to_str(phydev->duplex),
+		    phylink_pause_to_str(pl->phy_state.pause));
 }
 
 static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy,
@@ -1380,11 +1384,10 @@ int phylink_ethtool_ksettings_get(struct phylink *pl,
 
 	ASSERT_RTNL();
 
-	if (pl->phydev) {
+	if (pl->phydev)
 		phy_ethtool_ksettings_get(pl->phydev, kset);
-	} else {
+	else
 		kset->base.port = pl->link_port;
-	}
 
 	linkmode_copy(kset->link_modes.supported, pl->supported);
 
@@ -1455,15 +1458,11 @@ int phylink_ethtool_ksettings_set(struct phylink *pl,
 		return phy_ethtool_ksettings_set(pl->phydev, kset);
 	}
 
-	linkmode_copy(support, pl->supported);
 	config = pl->link_config;
-	config.an_enabled = kset->base.autoneg == AUTONEG_ENABLE;
 
-	/* Mask out unsupported advertisements, and force the autoneg bit */
+	/* Mask out unsupported advertisements */
 	linkmode_and(config.advertising, kset->link_modes.advertising,
-		     support);
-	linkmode_mod_bit(ETHTOOL_LINK_MODE_Autoneg_BIT, config.advertising,
-			 config.an_enabled);
+		     pl->supported);
 
 	/* FIXME: should we reject autoneg if phy/mac does not support it? */
 	switch (kset->base.autoneg) {
@@ -1472,7 +1471,7 @@ int phylink_ethtool_ksettings_set(struct phylink *pl,
 		 * duplex.
 		 */
 		s = phy_lookup_setting(kset->base.speed, kset->base.duplex,
-				       support, false);
+				       pl->supported, false);
 		if (!s)
 			return -EINVAL;
 
@@ -1513,6 +1512,12 @@ int phylink_ethtool_ksettings_set(struct phylink *pl,
 	/* We have ruled out the case with a PHY attached, and the
 	 * fixed-link cases.  All that is left are in-band links.
 	 */
+	config.an_enabled = kset->base.autoneg == AUTONEG_ENABLE;
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_Autoneg_BIT, config.advertising,
+			 config.an_enabled);
+
+	/* Validate without changing the current supported mask. */
+	linkmode_copy(support, pl->supported);
 	if (phylink_validate(pl, support, &config))
 		return -EINVAL;
 

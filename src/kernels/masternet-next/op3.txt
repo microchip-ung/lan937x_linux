@@ -2,14 +2,6 @@
   CALL    scripts/checksyscalls.sh
   CALL    scripts/atomic/check-atomics.sh
   CHK     include/generated/compile.h
-  CC      drivers/net/dsa/microchip/ksz_common.o
-  CC      drivers/net/dsa/microchip/lan937x_dev.o
-  CC      drivers/net/dsa/microchip/lan937x_main.o
-  CC      drivers/net/dsa/microchip/lan937x_spi.o
-  AR      drivers/net/dsa/microchip/built-in.a
-  AR      drivers/net/dsa/built-in.a
-  AR      drivers/net/built-in.a
-  AR      drivers/built-in.a
   CC      net/core/flow_dissector.o
   CC      net/core/dev.o
   CC      net/core/dev_ioctl.o
@@ -25,7 +17,6 @@
   CC      net/dsa/port.o
   CC      net/dsa/slave.o
   CC      net/dsa/switch.o
-  CC      net/dsa/tag_ksz.o
   AR      net/dsa/built-in.a
   AR      net/built-in.a
   GEN     .version
@@ -53,4 +44,5 @@
   LD      arch/arm/boot/compressed/vmlinux
   OBJCOPY arch/arm/boot/zImage
   Kernel: arch/arm/boot/zImage is ready
-  MODPOST Module.symvers
+  MODPOST modules-only.symvers
+  GEN     Module.symvers

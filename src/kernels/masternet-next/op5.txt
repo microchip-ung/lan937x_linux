@@ -1,6 +1,7 @@
   CALL    scripts/checksyscalls.sh
   CALL    scripts/atomic/check-atomics.sh
   CHK     include/generated/compile.h
+  CC      drivers/net/dsa/microchip/lan937x_dev.o
   CC      drivers/net/dsa/microchip/lan937x_main.o
   AR      drivers/net/dsa/microchip/built-in.a
   AR      drivers/net/dsa/built-in.a
@@ -31,4 +32,5 @@
   LD      arch/arm/boot/compressed/vmlinux
   OBJCOPY arch/arm/boot/zImage
   Kernel: arch/arm/boot/zImage is ready
-  MODPOST Module.symvers
+  MODPOST modules-only.symvers
+  GEN     Module.symvers

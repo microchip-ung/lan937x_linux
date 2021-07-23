@@ -1,0 +1,5 @@
+  CALL    scripts/checksyscalls.sh
+  CALL    scripts/atomic/check-atomics.sh
+  CHK     include/generated/compile.h
+  Kernel: arch/arm/boot/Image is ready
+  Kernel: arch/arm/boot/zImage is ready

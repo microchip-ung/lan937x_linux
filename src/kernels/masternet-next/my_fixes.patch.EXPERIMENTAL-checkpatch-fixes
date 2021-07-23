@@ -1,9 +1,9 @@
 diff --git a/Documentation/devicetree/bindings/net/dsa/microchip,lan937x.yaml b/Documentation/devicetree/bindings/net/dsa/microchip,lan937x.yaml
 new file mode 100644
-index 000000000000..22128a52d699
+index 000000000000..69021117d595
 --- /dev/null
 +++ b/Documentation/devicetree/bindings/net/dsa/microchip,lan937x.yaml
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,148 @@
 +# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 +%YAML 1.2
 +---
@@ -74,21 +74,25 @@ index 000000000000..22128a52d699
 +          port@0 {
 +            reg = <0>;
 +            label = "lan1";
++            phy-mode = "internal";
 +            phy-handle = <&t1phy0>;
 +          };
 +          port@1 {
 +            reg = <1>;
 +            label = "lan2";
++            phy-mode = "internal";
 +            phy-handle = <&t1phy1>;
 +          };
 +          port@2 {
 +            reg = <2>;
 +            label = "lan4";
++            phy-mode = "internal";
 +            phy-handle = <&t1phy2>;
 +          };
 +          port@3 {
 +            reg = <3>;
 +            label = "lan6";
++            phy-mode = "internal";
 +            phy-handle = <&t1phy3>;
 +          };
 +          port@4 {
@@ -103,6 +107,7 @@ index 000000000000..22128a52d699
 +          port@5 {
 +            reg = <5>;
 +            label = "lan7";
++            phy-mode = "rgmii";
 +            fixed-link {
 +              speed = <1000>;
 +              full-duplex;
@@ -111,17 +116,18 @@ index 000000000000..22128a52d699
 +          port@6 {
 +            reg = <6>;
 +            label = "lan5";
++            phy-mode = "internal";
 +            phy-handle = <&t1phy4>;
 +          };
 +          port@7 {
 +            reg = <7>;
 +            label = "lan3";
++            phy-mode = "internal";
 +            phy-handle = <&t1phy5>;
 +          };
 +        };
 +
 +        mdio {
-+          compatible = "microchip,lan937x-mdio";
 +          #address-cells = <1>;
 +          #size-cells = <0>;
 +
@@ -147,10 +153,10 @@ index 000000000000..22128a52d699
 +      };
 +    };
 diff --git a/MAINTAINERS b/MAINTAINERS
-index c3c8fa572580..a0fdfef8802a 100644
+index 183cc61e2dc0..8fb852cc7cef 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -11752,6 +11752,7 @@ M:	UNGLinuxDriver@microchip.com
+@@ -12018,6 +12018,7 @@ M:	UNGLinuxDriver@microchip.com
  L:	netdev@vger.kernel.org
  S:	Maintained
  F:	Documentation/devicetree/bindings/net/dsa/microchip,ksz.yaml
@@ -159,7 +165,7 @@ index c3c8fa572580..a0fdfef8802a 100644
  F:	include/linux/platform_data/microchip-ksz.h
  F:	net/dsa/tag_ksz.c
 diff --git a/drivers/net/dsa/microchip/Kconfig b/drivers/net/dsa/microchip/Kconfig
-index 4ec6a47b7f72..ae2484e3759b 100644
+index c9e2a8989556..f329cca934ee 100644
 --- a/drivers/net/dsa/microchip/Kconfig
 +++ b/drivers/net/dsa/microchip/Kconfig
 @@ -3,6 +3,18 @@ config NET_DSA_MICROCHIP_KSZ_COMMON
@@ -182,31 +188,45 @@ index 4ec6a47b7f72..ae2484e3759b 100644
  	tristate "Microchip KSZ9477 series switch support"
  	depends on NET_DSA
 diff --git a/drivers/net/dsa/microchip/Makefile b/drivers/net/dsa/microchip/Makefile
-index 929caa81e782..13f38efdadf0 100644
+index 2a03b21a3386..28d8eb62a795 100644
 --- a/drivers/net/dsa/microchip/Makefile
 +++ b/drivers/net/dsa/microchip/Makefile
-@@ -5,3 +5,8 @@ obj-$(CONFIG_NET_DSA_MICROCHIP_KSZ9477_I2C)	+= ksz9477_i2c.o
- obj-$(CONFIG_NET_DSA_MICROCHIP_KSZ9477_SPI)	+= ksz9477_spi.o
+@@ -6,3 +6,8 @@ obj-$(CONFIG_NET_DSA_MICROCHIP_KSZ9477_SPI)	+= ksz9477_spi.o
  obj-$(CONFIG_NET_DSA_MICROCHIP_KSZ8795)		+= ksz8795.o
  obj-$(CONFIG_NET_DSA_MICROCHIP_KSZ8795_SPI)	+= ksz8795_spi.o
+ obj-$(CONFIG_NET_DSA_MICROCHIP_KSZ8863_SMI)	+= ksz8863_smi.o
 +
 +obj-$(CONFIG_NET_DSA_MICROCHIP_LAN937X)		+= lan937x.o
 +lan937x-objs := lan937x_dev.o
 +lan937x-objs += lan937x_main.o
 +lan937x-objs += lan937x_spi.o
 diff --git a/drivers/net/dsa/microchip/ksz8795.c b/drivers/net/dsa/microchip/ksz8795.c
-index b4b7de63ca79..0a8313895a76 100644
+index 560f6843bb65..52cf2843dbeb 100644
 --- a/drivers/net/dsa/microchip/ksz8795.c
 +++ b/drivers/net/dsa/microchip/ksz8795.c
-@@ -231,8 +231,6 @@ static void ksz8795_port_init_cnt(struct ksz_device *dev, int port)
- 					NULL, &mib->counters[mib->cnt_ptr]);
+@@ -447,8 +447,6 @@ static void ksz8_port_init_cnt(struct ksz_device *dev, int port)
+ 					dropped, &mib->counters[mib->cnt_ptr]);
  		++mib->cnt_ptr;
  	}
 -	mib->cnt_ptr = 0;
 -	memset(mib->counters, 0, dev->mib_cnt * sizeof(u64));
  }
  
- static void ksz8795_r_table(struct ksz_device *dev, int table, u16 addr,
+ static void ksz8_r_table(struct ksz_device *dev, int table, u16 addr, u64 *data)
+diff --git a/drivers/net/dsa/microchip/ksz9477.c b/drivers/net/dsa/microchip/ksz9477.c
+index 854e25f43fa7..35b430d531de 100644
+--- a/drivers/net/dsa/microchip/ksz9477.c
++++ b/drivers/net/dsa/microchip/ksz9477.c
+@@ -289,9 +289,6 @@ static void ksz9477_port_init_cnt(struct ksz_device *dev, int port)
+ 	ksz_write8(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FLUSH);
+ 	ksz_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT__4, 0);
+ 	mutex_unlock(&mib->cnt_mutex);
+-
+-	mib->cnt_ptr = 0;
+-	memset(mib->counters, 0, dev->mib_cnt * sizeof(u64));
+ }
+ 
+ static enum dsa_tag_protocol ksz9477_get_tag_protocol(struct dsa_switch *ds,
 diff --git a/drivers/net/dsa/microchip/ksz_common.c b/drivers/net/dsa/microchip/ksz_common.c
 index a7e5ac60baef..6752ef14901e 100644
 --- a/drivers/net/dsa/microchip/ksz_common.c
@@ -228,7 +248,7 @@ index a7e5ac60baef..6752ef14901e 100644
  EXPORT_SYMBOL_GPL(ksz_init_mib_timer);
  
 diff --git a/drivers/net/dsa/microchip/ksz_common.h b/drivers/net/dsa/microchip/ksz_common.h
-index f212775372ce..a0ec3d36c889 100644
+index 2e6bfd333f50..690d339edd7b 100644
 --- a/drivers/net/dsa/microchip/ksz_common.h
 +++ b/drivers/net/dsa/microchip/ksz_common.h
 @@ -60,6 +60,8 @@ struct ksz_device {
@@ -240,9 +260,9 @@ index f212775372ce..a0ec3d36c889 100644
  	/* chip specific data */
  	u32 chip_id;
  	int num_vlans;
-@@ -144,6 +146,9 @@ void ksz_switch_remove(struct ksz_device *dev);
+@@ -145,6 +147,9 @@ void ksz_switch_remove(struct ksz_device *dev);
  
- int ksz8795_switch_register(struct ksz_device *dev);
+ int ksz8_switch_register(struct ksz_device *dev);
  int ksz9477_switch_register(struct ksz_device *dev);
 +int lan937x_switch_register(struct ksz_device *dev);
 +
@@ -252,10 +272,10 @@ index f212775372ce..a0ec3d36c889 100644
  void ksz_init_mib_timer(struct ksz_device *dev);
 diff --git a/drivers/net/dsa/microchip/lan937x_dev.c b/drivers/net/dsa/microchip/lan937x_dev.c
 new file mode 100644
-index 000000000000..3a0f1f89e27a
+index 000000000000..c36fdc4692ff
 --- /dev/null
 +++ b/drivers/net/dsa/microchip/lan937x_dev.c
-@@ -0,0 +1,703 @@
+@@ -0,0 +1,696 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/* Microchip lan937x dev ops functions
 + * Copyright (C) 2019-2021 Microchip Technology Inc.
@@ -467,15 +487,12 @@ index 000000000000..3a0f1f89e27a
 +	if (ret < 0)
 +		return ret;
 +
-+	/* default configuration */
 +	ret = ksz_read8(dev, REG_SW_LUE_CTRL_1, &data8);
 +	if (ret < 0)
 +		return ret;
 +
-+	data8 = SW_AGING_ENABLE | SW_LINK_AUTO_AGING |
-+	      SW_SRC_ADDR_FILTER;
-+
-+	ret = ksz_write8(dev, REG_SW_LUE_CTRL_1, data8);
++	/* Enable Auto Aging*/
++	ret = ksz_write8(dev, REG_SW_LUE_CTRL_1, data8 | SW_LINK_AUTO_AGING);
 +	if (ret < 0)
 +		return ret;
 +
@@ -500,11 +517,10 @@ index 000000000000..3a0f1f89e27a
 +
 +	/* Read Chip ID */
 +	ret = ksz_read32(dev, REG_CHIP_ID0__1, &id32);
-+
-+	if (ret)
++	if (ret < 0)
 +		return ret;
 +
-+	if (id32 != 0) {
++	if (id32 != 0 && id32 != 0xffffffff) {
 +		dev->chip_id = id32;
 +		dev_info(dev->dev, "Chip ID: 0x%x", id32);
 +		ret = 0;
@@ -857,7 +873,6 @@ index 000000000000..3a0f1f89e27a
 +	}
 +
 +	ds->slave_mii_bus = devm_mdiobus_alloc(ds->dev);
-+
 +	if (!ds->slave_mii_bus)
 +		return -ENOMEM;
 +
@@ -870,7 +885,6 @@ index 000000000000..3a0f1f89e27a
 +	ds->slave_mii_bus->phy_mask = ~ds->phys_mii_mask;
 +
 +	ret = of_mdiobus_register(ds->slave_mii_bus, dev->mdio_np);
-+
 +	if (ret) {
 +		dev_err(ds->dev, "unable to register MDIO bus %s\n",
 +			ds->slave_mii_bus->id);
@@ -889,8 +903,7 @@ index 000000000000..3a0f1f89e27a
 +
 +	/* Check device tree */
 +	ret = lan937x_check_device_id(dev);
-+
-+	if (ret)
++	if (ret < 0)
 +		return ret;
 +
 +	dev->port_mask = (1 << dev->port_cnt) - 1;
@@ -1050,10 +1063,10 @@ index 000000000000..0ddd7aa87468
 +#endif
 diff --git a/drivers/net/dsa/microchip/lan937x_main.c b/drivers/net/dsa/microchip/lan937x_main.c
 new file mode 100644
-index 000000000000..128d894b77d6
+index 000000000000..fc915f1e901b
 --- /dev/null
 +++ b/drivers/net/dsa/microchip/lan937x_main.c
-@@ -0,0 +1,1244 @@
+@@ -0,0 +1,1229 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/* Microchip LAN937X switch driver main logic
 + * Copyright (C) 2019-2021 Microchip Technology Inc.
@@ -1172,7 +1185,6 @@ index 000000000000..128d894b77d6
 +	if (ret < 0)
 +		goto exit;
 +
-+	ret = ksz_write8(dev, REG_SW_VLAN_CTRL, 0);
 +exit:
 +	mutex_unlock(&dev->vlan_mutex);
 +
@@ -1253,7 +1265,6 @@ index 000000000000..128d894b77d6
 +	int ret;
 +
 +	ret = lan937x_internal_phy_read(dev, addr, reg, &val);
-+
 +	if (ret < 0)
 +		return ret;
 +
@@ -1350,6 +1361,7 @@ index 000000000000..128d894b77d6
 +	 */
 +	if (forward != dev->member)
 +		ksz_update_port_member(dev, port);
++
 +	mutex_unlock(&dev->dev_mutex);
 +}
 +
@@ -1360,12 +1372,8 @@ index 000000000000..128d894b77d6
 +	struct ksz_device *dev = ds->priv;
 +	int ret;
 +
-+	if (flag)
-+		ret = lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_VLAN_ENABLE,
-+				  true);
-+	else
-+		ret = lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_VLAN_ENABLE,
-+				  false);
++	ret = lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_VLAN_ENABLE,
++			  flag);
 +
 +	return ret;
 +}
@@ -1394,7 +1402,6 @@ index 000000000000..128d894b77d6
 +	else
 +		vlan_entry.untag_prtmap &= ~BIT(port);
 +
-+	vlan_entry.untag_prtmap &= ~(BIT(dev->cpu_port));
 +	vlan_entry.fwd_map |= BIT(port);
 +
 +	ret = lan937x_set_vlan_table(dev, vlan->vid, &vlan_entry);
@@ -1407,7 +1414,6 @@ index 000000000000..128d894b77d6
 +	if (vlan->flags & BRIDGE_VLAN_INFO_PVID) {
 +		ret = lan937x_pwrite16(dev, port, REG_PORT_DEFAULT_VID,
 +				       vlan->vid);
-+
 +		if (ret < 0) {
 +			NL_SET_ERR_MSG_MOD(extack, "Failed to set pvid\n");
 +			return ret;
@@ -1430,7 +1436,6 @@ index 000000000000..128d894b77d6
 +	pvid &= 0xFFF;
 +
 +	ret = lan937x_get_vlan_table(dev, vlan->vid, &vlan_entry);
-+
 +	if (ret < 0) {
 +		dev_err(dev->dev, "Failed to get vlan table\n");
 +		return ret;
@@ -1448,7 +1453,6 @@ index 000000000000..128d894b77d6
 +	}
 +
 +	ret = lan937x_pwrite16(dev, port, REG_PORT_DEFAULT_VID, pvid);
-+
 +	if (ret < 0) {
 +		dev_err(dev->dev, "Failed to set pvid\n");
 +		return ret;
@@ -1469,6 +1473,7 @@ index 000000000000..128d894b77d6
 +
 +	mutex_lock(&dev->alu_mutex);
 +
++	/* Accessing two ALU tables through loop */
 +	for (i = 0; i < ALU_STA_DYN_CNT; i++) {
 +		/* find any entry with mac & fid */
 +		data = fid << ALU_FID_INDEX_S;
@@ -1476,33 +1481,33 @@ index 000000000000..128d894b77d6
 +
 +		ret = ksz_write32(dev, REG_SW_ALU_INDEX_0, data);
 +		if (ret < 0)
-+			goto exit;
++			break;
 +
 +		data = ((addr[2] << 24) | (addr[3] << 16));
 +		data |= ((addr[4] << 8) | addr[5]);
 +
 +		ret = ksz_write32(dev, REG_SW_ALU_INDEX_1, data);
 +		if (ret < 0)
-+			goto exit;
++			break;
 +
 +		/* start read operation */
 +		ret = ksz_write32(dev, REG_SW_ALU_CTRL(i),
 +				  ALU_READ | ALU_START);
 +		if (ret < 0)
-+			goto exit;
++			break;
 +
 +		/* wait to be finished */
 +		ret = lan937x_wait_alu_ready(i, dev);
 +		if (ret < 0) {
 +			dev_err(dev->dev, "Failed to read ALU\n");
-+			goto exit;
++			break;
 +		}
 +
 +		/* read ALU entry */
 +		ret = lan937x_read_table(dev, alu_table);
 +		if (ret < 0) {
 +			dev_err(dev->dev, "Failed to read ALU\n");
-+			goto exit;
++			break;
 +		}
 +
 +		/* update ALU entry */
@@ -1513,6 +1518,7 @@ index 000000000000..128d894b77d6
 +
 +		if (fid)
 +			alu_table[1] |= ALU_V_USE_FID;
++
 +		alu_table[2] = (fid << ALU_V_FID_S);
 +		alu_table[2] |= ((addr[0] << 8) | addr[1]);
 +		alu_table[3] = ((addr[2] << 24) | (addr[3] << 16));
@@ -1520,24 +1526,23 @@ index 000000000000..128d894b77d6
 +
 +		ret = lan937x_write_table(dev, alu_table);
 +		if (ret < 0)
-+			goto exit;
++			break;
 +
 +		ret = ksz_write32(dev, REG_SW_ALU_CTRL(i),
 +				  (ALU_WRITE | ALU_START));
 +		if (ret < 0)
-+			goto exit;
++			break;
 +
 +		/* wait to be finished */
 +		ret = lan937x_wait_alu_ready(i, dev);
-+
 +		if (ret < 0) {
 +			dev_err(dev->dev, "Failed to write ALU\n");
-+			goto exit;
++			break;
 +		}
 +
 +		ret = ksz_read8(dev, REG_SW_LUE_INT_STATUS__1, &val);
 +		if (ret < 0)
-+			goto exit;
++			break;
 +
 +		/* ALU write failed & do not return before checking ALU2*/
 +		if (val & WRITE_FAIL_INT && i == 1)
@@ -1549,13 +1554,12 @@ index 000000000000..128d894b77d6
 +			ret = ksz_write8(dev, REG_SW_LUE_INT_STATUS__1,
 +					 WRITE_FAIL_INT);
 +			if (ret < 0)
-+				goto exit;
++				break;
 +		} else {
-+			goto exit;
++			break;
 +		}
 +	}
 +
-+exit:
 +	mutex_unlock(&dev->alu_mutex);
 +
 +	return ret;
@@ -1572,43 +1576,44 @@ index 000000000000..128d894b77d6
 +
 +	mutex_lock(&dev->alu_mutex);
 +
++	/* Accessing two ALU tables through loop */
 +	for (i = 0; i < ALU_STA_DYN_CNT; i++) {
 +		/* read any entry with mac & fid */
 +		data = fid << ALU_FID_INDEX_S;
 +		data |= ((addr[0] << 8) | addr[1]);
 +		ret = ksz_write32(dev, REG_SW_ALU_INDEX_0, data);
 +		if (ret < 0)
-+			goto exit;
++			break;
 +
 +		data = ((addr[2] << 24) | (addr[3] << 16));
 +		data |= ((addr[4] << 8) | addr[5]);
 +		ret = ksz_write32(dev, REG_SW_ALU_INDEX_1, data);
 +		if (ret < 0)
-+			goto exit;
++			break;
 +
 +		/* start read operation */
 +		ret = ksz_write32(dev, REG_SW_ALU_CTRL(i),
 +				  (ALU_READ | ALU_START));
 +		if (ret < 0)
-+			goto exit;
++			break;
 +
 +		/* wait to be finished */
 +		ret = lan937x_wait_alu_ready(i, dev);
 +		if (ret < 0) {
 +			dev_err(dev->dev, "Failed to read ALU\n");
-+			goto exit;
++			break;
 +		}
 +
 +		ret = ksz_read32(dev, REG_SW_ALU_VAL_A, &alu_table[0]);
 +		if (ret < 0)
-+			goto exit;
++			break;
 +
 +		if (alu_table[0] & ALU_V_STATIC_VALID) {
 +			/* read ALU entry */
 +			ret = lan937x_read_table(dev, alu_table);
 +			if (ret < 0) {
-+				dev_err(dev->dev, "Failed to read ALU\n");
-+				goto exit;
++				dev_err(dev->dev, "Failed to read ALU table\n");
++				break;
 +			}
 +
 +			/* clear forwarding port */
@@ -1630,20 +1635,21 @@ index 000000000000..128d894b77d6
 +
 +		ret = lan937x_write_table(dev, alu_table);
 +		if (ret < 0)
-+			goto exit;
++			break;
 +
 +		ret = ksz_write32(dev, REG_SW_ALU_CTRL(i),
 +				  (ALU_WRITE | ALU_START));
 +		if (ret < 0)
-+			goto exit;
++			break;
 +
 +		/* wait to be finished */
 +		ret = lan937x_wait_alu_ready(i, dev);
-+		if (ret < 0)
-+			dev_err(dev->dev, "Failed to write ALU\n");
++		if (ret < 0) {
++			dev_err(dev->dev, "Failed to delete ALU Entries\n");
++			break;
++		}
 +	}
 +
-+exit:
 +	mutex_unlock(&dev->alu_mutex);
 +
 +	return ret;
@@ -1684,11 +1690,11 @@ index 000000000000..128d894b77d6
 +
 +	mutex_lock(&dev->alu_mutex);
 +
++	/* Accessing two ALU tables through loop */
 +	for (i = 0; i < ALU_STA_DYN_CNT; i++) {
 +		/* start ALU search */
 +		ret = ksz_write32(dev, REG_SW_ALU_CTRL(i),
 +				  (ALU_START | ALU_SEARCH));
-+
 +		if (ret < 0)
 +			goto exit;
 +
@@ -1697,7 +1703,6 @@ index 000000000000..128d894b77d6
 +			do {
 +				ret = ksz_read32(dev, REG_SW_ALU_CTRL(i),
 +						 &lan937x_data);
-+
 +				if (ret < 0)
 +					goto exit;
 +
@@ -1753,6 +1758,7 @@ index 000000000000..128d894b77d6
 +
 +	mutex_lock(&dev->alu_mutex);
 +
++	/* Access the entries in the table */
 +	for (index = 0; index < dev->num_statics; index++) {
 +		/* find empty slot first */
 +		data = (index << ALU_STAT_INDEX_S) |
@@ -1839,8 +1845,8 @@ index 000000000000..128d894b77d6
 +
 +	mutex_lock(&dev->alu_mutex);
 +
++	/* Access the entries in the table */
 +	for (index = 0; index < dev->num_statics; index++) {
-+		/* find empty slot first */
 +		data = (index << ALU_STAT_INDEX_S) |
 +			ALU_STAT_READ | ALU_STAT_START;
 +		ret = ksz_write32(dev, REG_SW_ALU_STAT_CTRL__4, data);
@@ -1856,13 +1862,11 @@ index 000000000000..128d894b77d6
 +
 +		/* read ALU static table */
 +		ret = lan937x_read_table(dev, static_table);
-+
 +		if (ret < 0)
 +			goto exit;
 +
 +		if (static_table[0] & ALU_V_STATIC_VALID) {
 +			/* check this has same fid & mac address */
-+
 +			if (((static_table[2] >> ALU_V_FID_S) == fid) &&
 +			    ((static_table[2] & ALU_V_MAC_ADDR_HI) == mac_hi) &&
 +			    static_table[3] == mac_lo) {
@@ -1915,14 +1919,13 @@ index 000000000000..128d894b77d6
 +	int ret, p;
 +	u8 data;
 +
-+	/*Configure ingress/egress mirroring*/
++	/* Configure ingress/egress mirroring*/
 +	if (ingress)
 +		ret = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX,
 +				       true);
 +	else
 +		ret = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX,
 +				       true);
-+
 +	if (ret < 0)
 +		return ret;
 +
@@ -2000,7 +2003,6 @@ index 000000000000..128d894b77d6
 +
 +	/* read interface from REG_PORT_XMII_CTRL_1 register */
 +	ret = lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
-+
 +	if (ret < 0)
 +		return PHY_INTERFACE_MODE_NA;
 +
@@ -2039,36 +2041,24 @@ index 000000000000..128d894b77d6
 +	for (i = 0; i < dev->port_cnt; i++) {
 +		if (dsa_is_cpu_port(ds, i) && (dev->cpu_ports & (1 << i))) {
 +			phy_interface_t interface;
-+			const char *prev_msg;
-+			const char *prev_mode;
 +
 +			dev->cpu_port = i;
 +			dev->host_mask = (1 << dev->cpu_port);
 +			dev->port_mask |= dev->host_mask;
 +			p = &dev->ports[i];
 +
-+			/* Read from XMII register to determine host port
-+			 * interface.  If set specifically in device tree
-+			 * note the difference to help debugging.
++			/* Check if the device tree have specific interface
++			 * setting otherwise read & assign from XMII register
++			 * for host port interface
 +			 */
 +			interface = lan937x_get_interface(dev, i);
 +			if (!p->interface)
 +				p->interface = interface;
 +
-+			if (interface && interface != p->interface) {
-+				prev_msg = " instead of ";
-+				prev_mode = phy_modes(interface);
-+			} else {
-+				prev_msg = "";
-+				prev_mode = "";
-+			}
-+
 +			dev_info(dev->dev,
-+				 "Port%d: using phy mode %s%s%s\n",
++				 "Port%d: using phy mode %s\n",
 +				 i,
-+				 phy_modes(p->interface),
-+				 prev_msg,
-+				 prev_mode);
++				 phy_modes(p->interface));
 +
 +			/* enable cpu port */
 +			lan937x_port_setup(dev, i, true);
@@ -2115,8 +2105,8 @@ index 000000000000..128d894b77d6
 +		    (SW_PAUSE_UNH_MODE | SW_NEW_BACKOFF | SW_AGGR_BACKOFF),
 +		    true);
 +
-+	/* If this bit is set, the switch will not drop packets when 16
-+	 * or more collisions occur
++	/* If NO_EXC_COLLISION_DROP bit is set, the switch will not drop
++	 * packets when 16 or more collisions occur
 +	 */
 +	lan937x_cfg(dev, REG_SW_MAC_CTRL_1, NO_EXC_COLLISION_DROP, true);
 +
@@ -2225,6 +2215,18 @@ index 000000000000..128d894b77d6
 +	struct ksz_device *dev = ds->priv;
 +	__ETHTOOL_DECLARE_LINK_MODE_MASK(mask) = { 0, };
 +
++	/* Check for unsupported interfaces */
++	if (!phy_interface_mode_is_rgmii(state->interface) &&
++	    state->interface != PHY_INTERFACE_MODE_RMII &&
++	    state->interface != PHY_INTERFACE_MODE_MII &&
++	    state->interface != PHY_INTERFACE_MODE_INTERNAL) {
++		bitmap_zero(supported, __ETHTOOL_LINK_MODE_MASK_NBITS);
++		dev_err(ds->dev, "Unsupported interface '%s' for port %d\n",
++			phy_modes(state->interface), port);
++		return;
++	}
++
++	/* For RGMII, RMII, MII and internal TX phy port */
 +	if (phy_interface_mode_is_rgmii(state->interface) ||
 +	    state->interface == PHY_INTERFACE_MODE_RMII ||
 +	    state->interface == PHY_INTERFACE_MODE_MII ||
@@ -2287,11 +2289,7 @@ index 000000000000..128d894b77d6
 +
 +int lan937x_switch_register(struct ksz_device *dev)
 +{
-+	int ret;
-+
-+	ret = ksz_switch_register(dev, &lan937x_dev_ops);
-+
-+	return ret;
++	return ksz_switch_register(dev, &lan937x_dev_ops);
 +}
 +EXPORT_SYMBOL(lan937x_switch_register);
 +
@@ -2300,10 +2298,10 @@ index 000000000000..128d894b77d6
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/net/dsa/microchip/lan937x_reg.h b/drivers/net/dsa/microchip/lan937x_reg.h
 new file mode 100644
-index 000000000000..550e1d02004e
+index 000000000000..44f55c2f1fc8
 --- /dev/null
 +++ b/drivers/net/dsa/microchip/lan937x_reg.h
-@@ -0,0 +1,678 @@
+@@ -0,0 +1,677 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/* Microchip LAN937X switch register definitions
 + * Copyright (C) 2019-2021 Microchip Technology Inc.
@@ -2382,10 +2380,9 @@ index 000000000000..550e1d02004e
 +#define REG_SW_LUE_CTRL_1		0x0311
 +
 +#define UNICAST_LEARN_DISABLE		BIT(7)
-+#define SW_SRC_ADDR_FILTER		BIT(6)
 +#define SW_FLUSH_STP_TABLE		BIT(5)
 +#define SW_FLUSH_MSTP_TABLE		BIT(4)
-+#define SW_FWD_MCAST_SRC_ADDR		BIT(3)
++#define SW_SRC_ADDR_FILTER		BIT(3)
 +#define SW_AGING_ENABLE			BIT(2)
 +#define SW_FAST_AGING			BIT(1)
 +#define SW_LINK_AUTO_AGING		BIT(0)
@@ -2984,10 +2981,10 @@ index 000000000000..550e1d02004e
 +#endif
 diff --git a/drivers/net/dsa/microchip/lan937x_spi.c b/drivers/net/dsa/microchip/lan937x_spi.c
 new file mode 100644
-index 000000000000..83a679377b46
+index 000000000000..7d2541ba54cb
 --- /dev/null
 +++ b/drivers/net/dsa/microchip/lan937x_spi.c
-@@ -0,0 +1,224 @@
+@@ -0,0 +1,223 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/* Microchip LAN937X switch driver register access through SPI
 + * Copyright (C) 2019-2021 Microchip Technology Inc.
@@ -3065,7 +3062,7 @@ index 000000000000..83a679377b46
 +		.port_cnt = 5,
 +	},
 +	{
-+		.chip_id = 0x00937400,
++		.chip_id = 0x00937410,
 +		.dev_name = "LAN9374",
 +		.num_vlans = 4096,
 +		.num_alus = 1024,
@@ -3105,7 +3102,6 @@ index 000000000000..83a679377b46
 +		dev->pdata = spi->dev.platform_data;
 +
 +	ret = lan937x_switch_register(dev);
-+
 +	/* Main DSA driver may not be started yet. */
 +	if (ret)
 +		return ret;
@@ -3213,28 +3209,23 @@ index 000000000000..83a679377b46
 +MODULE_DESCRIPTION("Microchip LAN937x Series Switch SPI access Driver");
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/net/phy/microchip_t1.c b/drivers/net/phy/microchip_t1.c
-index 4dc00bd5a8d2..561bf9f6c999 100644
+index 4dc00bd5a8d2..d24e5028401a 100644
 --- a/drivers/net/phy/microchip_t1.c
 +++ b/drivers/net/phy/microchip_t1.c
-@@ -30,15 +30,56 @@
+@@ -30,15 +30,53 @@
  #define	PHYACC_ATTR_MODE_READ		0
  #define	PHYACC_ATTR_MODE_WRITE		1
  #define	PHYACC_ATTR_MODE_MODIFY		2
-+#define PHYACC_ATTR_MODE_POLL		3
++#define	PHYACC_ATTR_MODE_POLL		3
  
  #define	PHYACC_ATTR_BANK_SMI		0
  #define	PHYACC_ATTR_BANK_MISC		1
  #define	PHYACC_ATTR_BANK_PCS		2
  #define	PHYACC_ATTR_BANK_AFE		3
-+#define PHYACC_ATTR_BANK_DSP		4
++#define	PHYACC_ATTR_BANK_DSP		4
  #define	PHYACC_ATTR_BANK_MAX		7
  
- #define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
--#define DRIVER_DESC	"Microchip LAN87XX T1 PHY driver"
-+#define DRIVER_DESC	"Microchip LAN87XX/LAN937X T1 PHY driver"
-+
 +#define T1_M_CTRL_REG			0x09
-+
 +#define T1_M_CFG			BIT(11)
 +
 +#define T1_MODE_STAT_REG		0x11
@@ -3246,7 +3237,6 @@ index 4dc00bd5a8d2..561bf9f6c999 100644
 +#define T1_REG_ADDR_MASK		0xFF
 +
 +#define T1_M_STATUS_REG			0x0A
-+
 +#define T1_LOCAL_RX_OK			BIT(13)
 +#define T1_REMOTE_RX_OK			BIT(12)
 +
@@ -3268,13 +3258,16 @@ index 4dc00bd5a8d2..561bf9f6c999 100644
 +#define T1_TX_LPF_FIR_CFG_REG		0x55
 +#define T1_SQI_CONFIG_REG		0x2E
 +#define T1_MDIO_CONTROL2_REG		0x10
-+#define T1_INTERRUPT_SOURCE_REG		0x18
++#define T1_INTERRUPT_SOURCE_REG	0x18
 +#define T1_INTERRUPT2_SOURCE_REG	0x08
 +
+ #define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
+-#define DRIVER_DESC	"Microchip LAN87XX T1 PHY driver"
++#define DRIVER_DESC	"Microchip LAN87XX/LAN937X T1 PHY driver"
  
  struct access_ereg_val {
  	u8  mode;
-@@ -51,12 +92,16 @@ struct access_ereg_val {
+@@ -51,12 +89,16 @@ struct access_ereg_val {
  static int access_ereg(struct phy_device *phydev, u8 mode, u8 bank,
  		       u8 offset, u16 val)
  {
@@ -3291,7 +3284,7 @@ index 4dc00bd5a8d2..561bf9f6c999 100644
  	if (bank == PHYACC_ATTR_BANK_SMI) {
  		if (mode == PHYACC_ATTR_MODE_WRITE)
  			rc = phy_write(phydev, offset, val);
-@@ -66,16 +111,43 @@ static int access_ereg(struct phy_device *phydev, u8 mode, u8 bank,
+@@ -66,16 +108,43 @@ static int access_ereg(struct phy_device *phydev, u8 mode, u8 bank,
  	}
  
  	if (mode == PHYACC_ATTR_MODE_WRITE) {
@@ -3335,11 +3328,10 @@ index 4dc00bd5a8d2..561bf9f6c999 100644
  	rc = phy_write(phydev, LAN87XX_EXT_REG_CTL, ereg);
  	if (rc < 0)
  		return rc;
-@@ -104,63 +176,152 @@ static int access_ereg_modify_changed(struct phy_device *phydev,
+@@ -104,63 +173,152 @@ static int access_ereg_modify_changed(struct phy_device *phydev,
  	return rc;
  }
  
--static int lan87xx_phy_init(struct phy_device *phydev)
 +static int access_ereg_clr_poll_timeout(struct phy_device *phydev, u8 bank,
 +					u8 offset, u16 mask, u16 clr)
 +{
@@ -3352,7 +3344,7 @@ index 4dc00bd5a8d2..561bf9f6c999 100644
 +				     150, 30000, true);
 +}
 +
-+static int mchp_t1_phy_config_init(struct phy_device *phydev)
+ static int lan87xx_phy_init(struct phy_device *phydev)
  {
  	static const struct access_ereg_val init[] = {
 -		/* TX Amplitude = 5 */
@@ -3534,7 +3526,7 @@ index 4dc00bd5a8d2..561bf9f6c999 100644
  
  	/* PHY Initialization */
  	for (i = 0; i < ARRAY_SIZE(init); i++) {
-@@ -169,6 +330,11 @@ static int lan87xx_phy_init(struct phy_device *phydev)
+@@ -169,6 +327,11 @@ static int lan87xx_phy_init(struct phy_device *phydev)
  							init[i].offset,
  							init[i].val,
  							init[i].mask);
@@ -3546,16 +3538,13 @@ index 4dc00bd5a8d2..561bf9f6c999 100644
  		} else {
  			rc = access_ereg(phydev, init[i].mode, init[i].bank,
  					 init[i].offset, init[i].val);
-@@ -221,34 +387,72 @@ static irqreturn_t lan87xx_handle_interrupt(struct phy_device *phydev)
- 
- static int lan87xx_config_init(struct phy_device *phydev)
+@@ -223,32 +386,70 @@ static int lan87xx_config_init(struct phy_device *phydev)
  {
--	int rc = lan87xx_phy_init(phydev);
-+	int rc = mchp_t1_phy_config_init(phydev);
-+
+ 	int rc = lan87xx_phy_init(phydev);
+ 
 +	if (rc < 0)
 +		phydev_err(phydev, "failed to initialize phy\n");
- 
++
  	return rc < 0 ? rc : 0;
  }
  
@@ -3634,27 +3623,27 @@ index 4dc00bd5a8d2..561bf9f6c999 100644
  
  MODULE_DEVICE_TABLE(mdio, microchip_t1_tbl);
 diff --git a/include/net/dsa.h b/include/net/dsa.h
-index 507082959aa4..98c1ab6dc4dc 100644
+index 289d68e82da0..2bd9e427cef3 100644
 --- a/include/net/dsa.h
 +++ b/include/net/dsa.h
-@@ -50,6 +50,7 @@ struct phylink_link_state;
- #define DSA_TAG_PROTO_OCELOT_8021Q_VALUE	20
+@@ -51,6 +51,7 @@ struct phylink_link_state;
  #define DSA_TAG_PROTO_SEVILLE_VALUE		21
  #define DSA_TAG_PROTO_BRCM_LEGACY_VALUE		22
-+#define DSA_TAG_PROTO_LAN937X_VALUE		23
+ #define DSA_TAG_PROTO_SJA1110_VALUE		23
++#define DSA_TAG_PROTO_LAN937X_VALUE		24
  
  enum dsa_tag_protocol {
  	DSA_TAG_PROTO_NONE		= DSA_TAG_PROTO_NONE_VALUE,
-@@ -75,6 +76,7 @@ enum dsa_tag_protocol {
- 	DSA_TAG_PROTO_XRS700X		= DSA_TAG_PROTO_XRS700X_VALUE,
+@@ -77,6 +78,7 @@ enum dsa_tag_protocol {
  	DSA_TAG_PROTO_OCELOT_8021Q	= DSA_TAG_PROTO_OCELOT_8021Q_VALUE,
  	DSA_TAG_PROTO_SEVILLE		= DSA_TAG_PROTO_SEVILLE_VALUE,
+ 	DSA_TAG_PROTO_SJA1110		= DSA_TAG_PROTO_SJA1110_VALUE,
 +	DSA_TAG_PROTO_LAN937X		= DSA_TAG_PROTO_LAN937X_VALUE,
  };
  
  struct packet_type;
 diff --git a/net/dsa/Kconfig b/net/dsa/Kconfig
-index cbc2bd643ab2..888eb79a85f2 100644
+index 00bb89b2d86f..1acbbd020f9f 100644
 --- a/net/dsa/Kconfig
 +++ b/net/dsa/Kconfig
 @@ -97,10 +97,10 @@ config NET_DSA_TAG_MTK
@@ -3671,10 +3660,10 @@ index cbc2bd643ab2..888eb79a85f2 100644
  config NET_DSA_TAG_RTL4_A
  	tristate "Tag driver for Realtek 4 byte protocol A tags"
 diff --git a/net/dsa/tag_ksz.c b/net/dsa/tag_ksz.c
-index 4820dbcedfa2..0d6ed4524af1 100644
+index 53565f48934c..74b2328811d5 100644
 --- a/net/dsa/tag_ksz.c
 +++ b/net/dsa/tag_ksz.c
-@@ -190,10 +190,67 @@ static const struct dsa_device_ops ksz9893_netdev_ops = {
+@@ -187,10 +187,66 @@ static const struct dsa_device_ops ksz9893_netdev_ops = {
  DSA_TAG_DRIVER(ksz9893_netdev_ops);
  MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
  
@@ -3727,8 +3716,7 @@ index 4820dbcedfa2..0d6ed4524af1 100644
 +	.proto	= DSA_TAG_PROTO_LAN937X,
 +	.xmit	= lan937x_xmit,
 +	.rcv	= ksz9477_rcv,
-+	.overhead = LAN937X_EGRESS_TAG_LEN,
-+	.tail_tag = true,
++	.needed_tailroom = LAN937X_EGRESS_TAG_LEN,
 +};
 +
 +DSA_TAG_DRIVER(lan937x_netdev_ops);

@@ -1504,7 +1504,9 @@ static bool mlx5_flow_dests_cmp(struct mlx5_flow_destination *d1,
 		    (d1->type == MLX5_FLOW_DESTINATION_TYPE_TIR &&
 		     d1->tir_num == d2->tir_num) ||
 		    (d1->type == MLX5_FLOW_DESTINATION_TYPE_FLOW_TABLE_NUM &&
-		     d1->ft_num == d2->ft_num))
+		     d1->ft_num == d2->ft_num) ||
+		    (d1->type == MLX5_FLOW_DESTINATION_TYPE_FLOW_SAMPLER &&
+		     d1->sampler_id == d2->sampler_id))
 			return true;
 	}
 
@@ -2969,8 +2971,11 @@ int mlx5_init_fs(struct mlx5_core_dev *dev)
 		return err;
 
 	steering = kzalloc(sizeof(*steering), GFP_KERNEL);
-	if (!steering)
+	if (!steering) {
+		err = -ENOMEM;
 		goto err;
+	}
+
 	steering->dev = dev;
 	dev->priv.steering = steering;
 

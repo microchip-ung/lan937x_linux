@@ -20,7 +20,7 @@
 #define IOSM_IF_ID_PAYLOAD 2
 
 /**
- * struct iosm_netdev_priv - netdev private data
+ * struct iosm_netdev_priv - netdev WWAN driver specific private data
  * @ipc_wwan:	Pointer to iosm_wwan struct
  * @netdev:	Pointer to network interface device structure
  * @if_id:	Interface id for device.
@@ -51,7 +51,7 @@ struct iosm_wwan {
 /* Bring-up the wwan net link */
 static int ipc_wwan_link_open(struct net_device *netdev)
 {
-	struct iosm_netdev_priv *priv = netdev_priv(netdev);
+	struct iosm_netdev_priv *priv = wwan_netdev_drvpriv(netdev);
 	struct iosm_wwan *ipc_wwan = priv->ipc_wwan;
 	int if_id = priv->if_id;
 	int ret;
@@ -88,7 +88,7 @@ out:
 /* Bring-down the wwan net link */
 static int ipc_wwan_link_stop(struct net_device *netdev)
 {
-	struct iosm_netdev_priv *priv = netdev_priv(netdev);
+	struct iosm_netdev_priv *priv = wwan_netdev_drvpriv(netdev);
 
 	netif_stop_queue(netdev);
 
@@ -105,8 +105,9 @@ static int ipc_wwan_link_stop(struct net_device *netdev)
 static int ipc_wwan_link_transmit(struct sk_buff *skb,
 				  struct net_device *netdev)
 {
-	struct iosm_netdev_priv *priv = netdev_priv(netdev);
+	struct iosm_netdev_priv *priv = wwan_netdev_drvpriv(netdev);
 	struct iosm_wwan *ipc_wwan = priv->ipc_wwan;
+	unsigned int len = skb->len;
 	int if_id = priv->if_id;
 	int ret;
 
@@ -123,6 +124,8 @@ static int ipc_wwan_link_transmit(struct sk_buff *skb,
 
 	/* Return code of zero is success */
 	if (ret == 0) {
+		netdev->stats.tx_packets++;
+		netdev->stats.tx_bytes += len;
 		ret = NETDEV_TX_OK;
 	} else if (ret == -EBUSY) {
 		ret = NETDEV_TX_BUSY;
@@ -140,7 +143,8 @@ exit:
 			ret);
 
 	dev_kfree_skb_any(skb);
-	return ret;
+	netdev->stats.tx_dropped++;
+	return NETDEV_TX_OK;
 }
 
 /* Ops structure for wwan net link */
@@ -158,6 +162,7 @@ static void ipc_wwan_setup(struct net_device *iosm_dev)
 	iosm_dev->priv_flags |= IFF_NO_QUEUE;
 
 	iosm_dev->type = ARPHRD_NONE;
+	iosm_dev->mtu = ETH_DATA_LEN;
 	iosm_dev->min_mtu = ETH_MIN_MTU;
 	iosm_dev->max_mtu = ETH_MAX_MTU;
 
@@ -178,7 +183,7 @@ static int ipc_wwan_newlink(void *ctxt, struct net_device *dev,
 	    if_id >= ARRAY_SIZE(ipc_wwan->sub_netlist))
 		return -EINVAL;
 
-	priv = netdev_priv(dev);
+	priv = wwan_netdev_drvpriv(dev);
 	priv->if_id = if_id;
 	priv->netdev = dev;
 	priv->ipc_wwan = ipc_wwan;
@@ -208,8 +213,8 @@ out_unlock:
 static void ipc_wwan_dellink(void *ctxt, struct net_device *dev,
 			     struct list_head *head)
 {
+	struct iosm_netdev_priv *priv = wwan_netdev_drvpriv(dev);
 	struct iosm_wwan *ipc_wwan = ctxt;
-	struct iosm_netdev_priv *priv = netdev_priv(dev);
 	int if_id = priv->if_id;
 
 	if (WARN_ON(if_id < IP_MUX_SESSION_START ||
@@ -252,8 +257,8 @@ int ipc_wwan_receive(struct iosm_wwan *ipc_wwan, struct sk_buff *skb_arg,
 
 	skb->pkt_type = PACKET_HOST;
 
-	if (if_id < (IP_MUX_SESSION_START - 1) ||
-	    if_id > (IP_MUX_SESSION_END - 1)) {
+	if (if_id < IP_MUX_SESSION_START ||
+	    if_id > IP_MUX_SESSION_END) {
 		ret = -EINVAL;
 		goto free;
 	}
@@ -317,7 +322,9 @@ struct iosm_wwan *ipc_wwan_init(struct iosm_imem *ipc_imem, struct device *dev)
 	ipc_wwan->dev = dev;
 	ipc_wwan->ipc_imem = ipc_imem;
 
-	if (wwan_register_ops(ipc_wwan->dev, &iosm_wwan_ops, ipc_wwan)) {
+	/* WWAN core will create a netdev for the default IP MUX channel */
+	if (wwan_register_ops(ipc_wwan->dev, &iosm_wwan_ops, ipc_wwan,
+			      IP_MUX_SESSION_DEFAULT)) {
 		kfree(ipc_wwan);
 		return NULL;
 	}
@@ -329,21 +336,8 @@ struct iosm_wwan *ipc_wwan_init(struct iosm_imem *ipc_imem, struct device *dev)
 
 void ipc_wwan_deinit(struct iosm_wwan *ipc_wwan)
 {
-	int if_id;
-
+	/* This call will remove all child netdev(s) */
 	wwan_unregister_ops(ipc_wwan->dev);
-
-	for (if_id = 0; if_id < ARRAY_SIZE(ipc_wwan->sub_netlist); if_id++) {
-		struct iosm_netdev_priv *priv;
-
-		priv = rcu_access_pointer(ipc_wwan->sub_netlist[if_id]);
-		if (!priv)
-			continue;
-
-		rtnl_lock();
-		ipc_wwan_dellink(ipc_wwan, priv->netdev, NULL);
-		rtnl_unlock();
-	}
 
 	mutex_destroy(&ipc_wwan->if_mutex);
 

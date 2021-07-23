@@ -860,7 +860,7 @@ s64 vsock_stream_has_data(struct vsock_sock *vsk)
 }
 EXPORT_SYMBOL_GPL(vsock_stream_has_data);
 
-static s64 vsock_has_data(struct vsock_sock *vsk)
+static s64 vsock_connectible_has_data(struct vsock_sock *vsk)
 {
 	struct sock *sk = sk_vsock(vsk);
 
@@ -1281,7 +1281,7 @@ static void vsock_connect_timeout(struct work_struct *work)
 	    (sk->sk_shutdown != SHUTDOWN_MASK)) {
 		sk->sk_state = TCP_CLOSE;
 		sk->sk_err = ETIMEDOUT;
-		sk->sk_error_report(sk);
+		sk_error_report(sk);
 		vsock_transport_cancel_pkt(vsk);
 	}
 	release_sock(sk);
@@ -1395,7 +1395,7 @@ static int vsock_connect(struct socket *sock, struct sockaddr *addr,
 
 		if (signal_pending(current)) {
 			err = sock_intr_errno(timeout);
-			sk->sk_state = TCP_CLOSE;
+			sk->sk_state = sk->sk_state == TCP_ESTABLISHED ? TCP_CLOSING : TCP_CLOSE;
 			sock->state = SS_UNCONNECTED;
 			vsock_transport_cancel_pkt(vsk);
 			goto out_wait;
@@ -1866,10 +1866,11 @@ out:
 	return err;
 }
 
-static int vsock_wait_data(struct sock *sk, struct wait_queue_entry *wait,
-			   long timeout,
-			   struct vsock_transport_recv_notify_data *recv_data,
-			   size_t target)
+static int vsock_connectible_wait_data(struct sock *sk,
+				       struct wait_queue_entry *wait,
+				       long timeout,
+				       struct vsock_transport_recv_notify_data *recv_data,
+				       size_t target)
 {
 	const struct vsock_transport *transport;
 	struct vsock_sock *vsk;
@@ -1880,7 +1881,7 @@ static int vsock_wait_data(struct sock *sk, struct wait_queue_entry *wait,
 	err = 0;
 	transport = vsk->transport;
 
-	while ((data = vsock_has_data(vsk)) == 0) {
+	while ((data = vsock_connectible_has_data(vsk)) == 0) {
 		prepare_to_wait(sk_sleep(sk), wait, TASK_INTERRUPTIBLE);
 
 		if (sk->sk_err != 0 ||
@@ -1967,7 +1968,8 @@ static int __vsock_stream_recvmsg(struct sock *sk, struct msghdr *msg,
 	while (1) {
 		ssize_t read;
 
-		err = vsock_wait_data(sk, &wait, timeout, &recv_data, target);
+		err = vsock_connectible_wait_data(sk, &wait, timeout,
+						  &recv_data, target);
 		if (err <= 0)
 			break;
 
@@ -2022,7 +2024,7 @@ static int __vsock_seqpacket_recvmsg(struct sock *sk, struct msghdr *msg,
 
 	timeout = sock_rcvtimeo(sk, flags & MSG_DONTWAIT);
 
-	err = vsock_wait_data(sk, &wait, timeout, NULL, 0);
+	err = vsock_connectible_wait_data(sk, &wait, timeout, NULL, 0);
 	if (err <= 0)
 		goto out;
 

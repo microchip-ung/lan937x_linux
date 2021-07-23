@@ -167,8 +167,8 @@ static void dsa_port_clear_brport_flags(struct dsa_port *dp)
 	}
 }
 
-static int dsa_port_switchdev_sync(struct dsa_port *dp,
-				   struct netlink_ext_ack *extack)
+static int dsa_port_switchdev_sync_attrs(struct dsa_port *dp,
+					 struct netlink_ext_ack *extack)
 {
 	struct net_device *brport_dev = dsa_port_to_bridge_port(dp);
 	struct net_device *br = dp->bridge_dev;
@@ -194,26 +194,10 @@ static int dsa_port_switchdev_sync(struct dsa_port *dp,
 	if (err && err != -EOPNOTSUPP)
 		return err;
 
-	err = br_mdb_replay(br, brport_dev,
-			    &dsa_slave_switchdev_blocking_notifier,
-			    extack);
-	if (err && err != -EOPNOTSUPP)
-		return err;
-
-	err = br_fdb_replay(br, brport_dev, &dsa_slave_switchdev_notifier);
-	if (err && err != -EOPNOTSUPP)
-		return err;
-
-	err = br_vlan_replay(br, brport_dev,
-			     &dsa_slave_switchdev_blocking_notifier,
-			     extack);
-	if (err && err != -EOPNOTSUPP)
-		return err;
-
 	return 0;
 }
 
-static void dsa_port_switchdev_unsync(struct dsa_port *dp)
+static void dsa_port_switchdev_unsync_attrs(struct dsa_port *dp)
 {
 	/* Configure the port for standalone mode (no address learning,
 	 * flood everything).
@@ -255,6 +239,8 @@ int dsa_port_bridge_join(struct dsa_port *dp, struct net_device *br,
 		.port = dp->index,
 		.br = br,
 	};
+	struct net_device *dev = dp->slave;
+	struct net_device *brport_dev;
 	int err;
 
 	/* Here the interface is already bridged. Reflect the current
@@ -262,21 +248,43 @@ int dsa_port_bridge_join(struct dsa_port *dp, struct net_device *br,
 	 */
 	dp->bridge_dev = br;
 
+	brport_dev = dsa_port_to_bridge_port(dp);
+
 	err = dsa_broadcast(DSA_NOTIFIER_BRIDGE_JOIN, &info);
 	if (err)
 		goto out_rollback;
 
-	err = dsa_port_switchdev_sync(dp, extack);
+	err = switchdev_bridge_port_offload(brport_dev, dev, dp,
+					    &dsa_slave_switchdev_notifier,
+					    &dsa_slave_switchdev_blocking_notifier,
+					    extack);
 	if (err)
 		goto out_rollback_unbridge;
 
+	err = dsa_port_switchdev_sync_attrs(dp, extack);
+	if (err)
+		goto out_rollback_unoffload;
+
 	return 0;
 
+out_rollback_unoffload:
+	switchdev_bridge_port_unoffload(brport_dev, dp,
+					&dsa_slave_switchdev_notifier,
+					&dsa_slave_switchdev_blocking_notifier);
 out_rollback_unbridge:
 	dsa_broadcast(DSA_NOTIFIER_BRIDGE_LEAVE, &info);
 out_rollback:
 	dp->bridge_dev = NULL;
 	return err;
+}
+
+void dsa_port_pre_bridge_leave(struct dsa_port *dp, struct net_device *br)
+{
+	struct net_device *brport_dev = dsa_port_to_bridge_port(dp);
+
+	switchdev_bridge_port_unoffload(brport_dev, dp,
+					&dsa_slave_switchdev_notifier,
+					&dsa_slave_switchdev_blocking_notifier);
 }
 
 void dsa_port_bridge_leave(struct dsa_port *dp, struct net_device *br)
@@ -298,7 +306,7 @@ void dsa_port_bridge_leave(struct dsa_port *dp, struct net_device *br)
 	if (err)
 		pr_err("DSA: failed to notify DSA_NOTIFIER_BRIDGE_LEAVE\n");
 
-	dsa_port_switchdev_unsync(dp);
+	dsa_port_switchdev_unsync_attrs(dp);
 }
 
 int dsa_port_lag_change(struct dsa_port *dp,
@@ -364,6 +372,12 @@ err_lag_join:
 	dp->lag_dev = NULL;
 	dsa_lag_unmap(dp->ds->dst, lag);
 	return err;
+}
+
+void dsa_port_pre_lag_leave(struct dsa_port *dp, struct net_device *lag)
+{
+	if (dp->bridge_dev)
+		dsa_port_pre_bridge_leave(dp, dp->bridge_dev);
 }
 
 void dsa_port_lag_leave(struct dsa_port *dp, struct net_device *lag)
@@ -567,11 +581,11 @@ int dsa_port_mrouter(struct dsa_port *dp, bool mrouter,
 }
 
 int dsa_port_mtu_change(struct dsa_port *dp, int new_mtu,
-			bool propagate_upstream)
+			bool targeted_match)
 {
 	struct dsa_notifier_mtu_info info = {
 		.sw_index = dp->ds->index,
-		.propagate_upstream = propagate_upstream,
+		.targeted_match = targeted_match,
 		.port = dp->index,
 		.mtu = new_mtu,
 	};
@@ -604,6 +618,44 @@ int dsa_port_fdb_del(struct dsa_port *dp, const unsigned char *addr,
 	};
 
 	return dsa_port_notify(dp, DSA_NOTIFIER_FDB_DEL, &info);
+}
+
+int dsa_port_host_fdb_add(struct dsa_port *dp, const unsigned char *addr,
+			  u16 vid)
+{
+	struct dsa_notifier_fdb_info info = {
+		.sw_index = dp->ds->index,
+		.port = dp->index,
+		.addr = addr,
+		.vid = vid,
+	};
+	struct dsa_port *cpu_dp = dp->cpu_dp;
+	int err;
+
+	err = dev_uc_add(cpu_dp->master, addr);
+	if (err)
+		return err;
+
+	return dsa_port_notify(dp, DSA_NOTIFIER_HOST_FDB_ADD, &info);
+}
+
+int dsa_port_host_fdb_del(struct dsa_port *dp, const unsigned char *addr,
+			  u16 vid)
+{
+	struct dsa_notifier_fdb_info info = {
+		.sw_index = dp->ds->index,
+		.port = dp->index,
+		.addr = addr,
+		.vid = vid,
+	};
+	struct dsa_port *cpu_dp = dp->cpu_dp;
+	int err;
+
+	err = dev_uc_del(cpu_dp->master, addr);
+	if (err)
+		return err;
+
+	return dsa_port_notify(dp, DSA_NOTIFIER_HOST_FDB_DEL, &info);
 }
 
 int dsa_port_fdb_dump(struct dsa_port *dp, dsa_fdb_dump_cb_t *cb, void *data)
@@ -639,6 +691,42 @@ int dsa_port_mdb_del(const struct dsa_port *dp,
 	};
 
 	return dsa_port_notify(dp, DSA_NOTIFIER_MDB_DEL, &info);
+}
+
+int dsa_port_host_mdb_add(const struct dsa_port *dp,
+			  const struct switchdev_obj_port_mdb *mdb)
+{
+	struct dsa_notifier_mdb_info info = {
+		.sw_index = dp->ds->index,
+		.port = dp->index,
+		.mdb = mdb,
+	};
+	struct dsa_port *cpu_dp = dp->cpu_dp;
+	int err;
+
+	err = dev_mc_add(cpu_dp->master, mdb->addr);
+	if (err)
+		return err;
+
+	return dsa_port_notify(dp, DSA_NOTIFIER_HOST_MDB_ADD, &info);
+}
+
+int dsa_port_host_mdb_del(const struct dsa_port *dp,
+			  const struct switchdev_obj_port_mdb *mdb)
+{
+	struct dsa_notifier_mdb_info info = {
+		.sw_index = dp->ds->index,
+		.port = dp->index,
+		.mdb = mdb,
+	};
+	struct dsa_port *cpu_dp = dp->cpu_dp;
+	int err;
+
+	err = dev_mc_del(cpu_dp->master, mdb->addr);
+	if (err)
+		return err;
+
+	return dsa_port_notify(dp, DSA_NOTIFIER_HOST_MDB_DEL, &info);
 }
 
 int dsa_port_vlan_add(struct dsa_port *dp,
@@ -1090,4 +1178,32 @@ void dsa_port_hsr_leave(struct dsa_port *dp, struct net_device *hsr)
 	err = dsa_port_notify(dp, DSA_NOTIFIER_HSR_LEAVE, &info);
 	if (err)
 		pr_err("DSA: failed to notify DSA_NOTIFIER_HSR_LEAVE\n");
+}
+
+int dsa_port_tag_8021q_vlan_add(struct dsa_port *dp, u16 vid)
+{
+	struct dsa_notifier_tag_8021q_vlan_info info = {
+		.tree_index = dp->ds->dst->index,
+		.sw_index = dp->ds->index,
+		.port = dp->index,
+		.vid = vid,
+	};
+
+	return dsa_broadcast(DSA_NOTIFIER_TAG_8021Q_VLAN_ADD, &info);
+}
+
+void dsa_port_tag_8021q_vlan_del(struct dsa_port *dp, u16 vid)
+{
+	struct dsa_notifier_tag_8021q_vlan_info info = {
+		.tree_index = dp->ds->dst->index,
+		.sw_index = dp->ds->index,
+		.port = dp->index,
+		.vid = vid,
+	};
+	int err;
+
+	err = dsa_broadcast(DSA_NOTIFIER_TAG_8021Q_VLAN_DEL, &info);
+	if (err)
+		pr_err("DSA: failed to notify tag_8021q VLAN deletion: %pe\n",
+		       ERR_PTR(err));
 }

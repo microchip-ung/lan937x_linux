@@ -1,6 +1,14 @@
+git checkout master
+git branch -D testbranch
+git checkout -b testbranch
+
 cp ../../../patch_new/patch1.sh .
 chmod 0777 patch1.sh
 ./patch1.sh
+
+cp ../../../patch_new/patch2_0.sh .
+chmod 0777 patch2_0.sh
+./patch2_0.sh
 
 cp ../../../patch_new/patch2.sh .
 chmod 0777 patch2.sh

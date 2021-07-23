@@ -10,6 +10,9 @@
   AR      drivers/net/dsa/built-in.a
   AR      drivers/net/built-in.a
   AR      drivers/built-in.a
+  CC      net/dsa/tag_ksz.o
+  AR      net/dsa/built-in.a
+  AR      net/built-in.a
   GEN     .version
   CHK     include/generated/compile.h
   UPD     include/generated/compile.h
@@ -35,4 +38,5 @@
   LD      arch/arm/boot/compressed/vmlinux
   OBJCOPY arch/arm/boot/zImage
   Kernel: arch/arm/boot/zImage is ready
-  MODPOST Module.symvers
+  MODPOST modules-only.symvers
+  GEN     Module.symvers

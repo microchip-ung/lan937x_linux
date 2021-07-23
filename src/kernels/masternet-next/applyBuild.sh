@@ -2,11 +2,14 @@ git checkout master
 git branch -D testbranch
 git checkout -b testbranch
 
-rm op1.txt op2.txt op3.txt op4.txt op5.txt op6.txt op7.txt op8.txt op9.txt
+rm op1.txt op2_0.txt op2.txt op3.txt op4.txt op5.txt op6.txt op7.txt op8.txt op9.txt
 
 ./patch1.sh
 make ARCH=arm sama5_lan937x_dsa_defconfig
 make ARCH=arm CROSS_COMPILE="arm-linux-gnueabihf-" 2>&1 | tee op1.txt
+
+./patch2_0.sh
+make ARCH=arm CROSS_COMPILE="arm-linux-gnueabihf-" 2>&1 | tee op2_0.txt
 
 ./patch2.sh
 make ARCH=arm CROSS_COMPILE="arm-linux-gnueabihf-" 2>&1 | tee op2.txt

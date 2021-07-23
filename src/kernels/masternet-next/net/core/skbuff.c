@@ -943,6 +943,7 @@ void __kfree_skb_defer(struct sk_buff *skb)
 
 void napi_skb_free_stolen_head(struct sk_buff *skb)
 {
+	nf_reset_ct(skb);
 	skb_dst_drop(skb);
 	skb_ext_put(skb);
 	napi_skb_cache_put(skb);
@@ -1258,6 +1259,7 @@ static void __msg_zerocopy_callback(struct ubuf_info *uarg)
 	struct sock *sk = skb->sk;
 	struct sk_buff_head *q;
 	unsigned long flags;
+	bool is_zerocopy;
 	u32 lo, hi;
 	u16 len;
 
@@ -1272,6 +1274,7 @@ static void __msg_zerocopy_callback(struct ubuf_info *uarg)
 	len = uarg->len;
 	lo = uarg->id;
 	hi = uarg->id + len - 1;
+	is_zerocopy = uarg->zerocopy;
 
 	serr = SKB_EXT_ERR(skb);
 	memset(serr, 0, sizeof(*serr));
@@ -1279,7 +1282,7 @@ static void __msg_zerocopy_callback(struct ubuf_info *uarg)
 	serr->ee.ee_origin = SO_EE_ORIGIN_ZEROCOPY;
 	serr->ee.ee_data = hi;
 	serr->ee.ee_info = lo;
-	if (!uarg->zerocopy)
+	if (!is_zerocopy)
 		serr->ee.ee_code |= SO_EE_CODE_ZEROCOPY_COPIED;
 
 	q = &sk->sk_error_queue;
@@ -1292,7 +1295,7 @@ static void __msg_zerocopy_callback(struct ubuf_info *uarg)
 	}
 	spin_unlock_irqrestore(&q->lock, flags);
 
-	sk->sk_error_report(sk);
+	sk_error_report(sk);
 
 release:
 	consume_skb(skb);
@@ -4683,7 +4686,7 @@ int sock_queue_err_skb(struct sock *sk, struct sk_buff *skb)
 
 	skb_queue_tail(&sk->sk_error_queue, skb);
 	if (!sock_flag(sk, SOCK_DEAD))
-		sk->sk_error_report(sk);
+		sk_error_report(sk);
 	return 0;
 }
 EXPORT_SYMBOL(sock_queue_err_skb);
@@ -4714,7 +4717,7 @@ struct sk_buff *sock_dequeue_err_skb(struct sock *sk)
 		sk->sk_err = 0;
 
 	if (skb_next)
-		sk->sk_error_report(sk);
+		sk_error_report(sk);
 
 	return skb;
 }

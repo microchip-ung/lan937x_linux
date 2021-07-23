@@ -31,4 +31,5 @@
   LD      arch/arm/boot/compressed/vmlinux
   OBJCOPY arch/arm/boot/zImage
   Kernel: arch/arm/boot/zImage is ready
-  MODPOST Module.symvers
+  MODPOST modules-only.symvers
+  GEN     Module.symvers

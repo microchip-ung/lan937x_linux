@@ -969,6 +969,20 @@ void phy_device_remove(struct phy_device *phydev)
 EXPORT_SYMBOL(phy_device_remove);
 
 /**
+ * phy_get_c45_ids - Read 802.3-c45 IDs for phy device.
+ * @phydev: phy_device structure to read 802.3-c45 IDs
+ *
+ * Returns zero on success, %-EIO on bus access error, or %-ENODEV if
+ * the "devices in package" is invalid.
+ */
+int phy_get_c45_ids(struct phy_device *phydev)
+{
+	return get_phy_c45_ids(phydev->mdio.bus, phydev->mdio.addr,
+			       &phydev->c45_ids);
+}
+EXPORT_SYMBOL(phy_get_c45_ids);
+
+/**
  * phy_find_first - finds the first PHY device on the bus
  * @bus: the target MII bus
  */
@@ -3021,15 +3035,14 @@ static int phy_probe(struct device *dev)
 	 * a controller will attach, and may modify one
 	 * or both of these values
 	 */
-	if (phydrv->features) {
+	if (phydrv->features)
 		linkmode_copy(phydev->supported, phydrv->features);
-	} else if (phydrv->get_features) {
+	else if (phydrv->get_features)
 		err = phydrv->get_features(phydev);
-	} else if (phydev->is_c45) {
+	else if (phydev->is_c45)
 		err = genphy_c45_pma_read_abilities(phydev);
-	} else {
+	else
 		err = genphy_read_abilities(phydev);
-	}
 
 	if (err)
 		goto out;
