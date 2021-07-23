@@ -404,7 +404,7 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 
 	mutex_lock(&dev->alu_mutex);
 
-	/* Accessing two ALU tables through loop */ 
+	/* Accessing two ALU tables through loop */
 	for (i = 0; i < ALU_STA_DYN_CNT; i++) {
 		/* find any entry with mac & fid */
 		data = fid << ALU_FID_INDEX_S;
@@ -980,7 +980,7 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 
 			/* Check if the device tree have specific interface
 			 * setting otherwise read & assign from XMII register
-			 * for host port interface 
+			 * for host port interface
 			 */
 			interface = lan937x_get_interface(dev, i);
 			if (!p->interface)
@@ -1036,7 +1036,7 @@ static int lan937x_setup(struct dsa_switch *ds)
 		    (SW_PAUSE_UNH_MODE | SW_NEW_BACKOFF | SW_AGGR_BACKOFF),
 		    true);
 
-	/* If NO_EXC_COLLISION_DROP bit is set, the switch will not drop 
+	/* If NO_EXC_COLLISION_DROP bit is set, the switch will not drop
 	 * packets when 16 or more collisions occur
 	 */
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_1, NO_EXC_COLLISION_DROP, true);
@@ -1147,10 +1147,10 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(mask) = { 0, };
 
 	/* Check for unsupported interfaces */
-	if (!phy_interface_mode_is_rgmii(state->interface) && 
-	     state->interface != PHY_INTERFACE_MODE_RMII &&
-	     state->interface != PHY_INTERFACE_MODE_MII &&
-	     state->interface != PHY_INTERFACE_MODE_INTERNAL) {
+	if (!phy_interface_mode_is_rgmii(state->interface) &&
+	    state->interface != PHY_INTERFACE_MODE_RMII &&
+	    state->interface != PHY_INTERFACE_MODE_MII &&
+	    state->interface != PHY_INTERFACE_MODE_INTERNAL) {
 		bitmap_zero(supported, __ETHTOOL_LINK_MODE_MASK_NBITS);
 		dev_err(ds->dev, "Unsupported interface '%s' for port %d\n",
 			phy_modes(state->interface), port);
