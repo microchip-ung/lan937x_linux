@@ -67,6 +67,8 @@ static struct argp argp = { options, parser };
 int main(int argc, char *argv[])
 {
 	int fd, res;
+	int ret;
+	int opt;
 	struct ifreq req;
 	uint8_t *data;
 	struct sockaddr_ll sk_addr = {
@@ -75,17 +77,35 @@ int main(int argc, char *argv[])
 		.sll_halen = ETH_ALEN,
 	};
 
-	//argp_parse(&argp, argc, argv, 0, NULL, NULL);
-	if(argc != 3)
+	while(EOF != (opt = getopt(argc, argv,"d:D:s:p:i:")))
 	{
-		printf("invalid argument");
-		return 1;
-	}
+		switch(opt) {
+			case 'd':
+				ret = sscanf(optarg, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+						&macaddr[0], &macaddr[1], &macaddr[2],
+						&macaddr[3], &macaddr[4], &macaddr[5]);
+				if (ret != 6) {
+					printf("Invalid address\n");
+					exit(EXIT_FAILURE);
+				}
+				break;
+			case 'D':
+				delay = atoi(optarg);
+				break;
+			case 's':
+				size = atoi(optarg);
+				break;
+			case 'p':
+				priority = atoi(optarg);
+				break;
+			case 'i':
+				strncpy(ifname, optarg, sizeof(ifname) - 1);
+				break;
+			default:
+				break;
+		}
 
-	sscanf(argv[1], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
-			&macaddr[0], &macaddr[1], &macaddr[2],
-			&macaddr[3], &macaddr[4], &macaddr[5]);
-	priority = atoi(argv[2]);
+	}
 
 	fd = socket(AF_PACKET, SOCK_DGRAM, htons(ETH_P_TSN));
 	if (fd < 0) {
@@ -93,7 +113,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	strncpy(req.ifr_name, "br0", sizeof(req.ifr_name));
+	strncpy(req.ifr_name, ifname, sizeof(req.ifr_name));
 	res = ioctl(fd, SIOCGIFINDEX, &req);
 	if (res < 0) {
 		perror("Couldn't get interface index");
