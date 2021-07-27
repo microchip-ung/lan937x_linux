@@ -126,10 +126,10 @@ int lan937x_get_acl_requirements(enum lan937x_filter_type filter_type,
 		break;
 	case LAN937x_BCAST_FILTER:
 	default:
-		//TODO Balaje: Is LAN937x_BCAST_FILTER is INVAL here?
 		return -EINVAL;
 
 	}
+
 	return 0;
 }
 
@@ -259,6 +259,7 @@ static int lan937x_acl_entry_write(struct ksz_device *dev,
 				   u8 port, u8 entry_idx,
 				   struct lan937x_acl_entry *acl_entry)
 {
+	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
 	struct lan937x_acl_access_ctl access_ctl;
 	struct lan937x_acl_byte_en byte_en_cfg;
 	u16 reg_ofst;
@@ -292,7 +293,7 @@ static int lan937x_acl_entry_write(struct ksz_device *dev,
 
 	pr_info("entry_idx %d", entry_idx);
 	access_ctl.tcam_addr = entry_idx;
-	dev->flower_block[port].resrcs.tcam_entries_used[entry_idx] = true;
+	res->tcam_entries_used[entry_idx] = true;
 	access_ctl.tcam_vben = true;
 	access_ctl.tcam_vbi = true;
 	access_ctl.tcam_row_vld = 0x0F;

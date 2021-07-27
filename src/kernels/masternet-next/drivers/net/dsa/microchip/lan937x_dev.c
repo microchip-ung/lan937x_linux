@@ -16,6 +16,7 @@
 #include "ksz_common.h"
 #include "lan937x_dev.h"
 #include "lan937x_ptp.h"
+#include "lan937x_flower.h"
 
 const struct mib_names lan937x_mib_names[] = {
 	{ 0x00, "rx_hi" },
@@ -724,6 +725,14 @@ static int lan937x_switch_init(struct ksz_device *dev)
 				     GFP_KERNEL);
 
 		if (!dev->ports[i].mib.counters)
+			return -ENOMEM;
+	
+		dev->ports[i].priv =
+			devm_kzalloc(dev->dev,
+				     sizeof(struct lan937x_flr_blk),
+				     GFP_KERNEL);
+		
+		if (!dev->ports[i].priv)
 			return -ENOMEM;
 	}
 

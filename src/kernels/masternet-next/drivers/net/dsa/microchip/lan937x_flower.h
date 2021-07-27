@@ -6,7 +6,26 @@
 #ifndef _NET_DSA_DRIVERS_LAN937X_FLOWER_H
 #define _NET_DSA_DRIVERS_LAN937X_FLOWER_H
 
+#include "lan937x_tc.h"
 #include "lan937x_acl.h"
+
+#define LAN937X_NUM_TCAM_ENTRIES	64
+#define LAN937X_MAX_PORTS			8
+#define LAN937X_NUM_STREAM_FILTERS	8
+#define LAN937X_NUM_GATES		8
+
+struct lan937x_p_res {
+	bool tcam_entries_used[LAN937X_NUM_TCAM_ENTRIES];
+	bool stream_filters_used[LAN937X_NUM_STREAM_FILTERS];
+	bool gate_used[LAN937X_NUM_GATES];
+	bool tc_policers_used[LAN937X_NUM_TC];
+	bool broadcast_pol_used;
+};
+
+struct lan937x_flr_blk {
+	struct list_head rules;	/**Element type: lan937x_flower_rule*/
+	struct lan937x_p_res res;
+};
 
 enum lan937x_filter_type {
 	LAN937x_BCAST_FILTER,
@@ -22,7 +41,6 @@ enum lan937x_actions_id {
 	LAN937X_ACT_STREAM_POLICE,
 	LAN937X_ACT_STREAM_GATE,
 	LAN937X_ACT_DROP,
-
 	LAN937X_NUM_ACTIONS_SUPPORTED,
 };
 
@@ -147,5 +165,10 @@ int lan937x_tc_flower_stats(struct dsa_switch *ds, int port,
 
 int lan937x_get_acl_requirements(enum lan937x_filter_type filter_type,
 				 u8 *parser_idx, u8 *num_entries);
+struct lan937x_flr_blk *lan937x_get_flr_blk (struct ksz_device *dev,
+					     int port);
+struct lan937x_p_res *lan937x_get_flr_res (struct ksz_device *dev,
+					 int port);
+
 #endif
 

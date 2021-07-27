@@ -17,36 +17,53 @@
  #include "lan937x_flower.h"
  #include "lan937x_acl.h"
 
+struct lan937x_flr_blk *lan937x_get_flr_blk (struct ksz_device *dev,
+					     int port)
+{
+	struct ksz_port *p = &dev->ports[port];
+
+	return p->priv;
+}
+
+struct lan937x_p_res *lan937x_get_flr_res (struct ksz_device *dev,
+					 int port)
+{
+	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
+
+	return &blk->res;
+}
+
 void lan937x_flower_setup(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
 	int port, rc;
 
-	for (port = 0; port < LAN937X_MAX_PORTS; port++) {
+	for (port = 0; port < dev->port_cnt; port++) {
+		struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
+		struct lan937x_p_res *res = &blk->res;
+
 		rc = lan937x_init_acl_parsers(dev, port);
 
-		INIT_LIST_HEAD(&dev->flower_block[port].rules);
+		INIT_LIST_HEAD(&blk->rules);
 
-		memset(dev->flower_block[port].resrcs.gate_used,
-		       0, LAN937X_NUM_GATES_PER_PORT);
-		memset(dev->flower_block[port].resrcs.stream_filters_used,
-		       0, LAN937X_NUM_STREAM_FILTERS_PER_PORT);
-		memset(dev->flower_block[port].resrcs.tcam_entries_used,
-		       0, LAN937X_NUM_TCAM_ENTRIES_PER_PORT);
-		memset(dev->flower_block[port].resrcs.tc_policers_used,
-		       0, LAN937X_NUM_TCAM_ENTRIES_PER_PORT);
-		dev->flower_block[port].resrcs.broadcast_pol_used = false;
+		memset(res->gate_used, 0, LAN937X_NUM_GATES);
+		memset(res->stream_filters_used, 0,
+		       LAN937X_NUM_STREAM_FILTERS);
+		memset(res->tcam_entries_used, 0,
+		       LAN937X_NUM_TCAM_ENTRIES);
+		memset(res->tc_policers_used, 0, LAN937X_NUM_TC);
+		res->broadcast_pol_used = false;
 	}
 }
 
 static int lan937x_assign_stream_filter(struct ksz_device *dev,
 					int port, u8 *stream_idx)
 {
-	struct lan937x_port_resources *resrc = &dev->flower_block[port].resrcs;
+	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
 	int i;
 
-	for (i = 0; i < LAN937X_NUM_STREAM_FILTERS_PER_PORT; i++) {
-		if (!(resrc->stream_filters_used[i])) {
+	for (i = 0; i < LAN937X_NUM_STREAM_FILTERS; i++) {
+		if (!(res->stream_filters_used[i])) {
 			*stream_idx = i;
 			return 0;
 		}
@@ -57,9 +74,9 @@ static int lan937x_assign_stream_filter(struct ksz_device *dev,
 static int lan937x_check_tc_pol_availability(struct ksz_device *dev,
 					     int port, int traffic_class)
 {
-	struct lan937x_port_resources *resrc = &dev->flower_block[port].resrcs;
+	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
 
-	if (resrc->tc_policers_used[traffic_class])
+	if (res->tc_policers_used[traffic_class])
 		return -ENOSPC;
 
 	return 0;
@@ -69,13 +86,13 @@ static int lan937x_assign_tcam_entries(struct ksz_device *dev,
 				       int port, u8 num_entry_reqd,
 				       u8 *tcam_idx)
 {
-	struct lan937x_port_resources *resrc = &dev->flower_block[port].resrcs;
+	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
 	int i, j, count;
 
-	for (i = 0; i < LAN937X_NUM_TCAM_ENTRIES_PER_PORT; i++) {
+	for (i = 0; i < LAN937X_NUM_TCAM_ENTRIES; i++) {
 		count = 0;
 		for (j = 0; j < num_entry_reqd; j++) {
-			if (!(resrc->tcam_entries_used[i + j]))
+			if (!(res->tcam_entries_used[i + j]))
 				count++;
 		}
 		if (count == num_entry_reqd) {
@@ -89,9 +106,10 @@ static int lan937x_assign_tcam_entries(struct ksz_device *dev,
 struct lan937x_flower_rule *lan937x_rule_find(struct ksz_device *dev,
 					      int port, unsigned long cookie)
 {
+	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
 	struct lan937x_flower_rule *rule;
 
-	list_for_each_entry(rule, &dev->flower_block[port].rules, list)
+	list_for_each_entry(rule, &blk->rules, list)
 		if (rule->cookie == cookie) {
 			pr_info("%s %lu", __func__, cookie);
 			return rule;
@@ -227,13 +245,14 @@ static int lan937x_setup_bcast_policer(struct ksz_device *dev,
 				       u64 rate_bytes_per_sec,
 				       u32 burst)
 {
+	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
 	struct lan937x_resrc_alloc *rsrc = rule->resrc;
 	struct lan937x_flower *flower = rule->flower;
 	int rc;
 
 	flower->action.actions_presence_mask |= BIT(LAN937X_ACT_BCAST_POLICE);
 
-	if (dev->flower_block[port].resrcs.broadcast_pol_used) {
+	if (res->broadcast_pol_used) {
 		NL_SET_ERR_MSG_MOD(extack, "Broadcast Policer already exists");
 		return -ENOSPC;
 	}
@@ -524,9 +543,7 @@ static int lan937x_flower_hw_configuration(struct ksz_device *dev,
 {
 	struct lan937x_flower_action *action = &rule->flower->action;
 	u32 actions_presence_mask = action->actions_presence_mask;
-	struct lan937x_key *key = &rule->flower->filter.key;
 	struct lan937x_resrc_alloc *resrc = rule->resrc;
-//	u16 acl_dissector_map = key->acl_dissector_map;
 	u16 burst;
 	u8 index;
 	u64 cir;
@@ -597,6 +614,7 @@ int lan937x_tc_flower_add(struct dsa_switch *ds, int port,
 	struct netlink_ext_ack *extack = cls->common.extack;
 	struct lan937x_flower_rule *flower_rule;
 	struct ksz_device *dev = ds->priv;
+	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev,port);
 	int rc;
 
 	if (lan937x_flower_rule_init(&flower_rule))
@@ -629,7 +647,8 @@ int lan937x_tc_flower_add(struct dsa_switch *ds, int port,
 	}
 
 	kfree(flower_rule->flower);
-	list_add(&flower_rule->list, &dev->flower_block[port].rules);
+	
+	list_add(&flower_rule->list, &blk->rules);
 	return 0;
 err:
 	kfree(flower_rule->flower);
