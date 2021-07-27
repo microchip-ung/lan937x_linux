@@ -282,8 +282,7 @@ enum lan937x_acl_dissector_type {
 	acl_src_mac_dissector,
 	acl_vlan_id_dissector,
 	acl_vlan_pcp_dissector,
-	acl_ethtype_dissector,
-	acl_num_dissectors
+	acl_ethtype_dissector
 };
 
 #define DST_MAC_DISSECTOR_PRESENT	BIT(acl_dst_mac_dissector)

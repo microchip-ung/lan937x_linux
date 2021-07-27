@@ -68,6 +68,9 @@ struct ksz_port {
 
 	struct ksz_port_mib mib;
 	phy_interface_t interface;
+
+	void *priv;
+	
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
 	bool hwts_tx_en;
         struct lan937x_port_ptp_shared ptp_shared;

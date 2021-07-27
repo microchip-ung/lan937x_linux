@@ -402,7 +402,8 @@ static int lan937x_flower_policer(struct ksz_device *dev,
 {
 	struct lan937x_flower *flower = rule->flower;
 	struct lan937x_key *key;
-
+	
+	//TODO:Balaje
 	switch (flower->filter.filter_type) {
 	case LAN937x_BCAST_FILTER:
 		return lan937x_setup_bcast_policer(dev, extack, port, rule,
@@ -525,7 +526,7 @@ static int lan937x_flower_hw_configuration(struct ksz_device *dev,
 	u32 actions_presence_mask = action->actions_presence_mask;
 	struct lan937x_key *key = &rule->flower->filter.key;
 	struct lan937x_resrc_alloc *resrc = rule->resrc;
-	u16 acl_dissector_map = key->acl_dissector_map;
+//	u16 acl_dissector_map = key->acl_dissector_map;
 	u16 burst;
 	u8 index;
 	u64 cir;
@@ -560,14 +561,14 @@ static int lan937x_flower_hw_configuration(struct ksz_device *dev,
 
 				cir = div_u64(action->police.rate_bytes_per_sec
 					      * 5242, 10000000);
-				pr_info("CIR %lu", cir);
+				pr_info("CIR %llu", cir);
 				val = ((cir << 16) & 0xFFFF) | (cir & 0xFFFF);
 				rc = lan937x_pwrite32(dev, port,
 						      REG_PORT_RX_QCI_METER_SR,
 						      val);
 
 				burst = action->police.burst;
-				pr_info("burst %lu", burst);
+				pr_info("burst %u", burst);
 				val = (((burst << 16) & 0xFFFF) |
 				       (burst & 0xFFFF));
 				rc = lan937x_pwrite32(dev, port,
@@ -596,7 +597,7 @@ int lan937x_tc_flower_add(struct dsa_switch *ds, int port,
 	struct netlink_ext_ack *extack = cls->common.extack;
 	struct lan937x_flower_rule *flower_rule;
 	struct ksz_device *dev = ds->priv;
-	int rc, i;
+	int rc;
 
 	if (lan937x_flower_rule_init(&flower_rule))
 		return -ENOMEM;

@@ -119,13 +119,18 @@ int lan937x_get_acl_requirements(enum lan937x_filter_type filter_type,
 	case LAN937x_VLAN_UNAWARE_FILTER:
 		*parser_idx = 0;
 		*n_entries = 1;
-		return 0;
+		break;
 	case LAN937x_VLAN_AWARE_FILTER:
 		*parser_idx = 1;
 		*n_entries = 1;
-		return 0;
+		break;
+	case LAN937x_BCAST_FILTER:
+	default:
+		//TODO Balaje: Is LAN937x_BCAST_FILTER is INVAL here?
+		return -EINVAL;
+
 	}
-	return -EINVAL;
+	return 0;
 }
 
 static int lan937x_acl_byte_enable_write(struct ksz_device *dev, int port,
@@ -257,7 +262,6 @@ static int lan937x_acl_entry_write(struct ksz_device *dev,
 	struct lan937x_acl_access_ctl access_ctl;
 	struct lan937x_acl_byte_en byte_en_cfg;
 	u16 reg_ofst;
-	u8 i, val;
 	int rc;
 
 	reg_ofst = LAN937X_ACL_CTRL_BASE_ADDR + LAN937X_ACL_PORT_ADR_REG;
@@ -312,7 +316,7 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 				  struct lan937x_key *key,
 				  struct lan937x_acl_entry *acl_entry)
 {
-	struct lan937x_acl_rfr *rfr_ptr = acl_rfrs_table[parser_idx];
+	const struct lan937x_acl_rfr *rfr_ptr = acl_rfrs_table[parser_idx];
 	u8 *mask = &acl_entry->acl_mask[1];
 	u8 *data = &acl_entry->acl_data[1];
 	struct vlan_tag *t_data;
@@ -396,7 +400,6 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 	struct lan937x_resrc_alloc *resrc = rule->resrc;
 	u16 acl_dissector_map = key->acl_dissector_map;
 	struct lan937x_acl_entry *acl_entry;
-	struct lan937x_acl_rfr *rfr;
 	int rc = EINVAL;
 	u8 *acl_action;
 	u8 i;
@@ -483,7 +486,6 @@ static int lan937x_set_rfr_entry(struct ksz_device *dev, int port,
 	struct lan937x_rfr_reg_type rfr_data;
 	u8 tcam_addr_access;
 	u16 reg_ofst;
-	u32 val;
 	int rc;
 
 	tcam_addr_access = parser_idx % 2;
