@@ -88,9 +88,7 @@ static int lan937x_setup_tc_cbs(struct dsa_switch *ds, int port,
 	/* Credit Increment Register */
 	bw = cinc_cal(qopt->idleslope, qopt->sendslope);
 
-	ret = lan937x_pwrite32(dev, port, REG_PORT_MTI_CREDIT_INCREMENT, bw);
-
-	return ret;
+	return lan937x_pwrite32(dev, port, REG_PORT_MTI_CREDIT_INCREMENT, bw);
 }
 
 static bool lan937x_tas_validate_gcl(struct tc_taprio_qopt_offload *qopt)
@@ -124,14 +122,14 @@ static void lan937x_tas_set_basetime(struct ksz_device *dev, ktime_t base_time,
 
 	if (base_time < current_time) {
 		u64 nr_of_cycles = current_time - base_time;
-		u32 add_cycles = 0;
+		u32 add_cycles = 1;
 
 		/*Reserve 1ms for programming and activating */
 		if(cycle_time < 1000000)
-			add_cycles = 1000000 / cycle_time;
+			add_cycles = DIV_ROUND_UP(1000000, cycle_time);
 
 		do_div(nr_of_cycles, cycle_time);
-		new_base_time += cycle_time * (nr_of_cycles + add_cycles + 1);
+		new_base_time += cycle_time * (nr_of_cycles + add_cycles);
 	}
 
 	*new_base_ts = ktime_to_timespec64(new_base_time);
@@ -154,7 +152,7 @@ static int lan937x_setup_tc_taprio(struct dsa_switch *ds, int port,
 		return ret;
 	}
 
-	/*Validate GCL */
+	/* Validate GCL */
 	ret = lan937x_tas_validate_gcl(qopt);
 	if (ret)
 		return ret;
@@ -165,8 +163,8 @@ static int lan937x_setup_tc_taprio(struct dsa_switch *ds, int port,
 	if (ret)
 		return ret;
 
-	/*Schedule entry */
-	for (i=0; i<qopt->num_entries; i++) {
+	/* Schedule entry */
+	for (i = 0; i < qopt->num_entries; i++) {
 		ret = lan937x_pwrite8(dev, port, REG_PORT_TAS_EVENT_INDEX__1,
 				      i);
 		if (ret)
@@ -176,6 +174,8 @@ static int lan937x_setup_tc_taprio(struct dsa_switch *ds, int port,
 		event = qopt->entries[i].gate_mask << TAS_GATE_CMD_S;
 		cycle_cnt = qopt->entries[i].interval / 12;
 		event |= (cycle_cnt & TAS_GATE_CYCLE_M);
+
+		pr_err("event value %x", event);
 
 		ret = lan937x_pwrite32(dev, port, REG_PORT_TAS_EVENT__4, event);
 		if (ret)
@@ -209,10 +209,8 @@ static int lan937x_setup_tc_taprio(struct dsa_switch *ds, int port,
 		return ret;
 
 	/*Set the config change bit */
-	ret =  lan937x_port_cfg(dev, port, REG_PORT_TAS_GATE_CTRL__1,
+	return lan937x_port_cfg(dev, port, REG_PORT_TAS_GATE_CTRL__1,
 				TAS_CFG_CHANGE, true);
-
-	return ret;
 }
 
 int lan937x_setup_tc(struct dsa_switch *ds, int port,
