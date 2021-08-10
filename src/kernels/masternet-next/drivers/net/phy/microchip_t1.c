@@ -404,6 +404,28 @@ static int lan87xx_config_init(struct phy_device *phydev)
 	return rc < 0 ? rc : 0;
 }
 
+static int lan937x_read_master_slave(struct phy_device *phydev)
+{
+	int val;
+
+	phydev->master_slave_get = MASTER_SLAVE_CFG_UNKNOWN;
+	phydev->master_slave_state = MASTER_SLAVE_STATE_UNKNOWN;
+
+	val = access_ereg(phydev, PHYACC_ATTR_MODE_READ, PHYACC_ATTR_BANK_SMI,
+			  0x0A, 0);
+	if (val < 0)
+		return val;
+
+	if ((val & 0x4000) != 0x4000) {
+		phydev->master_slave_get = MASTER_SLAVE_CFG_SLAVE_FORCE;
+		phydev->master_slave_state = MASTER_SLAVE_STATE_SLAVE;
+	} else {
+		phydev->master_slave_get = MASTER_SLAVE_CFG_MASTER_FORCE;
+		phydev->master_slave_state = MASTER_SLAVE_STATE_MASTER;
+	}
+
+	return 0;
+}
 static int lan937x_read_status(struct phy_device *phydev)
 {
 	int val;
@@ -417,6 +439,10 @@ static int lan937x_read_status(struct phy_device *phydev)
 		phydev->link = 1;
 	else
 		phydev->link = 0;
+
+	val = lan937x_read_master_slave(phydev);
+	if (val < 0)
+		return val;
 
 	phydev->duplex = DUPLEX_FULL;
 	phydev->speed = SPEED_100;
