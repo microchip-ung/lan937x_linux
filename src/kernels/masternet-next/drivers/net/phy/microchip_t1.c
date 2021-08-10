@@ -83,6 +83,10 @@
 #define T1_INTERRUPT_SOURCE_REG 	0x18
 #define T1_INTERRUPT2_SOURCE_REG	0x08
 
+#define LAN87XX_LINK_UP 		0x01
+#define LAN87XX_MAX_SQI 		0x08
+#define LAN87XX_SQI_ENTRY		200
+
 #define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
 #define DRIVER_DESC	"Microchip LAN87XX/LAN937X T1 PHY driver"
 
@@ -400,14 +404,122 @@ static int lan87xx_config_init(struct phy_device *phydev)
 	return rc < 0 ? rc : 0;
 }
 
+static int lan937x_read_status(struct phy_device *phydev)
+{
+	int val;
+
+	val = phy_read(phydev, T1_MODE_STAT_REG);
+
+	if (val < 0)
+		return val;
+
+	if (val & T1_LINK_UP_MSK)
+		phydev->link = 1;
+	else
+		phydev->link = 0;
+
+	phydev->duplex = DUPLEX_FULL;
+	phydev->speed = SPEED_100;
+	phydev->pause = 0;
+	phydev->asym_pause = 0;
+
+	return 0;
+}
+
 static int lan87xx_get_sqi(struct phy_device *phydev)
 {
-	return 1;
+	unsigned char  link_table[LAN87XX_SQI_ENTRY] = {1};
+	unsigned short raw_table[LAN87XX_SQI_ENTRY] = {0};
+	int sqi_avg = 0, link_avg = 0;
+	unsigned short temp;
+	int link_temp,i,j;
+	int sqi_num;
+
+	access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_DSP,
+				   0x04, 0x00, 0x01);
+
+	/* Enable SQI measurement */
+	access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_DSP,
+				   0x2E, 0x72, 0x7F);
+
+	/* Below effectively throws away first reading - update 0x82/0x83
+	* required delay before reading DSP 0x83 otherwise it will
+	* return a high value on first read
+	*/
+	access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_DSP,
+				   0xD, 0x01, 0x01);
+	usleep_range(4000, 5000);
+
+	for (i = 0; i < LAN87XX_SQI_ENTRY; i++) {
+		access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_DSP,
+					   0xD, 0x01, 0x01);
+
+		raw_table[i] = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
+					   PHYACC_ATTR_BANK_DSP, 0x83, 0x0);
+
+		lan937x_read_status(phydev);
+		link_table[i] = phydev->link;
+		usleep_range(300, 700);
+	}
+
+	/*Sorting arrays*/
+	for (i = 0; i < LAN87XX_SQI_ENTRY; i++) {
+		for (j = 0; j < LAN87XX_SQI_ENTRY; j++) {
+			if (raw_table[j] > raw_table[i]) {
+				temp = raw_table[i];
+				raw_table[i] = raw_table[j];
+				raw_table[j] = temp;
+
+				link_temp = link_table[i];
+				link_table[i] = link_table[j];
+				link_table[j] = link_temp;
+			}
+		}
+	}
+
+	/*Discarding outliers*/
+	for (i = 0; i < LAN87XX_SQI_ENTRY; i++) {
+		if ((i >= 40) && (i <= 160)) {
+			sqi_avg += raw_table[i];
+		}
+
+		link_avg += link_table[i];
+	}
+
+	/*Calculating SQI number*/
+	sqi_avg /= 120;
+	link_avg /= LAN87XX_SQI_ENTRY;
+
+	if (sqi_avg >= 299) {
+		sqi_num = 0;
+	} else if ((sqi_avg <= 298) && (sqi_avg >=237)) {
+		sqi_num = 1;
+	} else if ((sqi_avg <= 236) && (sqi_avg >=189)) {
+		sqi_num = 2;
+	} else if ((sqi_avg <= 188) && (sqi_avg >=150)) {
+		sqi_num = 3;
+	} else if ((sqi_avg <= 149) && (sqi_avg >=119)) {
+		sqi_num = 4;
+	} else if ((sqi_avg <= 118) && (sqi_avg >=94)) {
+		sqi_num = 5;
+	} else if ((sqi_avg <= 93) && (sqi_avg >=75)) {
+		sqi_num = 6;
+	} else if ((sqi_avg <= 74) && (sqi_avg >=0)) {
+		sqi_num = 7;
+	} else {
+		sqi_num = 8;
+	}
+
+	if (link_avg != LAN87XX_LINK_UP) {
+		sqi_num = 0;
+	}
+
+	return sqi_num;
 }
 
 static int lan87xx_get_sqi_max(struct phy_device *phydev)
 {
-	return 8;
+	return LAN87XX_MAX_SQI;
 }
 
 
@@ -634,28 +746,6 @@ static int lan87xx_cable_test_get_status(struct phy_device *phydev,
 
 		return lan87xx_cable_test_report(phydev);
 	}
-
-	return 0;
-}
-
-static int lan937x_read_status(struct phy_device *phydev)
-{
-	int val;
-
-	val = phy_read(phydev, T1_MODE_STAT_REG);
-
-	if (val < 0)
-		return val;
-
-	if (val & T1_LINK_UP_MSK)
-		phydev->link = 1;
-	else
-		phydev->link = 0;
-
-	phydev->duplex = DUPLEX_FULL;
-	phydev->speed = SPEED_100;
-	phydev->pause = 0;
-	phydev->asym_pause = 0;
 
 	return 0;
 }
