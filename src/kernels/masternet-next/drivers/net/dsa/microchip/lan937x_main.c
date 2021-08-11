@@ -929,6 +929,118 @@ static void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
 				 PORT_MIRROR_SNIFFER, false);
 }
 
+int lan937x_tc_pol_rate_to_reg (u64 rate_bytes_per_sec, u8* regval)
+{
+	u32 rate_kbps = div_u64(8 * rate_bytes_per_sec,1000);
+	u16 code = 0x00;
+	
+	pr_info("rate :%llukbps",rate_kbps);
+	
+	if(rate_kbps >= 2000){
+		code = (rate_kbps/1000);
+	} else if(rate_kbps == 1000) {
+		code = 0x01;
+	} else if(rate_kbps <= 256) {
+		code = 104;
+	} else if(rate_kbps <= 320) {
+		code = 105;
+	} else if(rate_kbps <= 384) {
+		code = 106;
+	} else if(rate_kbps <= 448) {
+		code = 107;
+	} else if(rate_kbps <= 512) {
+		code = 108;
+	} else if(rate_kbps <= 576) {
+		code = 109;
+	} else if(rate_kbps <= 640) {
+		code = 110;
+	} else if(rate_kbps <= 704) {
+		code = 111;
+	} else if(rate_kbps <= 768) {
+		code = 112;
+	} else if(rate_kbps <= 832) {
+		code = 113;
+	} else if(rate_kbps <= 896) {
+		code = 114;
+	} else if(rate_kbps <= 960) {
+		code = 115;
+	} else if(rate_kbps <= 1280) {
+		code = 102;
+	} else if(rate_kbps <= 1920) {
+		code = 103;
+	}
+
+	if (!code)
+		return -EINVAL;	
+	
+	*regval = code;
+	return 0;
+}
+
+static int lan937x_port_policer_add(struct dsa_switch *ds, int port,
+				    struct dsa_mall_policer_tc_entry *policer)
+{
+	struct ksz_device *dev = ds->priv;
+	struct lan937x_p_res *res = lan937x_get_flr_res (dev, port);
+	u32 rate_kbps;
+	u8 rate_mbps;
+	u8 code = 0;
+	int rc,i;
+
+	/**Port Policing and Traffic class Policing is mutually exclusive
+	behavior of one Ingress Rate Limiting Hw */
+	for (i=0; i<LAN937X_NUM_TC;i++) {
+		if (res->tc_policers_used[i])
+			return -ENOSPC;
+	}
+
+	rc = lan937x_tc_pol_rate_to_reg(policer->rate_bytes_per_sec, &code);
+	if (rc)
+		return rc;
+
+	rc = lan937x_port_cfg(dev, port, REG_PORT_MAC_IN_RATE_LIMIT, PORT_RATE_LIMIT,
+			 true);	
+	if (rc)
+		return rc;
+
+	rc = lan937x_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL, code);
+	if (rc) 
+		return rc;	
+	/**Note that the update will not take effect until the Port Queue 7 
+	Ingress Limit ctrl Register is written. When port-based rate limiting
+	is used a value of 0h should be written to Port Queue 7 Egress Limit
+	Control Register.*/
+	rc = lan937x_pwrite8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL, 0x00);
+	if (rc) 
+		return rc;	
+	for (i=0; i<LAN937X_NUM_TC;i++)
+		res->tc_policers_used[i] = true;
+	return 0;
+}
+
+static void lan937x_port_policer_del(struct dsa_switch *ds, int port)
+{
+	struct ksz_device *dev = ds->priv;
+	struct lan937x_p_res *res = lan937x_get_flr_res (dev, port);
+	int rc;
+	u8 i;
+
+	/*Update Default Value to Rate Limit : 00*/
+	rc = lan937x_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL, 0x00);
+	if (rc) 
+		return rc;	
+	/**Note that the update will not take effect until the Port Queue 7 
+	Ingress Limit ctrl Register is written. When port-based rate limiting
+	is used a value of 0h should be written to Port Queue 7 Egress Limit
+	Control Register.*/
+	rc = lan937x_pwrite8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL, 0x00);
+	if (rc) 
+		return rc;	
+	for (i=0; i<LAN937X_NUM_TC;i++)
+		res->tc_policers_used[i] = false;
+	return 0;	
+}
+
 static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 {
 	phy_interface_t interface;
@@ -1056,9 +1168,9 @@ static int lan937x_setup(struct dsa_switch *ds)
 
 	ret = lan937x_ptp_init(dev);
 	if (ret) 
-        goto error_ptp_deinit;
+        	goto error_ptp_deinit;
         
-    lan937x_tc_queue_init(ds);
+	lan937x_tc_queue_init(ds);
 	
 	lan937x_flower_setup(ds);
 
@@ -1221,7 +1333,9 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.port_hwtstamp_set      = lan937x_hwtstamp_set,
 	.port_txtstamp		= lan937x_port_txtstamp,
 	.get_ts_info            = lan937x_get_ts_info,
-    .port_setup_tc          = lan937x_setup_tc,
+	.port_setup_tc          = lan937x_setup_tc,
+	.port_policer_add	= lan937x_port_policer_add,
+	.port_policer_del	= lan937x_port_policer_del,
 	.cls_flower_add	=lan937x_tc_flower_add,
 	.cls_flower_del =lan937x_tc_flower_del,
 	.cls_flower_stats = lan937x_tc_flower_stats,

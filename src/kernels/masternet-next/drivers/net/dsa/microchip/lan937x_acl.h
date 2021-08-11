@@ -296,25 +296,25 @@ enum lan937x_acl_dissector_type {
 
 /**TCAM Access Control Register defines*/
 
-#define acl_pri_low(val)	(((val) << TCAM_LO_PRI_POS)\
+#define acl_pri_low(val)	((((u32)val) << TCAM_LO_PRI_POS)\
 				 & LAN937X_ACL_PORT_ARACR_ADD_SHIFT_LO_PRI)
-#define acl_tcam_flush(val)	(((val) << TCAM_FLUSH_POS)\
+#define acl_tcam_flush(val)	((((u32)val) << TCAM_FLUSH_POS)\
 				 & LAN937X_ACL_PORT_ARACR_TCAM_FLUSH)
-#define acl_tcam_vben(val)	(((val) << TCAM_VBEN_POS)\
+#define acl_tcam_vben(val)	((((u32)val) << TCAM_VBEN_POS)\
 				 & LAN937X_ACL_PORT_ARACR_TCAM_VBEN)
-#define acl_tcam_vbi(val)	(((val) << TCAM_VBI_POS)\
+#define acl_tcam_vbi(val)	((((u32)val) << TCAM_VBI_POS)\
 				 & LAN937X_ACL_PORT_ARACR_TCAM_VBI)
-#define acl_tcam_row_vld(val)	(((val) << TCAM_ROW_VLD_POS)\
+#define acl_tcam_row_vld(val)	((((u32)val) << TCAM_ROW_VLD_POS)\
 				 & LAN937X_ACL_PORT_ARACR_TCAM_ROW_VLD)
-#define acl_row_shift(val)	(((val) << TCAM_START_ROW_SHIFT_POS)\
+#define acl_row_shift(val)	((((u32)val) << TCAM_START_ROW_SHIFT_POS)\
 				 & LAN937X_ACL_PORT_ARACR_START_ROW_SHFIT)
-#define acl_tcam_req(val)	(((val) << TCAM_REQ_TYPE_POS)\
+#define acl_tcam_req(val)	((((u32)val) << TCAM_REQ_TYPE_POS)\
 				 & LAN937X_ACL_PORT_ARACR_TCAM_REQ_TYPE)
-#define acl_tcam_acc(val)	(((val) << TCAM_ACC_TYPE_POS)\
+#define acl_tcam_acc(val)	((((u32)val) << TCAM_ACC_TYPE_POS)\
 				 & LAN937X_ACL_PORT_ARACR_TCAM_ACC_TYPE)
-#define acl_num_shift(val)	(((val) << TCAM_NUM_SHIFT_POS)\
+#define acl_num_shift(val)	((((u32)val) << TCAM_NUM_SHIFT_POS)\
 				 & LAN937X_ACL_PORT_ARACR_TCAM_NUM_SHIFT)
-#define acl_tcam_addr(val)	 ((val) & LAN937X_ACL_PORT_ARACR_TCAM_ADDR_MASK)
+#define acl_tcam_addr(val)	 (((u32)val) & LAN937X_ACL_PORT_ARACR_TCAM_ADDR_MASK)
 
 /****************************
  * TCAM Structures

@@ -9,8 +9,7 @@
 #include "lan937x_tc.h"
 #include "lan937x_acl.h"
 
-#define LAN937X_NUM_TCAM_ENTRIES	64
-#define LAN937X_MAX_PORTS			8
+#define LAN937X_NUM_TCAM_ENTRIES	MAX_ACL_ENTRIES
 #define LAN937X_NUM_STREAM_FILTERS	8
 #define LAN937X_NUM_GATES		8
 
@@ -133,7 +132,7 @@ struct lan937x_resrc_alloc {
 			u8 index;
 		} gate;
 
-		u8 tc_pol_used_mask;
+		u8 tc_pol_used;
 		u8 broadcast_pol_en;
 	} type;
 };
@@ -169,6 +168,8 @@ struct lan937x_flr_blk *lan937x_get_flr_blk (struct ksz_device *dev,
 					     int port);
 struct lan937x_p_res *lan937x_get_flr_res (struct ksz_device *dev,
 					 int port);
+
+extern int lan937x_tc_pol_rate_to_reg (u64 rate_bytes_per_sec, u8* regval);
 
 #endif
 
