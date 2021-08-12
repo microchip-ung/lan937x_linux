@@ -112,6 +112,7 @@ struct ksz_device {
 	u16 port_mask;
 
 	u8 tas_port;
+	bool cut_through_enable;
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
 	struct ptp_clock_info ptp_caps;
 	struct ptp_clock *ptp_clock;

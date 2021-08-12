@@ -15,6 +15,7 @@
 #include "ksz_common.h"
 #include "lan937x_dev.h"
 #include "lan937x_tc.h"
+#include "lan937x_devlink.h"
 
 static int lan937x_wait_vlan_ctrl_ready(struct ksz_device *dev)
 {
@@ -1054,9 +1055,13 @@ static int lan937x_setup(struct dsa_switch *ds)
 
 	ret = lan937x_ptp_init(dev);
 	if (ret) 
-                goto error_ptp_deinit;
-        
+                return ret;
+
         lan937x_tc_queue_init(ds);
+
+	ret = lan937x_devlink_init(ds);
+	if (ret)
+		goto error_ptp_deinit;
 
 	/* start switch */
 	lan937x_cfg(dev, REG_SW_OPERATION, SW_START, true);
@@ -1217,7 +1222,10 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.port_hwtstamp_set      = lan937x_hwtstamp_set,
 	.port_txtstamp		= lan937x_port_txtstamp,
 	.get_ts_info            = lan937x_get_ts_info,
-        .port_setup_tc          = lan937x_setup_tc
+        .port_setup_tc          = lan937x_setup_tc,
+	.devlink_param_get	= lan937x_devlink_param_get,
+	.devlink_param_set	= lan937x_devlink_param_set,
+	.devlink_info_get	= lan937x_devlink_info_get,
 };
 
 
