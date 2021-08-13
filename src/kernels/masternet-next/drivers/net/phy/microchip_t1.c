@@ -426,6 +426,7 @@ static int lan937x_read_master_slave(struct phy_device *phydev)
 
 	return 0;
 }
+
 static int lan937x_read_status(struct phy_device *phydev)
 {
 	int val;
@@ -776,6 +777,29 @@ static int lan87xx_cable_test_get_status(struct phy_device *phydev,
 	return 0;
 }
 
+static int lan937x_config_aneg(struct phy_device *phydev)
+{
+	int ret;
+	u16 ctl = 0;
+
+	switch (phydev->master_slave_set) {
+	case MASTER_SLAVE_CFG_MASTER_FORCE:
+		ctl |= T1_M_CFG;
+		break;
+	case MASTER_SLAVE_CFG_SLAVE_FORCE:
+		break;
+	case MASTER_SLAVE_CFG_UNKNOWN:
+	case MASTER_SLAVE_CFG_UNSUPPORTED:
+		return 0;
+	default:
+		phydev_warn(phydev, "Unsupported Master/Slave mode\n");
+		return -EOPNOTSUPP;
+	}
+
+	return access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI,
+					T1_M_CTRL_REG, ctl, T1_M_CFG);
+}
+
 static int lan937x_config_init(struct phy_device *phydev)
 {
 	/* lan87xx & lan937x follows same init sequence */
@@ -804,6 +828,7 @@ static struct phy_driver microchip_t1_phy_driver[] = {
 		.read_status 	= lan937x_read_status,
 		.features 	= PHY_BASIC_T1_FEATURES,
 		.config_init 	= lan937x_config_init,
+		.config_aneg    = lan937x_config_aneg,
 		.suspend 	= genphy_suspend,
 		.resume 	= genphy_resume,
 		.cable_test_start 	= lan87xx_cable_test_start,
