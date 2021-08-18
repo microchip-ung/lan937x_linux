@@ -278,6 +278,12 @@ static inline int ksz_write64(struct ksz_device *dev, u32 reg, u64 value)
 	return regmap_bulk_write(dev->regmap[2], reg, val, 2);
 }
 
+static inline int ksz_write8_bulk(struct ksz_device *dev, u32 reg, u8 *value, 
+				  u8 n)
+{
+	return regmap_bulk_write(dev->regmap[0], reg, value, n);
+}
+
 static inline void ksz_pread8(struct ksz_device *dev, int port, int offset,
 			      u8 *data)
 {

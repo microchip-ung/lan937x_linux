@@ -6,77 +6,53 @@
 #ifndef _NET_DSA_DRIVERS_LAN937X_ACL_H
 #define _NET_DSA_DRIVERS_LAN937X_ACL_H
 
-/* ACL Registers START */
-#define LAN937X_ACL_CTRL_BASE_ADDR  (0x600)
-#define LAN937X_ACL_CTRL_PORT_BASE_ADDR(port) ((port) * 0x1000)
-
-/* Reg Base address */
-#define LAN937X_ACL_PORT_ADR_REG  (0x00)  /* 96 byets */
-#define LAN937X_ACL_PORT_AAR_REG  (0x60)  /* 08 bytes */
-#define LAN937X_ACL_PORT_ABER_REG (0x68)  /* 14 bytes */
-#define LAN937X_ACL_PORT_ARACR_REG (0x78)  /* 04 bytes */
-#define LAN937X_ACL_PORT_PCTRL_REG (0x7C)  /* 04 bytes */
-#define LAN937X_ACL_PORT_FR_COUNT0_REG (0x80)  /* 04 bytes */
-#define LAN937X_ACL_PORT_FR_COUNT1_REG (0x84)  /* 04 bytes */
-#define LAN937X_ACL_PORT_FR_COUNT2_REG (0x88)  /* 04 bytes */
-#define LAN937X_ACL_PORT_FR_COUNT3_REG (0x8C)  /* 04 bytes */
-#define LAN937X_ACL_PORT_NMATCH_REG (0x94)  /* 08 bytes */
-#define LAN937X_ACL_PORT_INT_STS_REG (0xA0)  /* 01 byte  */
-#define LAN937X_ACL_PORT_INT_MASK_REG  (0xA2)  /* 01 byte  */
-#define LAN937X_ACL_PORT_SPARE_REG (0xC0)  /* 04 byte  */
-#define LAN937X_ACL_PORT_TCAM_BIST0_REG (0xD0)  /* 02 byte  */
-#define LAN937X_ACL_PORT_TCAM_BIST1_REG (0xD2)  /* 01 byte  */
-#define LAN937X_ACL_PORT_TCAM_BIST2_REG (0xD3)  /* 01 byte  */
-#define LAN937X_ACL_PORT_TCAM_BIST3_REG (0xD4)  /* 01 byte  */
-#define LAN937X_ACL_PORT_TCAM_BITMAP_REG (0xE0)  /* 16 bytes */
-
 /* Reg Data */
-#define LAN937X_ACL_PORT_ARACR_ADD_SHIFT_LO_PRI  (0x10000000)
-#define LAN937X_ACL_PORT_ARACR_TCAM_FLUSH  (0x08000000)
-#define LAN937X_ACL_PORT_ARACR_TCAM_VBEN   (0x04000000)
-#define LAN937X_ACL_PORT_ARACR_TCAM_VBI (0x02000000)
-#define LAN937X_ACL_PORT_ARACR_TCAM_ROW_VLD  (0x01E00000)
-#define LAN937X_ACL_PORT_ARACR_START_ROW_SHFIT   (0x000FC000)
-#define LAN937X_ACL_PORT_ARACR_TCAM_OPERATION_STATUS (0x00002000)
-#define LAN937X_ACL_PORT_ARACR_TCAM_REQ_TYPE (0x00001C00)
-#define LAN937X_ACL_PORT_ARACR_TCAM_ACC_TYPE (0x00000300)
-#define LAN937X_ACL_PORT_ARACR_TCAM_NUM_SHIFT (0x000000C0)
-#define LAN937X_ACL_PORT_ARACR_TCAM_ADDR_MASK (0x0000003F)
+#define ACL_ARACR_ADD_SHIFT_LO_PRI  (0x10000000)
+#define ACL_ARACR_TCAM_FLUSH  (0x08000000)
+#define ACL_ARACR_TCAM_VBEN   (0x04000000)
+#define ACL_ARACR_TCAM_VBI (0x02000000)
+#define ACL_ARACR_TCAM_ROW_VLD  (0x01E00000)
+#define ACL_ARACR_START_ROW_SHFIT   (0x000FC000)
+#define ACL_ARACR_TCAM_OP_STS (0x00002000)
+#define ACL_ARACR_TCAM_REQ_TYPE (0x00001C00)
+#define ACL_ARACR_TCAM_ACC_TYPE (0x00000300)
+#define ACL_ARACR_TCAM_NUM_SHIFT (0x000000C0)
+#define ACL_ARACR_TCAM_ADDR_MASK (0x0000003F)
 
-#define LAN937X_ACL_PORT_PCTRL_NUM_KEY_FORMAT (0xF0000000)
-#define LAN937X_ACL_PORT_PCTRL_KEY_TYPE (0x0F000000)
-#define LAN937X_ACL_PORT_PCTRL_IP_OPTIONS  (0x00F00000)
-#define LAN937X_ACL_PORT_PCTRL_VLAN_TAG (0x000F0000)
-#define LAN937X_ACL_PORT_PCTRL_ABS_OFF (0x0000F000)
-#define LAN937X_ACL_PORT_PCTRL_HSR_TAG (0x00000F00)
-#define LAN937X_ACL_PORT_PCTRL_SNAP_TAG (0x000000F0)
+#define ACL_PCTRL_NUM_KEY_FORMAT (0xF0000000)
+#define ACL_PCTRL_KEY_TYPE (0x0F000000)
+#define ACL_PCTRL_IP_OPTIONS  (0x00F00000)
+#define ACL_PCTRL_VLAN_TAG (0x000F0000)
+#define ACL_PCTRL_ABS_OFF (0x0000F000)
+#define ACL_PCTRL_HSR_TAG (0x00000F00)
+#define ACL_PCTRL_SNAP_TAG (0x000000F0)
 
-#define LAN937X_ACL_PORT_INT_STS_TOP  (0x00000001)
-#define LAN937X_ACL_PORT_INT_STS_FRC0 (0x00000002)
-#define LAN937X_ACL_PORT_INT_STS_FRC1 (0x00000004)
-#define LAN937X_ACL_PORT_INT_STS_FRC2 (0x00000008)
-#define LAN937X_ACL_PORT_INT_STS_FRC3 (0x00000010)
-#define LAN937X_ACL_PORT_INT_STS_FRCX (0x0000001E)
-#define LAN937X_ACL_PORT_INT_MASK_TOP (0x00000001)
-#define LAN937X_ACL_PORT_INT_MASK_FRC0 (0x00000002)
-#define LAN937X_ACL_PORT_INT_MASK_FRC1 (0x00000004)
-#define LAN937X_ACL_PORT_INT_MASK_FRC2 (0x00000008)
-#define LAN937X_ACL_PORT_INT_MASK_FRC3 (0x00000010)
-#define LAN937X_ACL_PORT_INT_MASK_FRCX (0x0000001E)
+#define ACL_INT_STS_TOP  (0x00000001)
+#define ACL_INT_STS_FRC0 (0x00000002)
+#define ACL_INT_STS_FRC1 (0x00000004)
+#define ACL_INT_STS_FRC2 (0x00000008)
+#define ACL_INT_STS_FRC3 (0x00000010)
+#define ACL_INT_STS_FRCX (0x0000001E)
+#define ACL_INT_MASK_TOP (0x00000001)
+#define ACL_INT_MASK_FRC0 (0x00000002)
+#define ACL_INT_MASK_FRC1 (0x00000004)
+#define ACL_INT_MASK_FRC2 (0x00000008)
+#define ACL_INT_MASK_FRC3 (0x00000010)
+#define ACL_INT_MASK_FRCX (0x0000001E)
 
-#define LAN937X_ACL_PORT_TCAM_BIST0_TCAMSEL  (0x00000600)
-#define LAN937X_ACL_PORT_TCAM_BIST0_FAIL   (0x00000100)
-#define LAN937X_ACL_PORT_TCAM_BIST0_PASS   (0x00000080)
-#define LAN937X_ACL_PORT_TCAM_BIST0_PAUSE  (0x00000040)
-#define LAN937X_ACL_PORT_TCAM_BIST0_SHO (0x00000020)
-#define LAN937X_ACL_PORT_TCAM_BIST0_SHI (0x00000010)
-#define LAN937X_ACL_PORT_TCAM_BIST0_RESUME (0x00000008)
-#define LAN937X_ACL_PORT_TCAM_BIST0_RTNEN  (0x00000004)
-#define LAN937X_ACL_PORT_TCAM_BIST0_RUN (0x00000002)
-#define LAN937X_ACL_PORT_TCAM_BIST0_RESET  (0x00000001)
-#define LAN937X_ACL_PORT_TCAM_BIST1_DEFADDR  (0x0000007F)
-#define LAN937X_ACL_PORT_TCAM_BIST2_FAILSEQ  (0x000000FF)
-#define LAN937X_ACL_PORT_TCAM_BIST3_SKPERRCNT (0x0000001F)
+#define ACL_TCAM_BIST0_TCAMSEL  (0x00000600)
+#define ACL_TCAM_BIST0_FAIL   (0x00000100)
+#define ACL_TCAM_BIST0_PASS   (0x00000080)
+#define ACL_TCAM_BIST0_PAUSE  (0x00000040)
+#define ACL_TCAM_BIST0_SHO (0x00000020)
+#define ACL_TCAM_BIST0_SHI (0x00000010)
+#define ACL_TCAM_BIST0_RESUME (0x00000008)
+#define ACL_TCAM_BIST0_RTNEN  (0x00000004)
+#define ACL_TCAM_BIST0_RUN (0x00000002)
+#define ACL_TCAM_BIST0_RESET  (0x00000001)
+#define ACL_TCAM_BIST1_DEFADDR  (0x0000007F)
+#define ACL_TCAM_BIST2_FAILSEQ  (0x000000FF)
+#define ACL_TCAM_BIST3_SKPERRCNT (0x0000001F)
 
 #define TCAM_BIST_TCAMSEL_SHIFT  9
 #define TCAM_BIST_FAIL_SHIFT 8
@@ -205,6 +181,8 @@
 #define TCAM_DATA 0x02
 #define TCAM_MASK_DATA  0x03
 
+#define TCAM_MULTI_KEY_ENTRY_START	0x01
+
 #define TCAM_PARSER_0_1 0x00
 #define TCAM_PARSER_2_3 0x01
 
@@ -233,22 +211,22 @@
 #define ACLTCAMPARX 0x04
 #define ACLTCAMPARX_1  0x05
 
-#define ACLTCAMPARSER0 0x00
-#define ACLTCAMPARSER1 0x01
-#define ACLTCAMPARSER2 0x02
-#define ACLTCAMPARSER3 0x03
-#define ACLTCAMPARSER_0_1 0x04
-#define ACLTCAMPARSER_2_3 0x05
-#define ACLTCAM_UMR 0x01
-#define ACLTCAM_LMR 0x02
-#define ACLTCAM_RCS 0x00
-#define ACLTCAM_RCMRRAM 0x00
-#define ACLTCAM_RCMWRAM 0x01
-#define ACLTCAM_RCMRHW 0x02
-#define ACLTCAM_RCMWHW 0x03
+// #define ACLTCAMPARSER0 0x00
+// #define ACLTCAMPARSER1 0x01
+// #define ACLTCAMPARSER2 0x02
+// #define ACLTCAMPARSER3 0x03
+// #define ACLTCAMPARSER_0_1 0x04
+// #define ACLTCAMPARSER_2_3 0x05
+// #define ACLTCAM_UMR 0x01
+// #define ACLTCAM_LMR 0x02
+// #define ACLTCAM_RCS 0x00
+// #define ACLTCAM_RCMRRAM 0x00
+// #define ACLTCAM_RCMWRAM 0x01
+// #define ACLTCAM_RCMRHW 0x02
+// #define ACLTCAM_RCMWHW 0x03
 
-#define ACLPARSER_X 0x00
-#define ACLPARSER_Y 0x01
+// #define ACLPARSER_X 0x00
+// #define ACLPARSER_Y 0x01
 
 /*ACL MACRO*/
 #define MAX_ACL_ENTRIES 64
@@ -297,24 +275,35 @@ enum lan937x_acl_dissector_type {
 /**TCAM Access Control Register defines*/
 
 #define acl_pri_low(val)	((((u32)val) << TCAM_LO_PRI_POS)\
-				 & LAN937X_ACL_PORT_ARACR_ADD_SHIFT_LO_PRI)
+				 & ACL_ARACR_ADD_SHIFT_LO_PRI)
 #define acl_tcam_flush(val)	((((u32)val) << TCAM_FLUSH_POS)\
-				 & LAN937X_ACL_PORT_ARACR_TCAM_FLUSH)
+				 & ACL_ARACR_TCAM_FLUSH)
 #define acl_tcam_vben(val)	((((u32)val) << TCAM_VBEN_POS)\
-				 & LAN937X_ACL_PORT_ARACR_TCAM_VBEN)
+				 & ACL_ARACR_TCAM_VBEN)
 #define acl_tcam_vbi(val)	((((u32)val) << TCAM_VBI_POS)\
-				 & LAN937X_ACL_PORT_ARACR_TCAM_VBI)
+				 & ACL_ARACR_TCAM_VBI)
 #define acl_tcam_row_vld(val)	((((u32)val) << TCAM_ROW_VLD_POS)\
-				 & LAN937X_ACL_PORT_ARACR_TCAM_ROW_VLD)
+				 & ACL_ARACR_TCAM_ROW_VLD)
 #define acl_row_shift(val)	((((u32)val) << TCAM_START_ROW_SHIFT_POS)\
-				 & LAN937X_ACL_PORT_ARACR_START_ROW_SHFIT)
+				 & ACL_ARACR_START_ROW_SHFIT)
 #define acl_tcam_req(val)	((((u32)val) << TCAM_REQ_TYPE_POS)\
-				 & LAN937X_ACL_PORT_ARACR_TCAM_REQ_TYPE)
+				 & ACL_ARACR_TCAM_REQ_TYPE)
 #define acl_tcam_acc(val)	((((u32)val) << TCAM_ACC_TYPE_POS)\
-				 & LAN937X_ACL_PORT_ARACR_TCAM_ACC_TYPE)
+				 & ACL_ARACR_TCAM_ACC_TYPE)
 #define acl_num_shift(val)	((((u32)val) << TCAM_NUM_SHIFT_POS)\
-				 & LAN937X_ACL_PORT_ARACR_TCAM_NUM_SHIFT)
-#define acl_tcam_addr(val)	 (((u32)val) & LAN937X_ACL_PORT_ARACR_TCAM_ADDR_MASK)
+				 & ACL_ARACR_TCAM_NUM_SHIFT)
+#define acl_tcam_addr(val)	(((u32)val) & ACL_ARACR_TCAM_ADDR_MASK)
+
+#define acl_acc_ctl(acc)	(acl_pri_low(acc->pri_low) |\
+				 acl_tcam_flush(acc->tcam_flush) |\
+				 acl_tcam_vben(acc->tcam_vben) |\
+				 acl_tcam_vbi(acc->tcam_vbi) |\
+				 acl_tcam_row_vld(acc->tcam_row_vld) |\
+				 acl_row_shift(acc->row_shift) |\
+				 acl_tcam_req(acc->tcam_req) |\
+				 acl_tcam_acc(acc->tcam_acc) |\
+				 acl_num_shift(acc->num_shift) |\
+				 acl_tcam_addr(acc->tcam_addr))
 
 /****************************
  * TCAM Structures
@@ -391,6 +380,18 @@ struct lan937x_acl_access_ctl {
 	u8 num_shift;
 	u8 tcam_addr;
 };
+/*Macros to set values in lan937x_acl_access_ctl*/
+#define clr_data(data)	memset(&data,0x00,sizeof(data))
+#define set_pri_low(acc, val)	acc.pri_low = val
+#define set_tcam_flush(acc, val)	acc.tcam_flush = val
+#define set_tcam_vben(acc, val)	acc.tcam_vben = val
+#define set_tcam_vbi(acc, val)	acc.tcam_vbi = val
+#define set_tcam_row_vld(acc,val)	acc.tcam_row_vld = val
+#define set_row_shift(acc,val)	acc.row_shift = val
+#define set_tcam_req(acc,val)	acc.tcam_req = val
+#define set_tcam_acc(acc,val)	acc.tcam_acc = val
+#define set_num_shift(acc,val)	acc.num_shift = val
+#define set_tcam_addr(acc,val)	acc.tcam_addr = val
 
 struct lan937x_acl_byte_en {
 	u8 acl_mask[6];

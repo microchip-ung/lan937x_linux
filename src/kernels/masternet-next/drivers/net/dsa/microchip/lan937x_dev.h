@@ -22,6 +22,8 @@ int lan937x_pwrite16(struct ksz_device *dev, int port,
 		     int offset, u16 data);
 int lan937x_pwrite32(struct ksz_device *dev, int port,
 		     int offset, u32 data);
+int lan937x_pwrite8_bulk(struct ksz_device *dev, int port, int offset, 
+			 u8* data, u8 n);
 int lan937x_port_cfg32(struct ksz_device *dev, int port, int offset,
 		       u32 bits, bool set);
 int lan937x_internal_phy_write(struct ksz_device *dev, int addr,

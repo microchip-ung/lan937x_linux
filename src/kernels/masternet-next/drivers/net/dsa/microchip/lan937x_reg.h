@@ -998,4 +998,29 @@
 #define METER_BS_CBS_POS			16
 #define PORT_METER_RED_INT_MSK_ALL		0xFF
 
+/**TCAM/ACL Register space*/
+/* ACL Registers START */
+#define ACL_CTRL_BASE_ADDR  (0x600)
+#define ACL_CTRL_PORT_BASE_ADDR(port) ((port) * 0x1000)
+/* Reg Base address */
+#define REG_ACL_PORT_ADR 		(ACL_CTRL_BASE_ADDR + 0x00)  /* 96b */
+#define REG_ACL_PORT_AAR 		(ACL_CTRL_BASE_ADDR + 0x60)  /* 08b */
+#define REG_ACL_PORT_ABER		(ACL_CTRL_BASE_ADDR + 0x68)  /* 14b */
+#define REG_ACL_PORT_ARACR		(ACL_CTRL_BASE_ADDR + 0x78)  /* 04b */
+#define REG_ACL_PORT_PCTRL		(ACL_CTRL_BASE_ADDR + 0x7C)  /* 04b */
+#define REG_ACL_PORT_FR_COUNT0		(ACL_CTRL_BASE_ADDR + 0x80)  /* 04b */
+#define REG_ACL_PORT_FR_COUNT1		(ACL_CTRL_BASE_ADDR + 0x84)  /* 04b */
+#define REG_ACL_PORT_FR_COUNT2		(ACL_CTRL_BASE_ADDR + 0x88)  /* 04b */
+#define REG_ACL_PORT_FR_COUNT3		(ACL_CTRL_BASE_ADDR + 0x8C)  /* 04b */
+#define REG_ACL_PORT_NMATCH		(ACL_CTRL_BASE_ADDR + 0x94)  /* 08b */
+#define REG_ACL_PORT_INT_STS		(ACL_CTRL_BASE_ADDR + 0xA0)  /* 01b */
+#define REG_ACL_PORT_INT_MASK 		(ACL_CTRL_BASE_ADDR + 0xA2)  /* 01b */
+#define REG_ACL_PORT_SPARE		(ACL_CTRL_BASE_ADDR + 0xC0)  /* 04b */
+#define REG_ACL_PORT_TCAM_BIST0		(ACL_CTRL_BASE_ADDR + 0xD0)  /* 02b */
+#define REG_ACL_PORT_TCAM_BIST1		(ACL_CTRL_BASE_ADDR + 0xD2)  /* 01b */
+#define REG_ACL_PORT_TCAM_BIST2		(ACL_CTRL_BASE_ADDR + 0xD3)  /* 01b */
+#define REG_ACL_PORT_TCAM_BIST3		(ACL_CTRL_BASE_ADDR + 0xD4)  /* 01b */
+#define REG_ACL_PORT_TCAM_BITMAP	(ACL_CTRL_BASE_ADDR + 0xE0)  /* 16b */
+
+
 #endif

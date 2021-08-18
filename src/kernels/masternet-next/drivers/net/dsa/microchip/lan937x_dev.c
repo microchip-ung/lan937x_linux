@@ -110,6 +110,12 @@ int lan937x_pwrite32(struct ksz_device *dev, int port, int offset, u32 data)
 	return ksz_write32(dev, PORT_CTRL_ADDR(port, offset), data);
 }
 
+int lan937x_pwrite8_bulk(struct ksz_device *dev, int port, int offset, 
+			 u8 *data, u8 n)
+{
+	return ksz_write8_bulk(dev, PORT_CTRL_ADDR(port, offset), data, n);
+}
+
 int lan937x_port_cfg32(struct ksz_device *dev, int port, int offset, u32 bits,
 		       bool set)
 {

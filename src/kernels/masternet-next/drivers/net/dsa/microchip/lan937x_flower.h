@@ -151,7 +151,7 @@ struct lan937x_flower_rule {
 
 int lan937x_tc_flower_add(struct dsa_switch *ds, int port,
 			  struct flow_cls_offload *cls, bool ingress);
-void lan937x_flower_setup(struct dsa_switch *ds);
+int lan937x_flower_setup(struct dsa_switch *ds);
 
 int lan937x_init_acl_parsers(struct ksz_device *dev, int port);
 
@@ -162,14 +162,19 @@ int lan937x_tc_flower_del(struct dsa_switch *ds, int port,
 int lan937x_tc_flower_stats(struct dsa_switch *ds, int port,
 			    struct flow_cls_offload *cls, bool ingress);
 
-int lan937x_get_acl_requirements(enum lan937x_filter_type filter_type,
-				 u8 *parser_idx, u8 *num_entries);
+int lan937x_get_acl_req(enum lan937x_filter_type filter_type,
+			u8 *parser_idx, u8 *num_entries);
 struct lan937x_flr_blk *lan937x_get_flr_blk (struct ksz_device *dev,
 					     int port);
 struct lan937x_p_res *lan937x_get_flr_res (struct ksz_device *dev,
 					 int port);
 
 extern int lan937x_tc_pol_rate_to_reg (u64 rate_bytes_per_sec, u8* regval);
+int lan937x_assign_tcam_entries(struct ksz_device *dev,
+				       int port, u8 num_entry_reqd,
+				       u8 *tcam_idx);
+int lan937x_acl_free_entry(struct ksz_device *dev, int port,
+			   struct lan937x_flower_rule *rule);
 
 #endif
 
