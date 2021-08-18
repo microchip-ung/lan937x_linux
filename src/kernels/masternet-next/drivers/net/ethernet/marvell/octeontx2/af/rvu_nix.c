@@ -192,15 +192,67 @@ struct nix_hw *get_nix_hw(struct rvu_hwinfo *hw, int blkaddr)
 	return NULL;
 }
 
+u32 convert_dwrr_mtu_to_bytes(u8 dwrr_mtu)
+{
+	dwrr_mtu &= 0x1FULL;
+
+	/* MTU used for DWRR calculation is in power of 2 up until 64K bytes.
+	 * Value of 4 is reserved for MTU value of 9728 bytes.
+	 * Value of 5 is reserved for MTU value of 10240 bytes.
+	 */
+	switch (dwrr_mtu) {
+	case 4:
+		return 9728;
+	case 5:
+		return 10240;
+	default:
+		return BIT_ULL(dwrr_mtu);
+	}
+
+	return 0;
+}
+
+u32 convert_bytes_to_dwrr_mtu(u32 bytes)
+{
+	/* MTU used for DWRR calculation is in power of 2 up until 64K bytes.
+	 * Value of 4 is reserved for MTU value of 9728 bytes.
+	 * Value of 5 is reserved for MTU value of 10240 bytes.
+	 */
+	if (bytes > BIT_ULL(16))
+		return 0;
+
+	switch (bytes) {
+	case 9728:
+		return 4;
+	case 10240:
+		return 5;
+	default:
+		return ilog2(bytes);
+	}
+
+	return 0;
+}
+
 static void nix_rx_sync(struct rvu *rvu, int blkaddr)
 {
 	int err;
 
-	/*Sync all in flight RX packets to LLC/DRAM */
+	/* Sync all in flight RX packets to LLC/DRAM */
 	rvu_write64(rvu, blkaddr, NIX_AF_RX_SW_SYNC, BIT_ULL(0));
 	err = rvu_poll_reg(rvu, blkaddr, NIX_AF_RX_SW_SYNC, BIT_ULL(0), true);
 	if (err)
-		dev_err(rvu->dev, "NIX RX software sync failed\n");
+		dev_err(rvu->dev, "SYNC1: NIX RX software sync failed\n");
+
+	/* SW_SYNC ensures all existing transactions are finished and pkts
+	 * are written to LLC/DRAM, queues should be teared down after
+	 * successful SW_SYNC. Due to a HW errata, in some rare scenarios
+	 * an existing transaction might end after SW_SYNC operation. To
+	 * ensure operation is fully done, do the SW_SYNC twice.
+	 */
+	rvu_write64(rvu, blkaddr, NIX_AF_RX_SW_SYNC, BIT_ULL(0));
+	err = rvu_poll_reg(rvu, blkaddr, NIX_AF_RX_SW_SYNC, BIT_ULL(0), true);
+	if (err)
+		dev_err(rvu->dev, "SYNC2: NIX RX software sync failed\n");
 }
 
 static bool is_valid_txschq(struct rvu *rvu, int blkaddr,
@@ -298,6 +350,7 @@ static int nix_interface_init(struct rvu *rvu, u16 pcifunc, int type, int nixlf)
 					rvu_nix_chan_lbk(rvu, lbkid, vf + 1);
 		pfvf->rx_chan_cnt = 1;
 		pfvf->tx_chan_cnt = 1;
+		rvu_npc_set_pkind(rvu, NPC_RX_LBK_PKIND, pfvf);
 		rvu_npc_install_promisc_entry(rvu, pcifunc, nixlf,
 					      pfvf->rx_chan_base,
 					      pfvf->rx_chan_cnt);
@@ -931,7 +984,7 @@ static int rvu_nix_aq_enq_inst(struct rvu *rvu, struct nix_aq_enq_req *req,
 
 	nix_hw =  get_nix_hw(rvu->hw, blkaddr);
 	if (!nix_hw)
-		return -EINVAL;
+		return NIX_AF_ERR_INVALID_NIXBLK;
 
 	return rvu_nix_blk_aq_enq_inst(rvu, nix_hw, req, rsp);
 }
@@ -1352,7 +1405,7 @@ int rvu_mbox_handler_nix_mark_format_cfg(struct rvu *rvu,
 
 	nix_hw = get_nix_hw(rvu->hw, blkaddr);
 	if (!nix_hw)
-		return -EINVAL;
+		return NIX_AF_ERR_INVALID_NIXBLK;
 
 	cfg = (((u32)req->offset & 0x7) << 16) |
 	      (((u32)req->y_mask & 0xF) << 12) |
@@ -1620,7 +1673,7 @@ int rvu_mbox_handler_nix_txsch_alloc(struct rvu *rvu,
 
 	nix_hw = get_nix_hw(rvu->hw, blkaddr);
 	if (!nix_hw)
-		return -EINVAL;
+		return NIX_AF_ERR_INVALID_NIXBLK;
 
 	mutex_lock(&rvu->rsrc_lock);
 
@@ -1742,7 +1795,7 @@ static int nix_txschq_free(struct rvu *rvu, u16 pcifunc)
 
 	nix_hw = get_nix_hw(rvu->hw, blkaddr);
 	if (!nix_hw)
-		return -EINVAL;
+		return NIX_AF_ERR_INVALID_NIXBLK;
 
 	nixlf = rvu_get_lf(rvu, &hw->block[blkaddr], pcifunc, 0);
 	if (nixlf < 0)
@@ -1813,7 +1866,7 @@ static int nix_txschq_free_one(struct rvu *rvu,
 
 	nix_hw = get_nix_hw(rvu->hw, blkaddr);
 	if (!nix_hw)
-		return -EINVAL;
+		return NIX_AF_ERR_INVALID_NIXBLK;
 
 	nixlf = rvu_get_lf(rvu, &hw->block[blkaddr], pcifunc, 0);
 	if (nixlf < 0)
@@ -1946,10 +1999,48 @@ static void nix_tl1_default_cfg(struct rvu *rvu, struct nix_hw *nix_hw,
 		return;
 	rvu_write64(rvu, blkaddr, NIX_AF_TL1X_TOPOLOGY(schq),
 		    (TXSCH_TL1_DFLT_RR_PRIO << 1));
-	rvu_write64(rvu, blkaddr, NIX_AF_TL1X_SCHEDULE(schq),
-		    TXSCH_TL1_DFLT_RR_QTM);
+
+	/* On OcteonTx2 the config was in bytes and newer silcons
+	 * it's changed to weight.
+	 */
+	if (!rvu->hw->cap.nix_common_dwrr_mtu)
+		rvu_write64(rvu, blkaddr, NIX_AF_TL1X_SCHEDULE(schq),
+			    TXSCH_TL1_DFLT_RR_QTM);
+	else
+		rvu_write64(rvu, blkaddr, NIX_AF_TL1X_SCHEDULE(schq),
+			    CN10K_MAX_DWRR_WEIGHT);
+
 	rvu_write64(rvu, blkaddr, NIX_AF_TL1X_CIR(schq), 0x00);
 	pfvf_map[schq] = TXSCH_SET_FLAG(pfvf_map[schq], NIX_TXSCHQ_CFG_DONE);
+}
+
+static void rvu_nix_tx_tl2_cfg(struct rvu *rvu, int blkaddr,
+			       u16 pcifunc, struct nix_txsch *txsch)
+{
+	struct rvu_hwinfo *hw = rvu->hw;
+	int lbk_link_start, lbk_links;
+	u8 pf = rvu_get_pf(pcifunc);
+	int schq;
+
+	if (!is_pf_cgxmapped(rvu, pf))
+		return;
+
+	lbk_link_start = hw->cgx_links;
+
+	for (schq = 0; schq < txsch->schq.max; schq++) {
+		if (TXSCH_MAP_FUNC(txsch->pfvf_map[schq]) != pcifunc)
+			continue;
+		/* Enable all LBK links with channel 63 by default so that
+		 * packets can be sent to LBK with a NPC TX MCAM rule
+		 */
+		lbk_links = hw->lbk_links;
+		while (lbk_links--)
+			rvu_write64(rvu, blkaddr,
+				    NIX_AF_TL3_TL2X_LINKX_CFG(schq,
+							      lbk_link_start +
+							      lbk_links),
+				    BIT_ULL(12) | RVU_SWITCH_LBK_CHAN);
+	}
 }
 
 int rvu_mbox_handler_nix_txschq_cfg(struct rvu *rvu,
@@ -1975,7 +2066,7 @@ int rvu_mbox_handler_nix_txschq_cfg(struct rvu *rvu,
 
 	nix_hw = get_nix_hw(rvu->hw, blkaddr);
 	if (!nix_hw)
-		return -EINVAL;
+		return NIX_AF_ERR_INVALID_NIXBLK;
 
 	txsch = &nix_hw->txsch[req->lvl];
 	pfvf_map = txsch->pfvf_map;
@@ -2040,6 +2131,9 @@ int rvu_mbox_handler_nix_txschq_cfg(struct rvu *rvu,
 		rvu_write64(rvu, blkaddr, reg, regval);
 	}
 
+	rvu_nix_tx_tl2_cfg(rvu, blkaddr, pcifunc,
+			   &nix_hw->txsch[NIX_TXSCH_LVL_TL2]);
+
 	return 0;
 }
 
@@ -2070,8 +2164,12 @@ static int nix_tx_vtag_free(struct rvu *rvu, int blkaddr,
 			    u16 pcifunc, int index)
 {
 	struct nix_hw *nix_hw = get_nix_hw(rvu->hw, blkaddr);
-	struct nix_txvlan *vlan = &nix_hw->txvlan;
+	struct nix_txvlan *vlan;
 
+	if (!nix_hw)
+		return NIX_AF_ERR_INVALID_NIXBLK;
+
+	vlan = &nix_hw->txvlan;
 	if (vlan->entry2pfvf_map[index] != pcifunc)
 		return NIX_AF_ERR_PARAM;
 
@@ -2112,9 +2210,14 @@ static int nix_tx_vtag_alloc(struct rvu *rvu, int blkaddr,
 			     u64 vtag, u8 size)
 {
 	struct nix_hw *nix_hw = get_nix_hw(rvu->hw, blkaddr);
-	struct nix_txvlan *vlan = &nix_hw->txvlan;
+	struct nix_txvlan *vlan;
 	u64 regval;
 	int index;
+
+	if (!nix_hw)
+		return NIX_AF_ERR_INVALID_NIXBLK;
+
+	vlan = &nix_hw->txvlan;
 
 	mutex_lock(&vlan->rsrc_lock);
 
@@ -2140,12 +2243,16 @@ static int nix_tx_vtag_decfg(struct rvu *rvu, int blkaddr,
 			     struct nix_vtag_config *req)
 {
 	struct nix_hw *nix_hw = get_nix_hw(rvu->hw, blkaddr);
-	struct nix_txvlan *vlan = &nix_hw->txvlan;
 	u16 pcifunc = req->hdr.pcifunc;
 	int idx0 = req->tx.vtag0_idx;
 	int idx1 = req->tx.vtag1_idx;
+	struct nix_txvlan *vlan;
 	int err = 0;
 
+	if (!nix_hw)
+		return NIX_AF_ERR_INVALID_NIXBLK;
+
+	vlan = &nix_hw->txvlan;
 	if (req->tx.free_vtag0 && req->tx.free_vtag1)
 		if (vlan->entry2pfvf_map[idx0] != pcifunc ||
 		    vlan->entry2pfvf_map[idx1] != pcifunc)
@@ -2172,9 +2279,13 @@ static int nix_tx_vtag_cfg(struct rvu *rvu, int blkaddr,
 			   struct nix_vtag_config_rsp *rsp)
 {
 	struct nix_hw *nix_hw = get_nix_hw(rvu->hw, blkaddr);
-	struct nix_txvlan *vlan = &nix_hw->txvlan;
+	struct nix_txvlan *vlan;
 	u16 pcifunc = req->hdr.pcifunc;
 
+	if (!nix_hw)
+		return NIX_AF_ERR_INVALID_NIXBLK;
+
+	vlan = &nix_hw->txvlan;
 	if (req->tx.cfg_vtag0) {
 		rsp->vtag0_idx =
 			nix_tx_vtag_alloc(rvu, blkaddr,
@@ -2623,6 +2734,15 @@ static int nix_setup_txschq(struct rvu *rvu, struct nix_hw *nix_hw, int blkaddr)
 		for (schq = 0; schq < txsch->schq.max; schq++)
 			txsch->pfvf_map[schq] = TXSCH_MAP(0, NIX_TXSCHQ_FREE);
 	}
+
+	/* Setup a default value of 8192 as DWRR MTU */
+	if (rvu->hw->cap.nix_common_dwrr_mtu) {
+		rvu_write64(rvu, blkaddr, NIX_AF_DWRR_RPM_MTU,
+			    convert_bytes_to_dwrr_mtu(8192));
+		rvu_write64(rvu, blkaddr, NIX_AF_DWRR_SDP_MTU,
+			    convert_bytes_to_dwrr_mtu(8192));
+	}
+
 	return 0;
 }
 
@@ -2699,6 +2819,7 @@ int rvu_mbox_handler_nix_get_hw_info(struct rvu *rvu, struct msg_req *req,
 				     struct nix_hw_info *rsp)
 {
 	u16 pcifunc = req->hdr.pcifunc;
+	u64 dwrr_mtu;
 	int blkaddr;
 
 	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NIX, pcifunc);
@@ -2711,6 +2832,20 @@ int rvu_mbox_handler_nix_get_hw_info(struct rvu *rvu, struct msg_req *req,
 		rvu_get_lmac_link_max_frs(rvu, &rsp->max_mtu);
 
 	rsp->min_mtu = NIC_HW_MIN_FRS;
+
+	if (!rvu->hw->cap.nix_common_dwrr_mtu) {
+		/* Return '1' on OTx2 */
+		rsp->rpm_dwrr_mtu = 1;
+		rsp->sdp_dwrr_mtu = 1;
+		return 0;
+	}
+
+	dwrr_mtu = rvu_read64(rvu, BLKADDR_NIX0, NIX_AF_DWRR_RPM_MTU);
+	rsp->rpm_dwrr_mtu = convert_dwrr_mtu_to_bytes(dwrr_mtu);
+
+	dwrr_mtu = rvu_read64(rvu, BLKADDR_NIX0, NIX_AF_DWRR_SDP_MTU);
+	rsp->sdp_dwrr_mtu = convert_dwrr_mtu_to_bytes(dwrr_mtu);
+
 	return 0;
 }
 
@@ -3024,7 +3159,7 @@ static int reserve_flowkey_alg_idx(struct rvu *rvu, int blkaddr, u32 flow_cfg)
 
 	hw = get_nix_hw(rvu->hw, blkaddr);
 	if (!hw)
-		return -EINVAL;
+		return NIX_AF_ERR_INVALID_NIXBLK;
 
 	/* No room to add new flow hash algoritham */
 	if (hw->flowkey.in_use >= NIX_FLOW_KEY_ALG_MAX)
@@ -3064,7 +3199,7 @@ int rvu_mbox_handler_nix_rss_flowkey_cfg(struct rvu *rvu,
 
 	nix_hw = get_nix_hw(rvu->hw, blkaddr);
 	if (!nix_hw)
-		return -EINVAL;
+		return NIX_AF_ERR_INVALID_NIXBLK;
 
 	alg_idx = get_flowkey_alg_idx(nix_hw, req->flowkey_cfg);
 	/* Failed to get algo index from the exiting list, reserve new  */
@@ -3179,6 +3314,8 @@ int rvu_mbox_handler_nix_set_mac_addr(struct rvu *rvu,
 
 	if (test_bit(PF_SET_VF_TRUSTED, &pfvf->flags) && from_vf)
 		ether_addr_copy(pfvf->default_mac, req->mac_addr);
+
+	rvu_switch_update_rules(rvu, pcifunc);
 
 	return 0;
 }
@@ -3339,7 +3476,7 @@ int rvu_mbox_handler_nix_set_hw_frs(struct rvu *rvu, struct nix_frs_cfg *req,
 
 	nix_hw = get_nix_hw(rvu->hw, blkaddr);
 	if (!nix_hw)
-		return -EINVAL;
+		return NIX_AF_ERR_INVALID_NIXBLK;
 
 	if (is_afvf(pcifunc))
 		rvu_get_lbk_link_max_frs(rvu, &max_mtu);
@@ -3601,6 +3738,28 @@ static int nix_aq_init(struct rvu *rvu, struct rvu_block *block)
 	return 0;
 }
 
+static void rvu_nix_setup_capabilities(struct rvu *rvu, int blkaddr)
+{
+	struct rvu_hwinfo *hw = rvu->hw;
+	u64 hw_const;
+
+	hw_const = rvu_read64(rvu, blkaddr, NIX_AF_CONST1);
+
+	/* On OcteonTx2 DWRR quantum is directly configured into each of
+	 * the transmit scheduler queues. And PF/VF drivers were free to
+	 * config any value upto 2^24.
+	 * On CN10K, HW is modified, the quantum configuration at scheduler
+	 * queues is in terms of weight. And SW needs to setup a base DWRR MTU
+	 * at NIX_AF_DWRR_RPM_MTU / NIX_AF_DWRR_SDP_MTU. HW will do
+	 * 'DWRR MTU * weight' to get the quantum.
+	 *
+	 * Check if HW uses a common MTU for all DWRR quantum configs.
+	 * On OcteonTx2 this register field is '0'.
+	 */
+	if (((hw_const >> 56) & 0x10) == 0x10)
+		hw->cap.nix_common_dwrr_mtu = true;
+}
+
 static int rvu_nix_block_init(struct rvu *rvu, struct nix_hw *nix_hw)
 {
 	const struct npc_lt_def_cfg *ltdefs;
@@ -3637,6 +3796,9 @@ static int rvu_nix_block_init(struct rvu *rvu, struct nix_hw *nix_hw)
 	err = nix_calibrate_x2p(rvu, blkaddr);
 	if (err)
 		return err;
+
+	/* Setup capabilities of the NIX block */
+	rvu_nix_setup_capabilities(rvu, blkaddr);
 
 	/* Initialize admin queue */
 	err = nix_aq_init(rvu, block);
@@ -3808,7 +3970,6 @@ static void rvu_nix_block_freemem(struct rvu *rvu, int blkaddr,
 		vlan = &nix_hw->txvlan;
 		kfree(vlan->rsrc.bmap);
 		mutex_destroy(&vlan->rsrc_lock);
-		devm_kfree(rvu->dev, vlan->entry2pfvf_map);
 
 		mcast = &nix_hw->mcast;
 		qmem_free(rvu->dev, mcast->mce_ctx);
@@ -3848,6 +4009,8 @@ int rvu_mbox_handler_nix_lf_start_rx(struct rvu *rvu, struct msg_req *req,
 
 	pfvf = rvu_get_pfvf(rvu, pcifunc);
 	set_bit(NIXLF_INITIALIZED, &pfvf->flags);
+
+	rvu_switch_update_rules(rvu, pcifunc);
 
 	return rvu_cgx_start_stop_io(rvu, pcifunc, true);
 }
@@ -3980,7 +4143,7 @@ int rvu_mbox_handler_nix_lso_format_cfg(struct rvu *rvu,
 
 	nix_hw = get_nix_hw(rvu->hw, blkaddr);
 	if (!nix_hw)
-		return -EINVAL;
+		return NIX_AF_ERR_INVALID_NIXBLK;
 
 	/* Find existing matching LSO format, if any */
 	for (idx = 0; idx < nix_hw->lso.in_use; idx++) {

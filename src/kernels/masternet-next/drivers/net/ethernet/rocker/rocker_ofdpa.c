@@ -1822,7 +1822,7 @@ static void ofdpa_port_fdb_learn_work(struct work_struct *work)
 		container_of(work, struct ofdpa_fdb_learn_work, work);
 	bool removing = (lw->flags & OFDPA_OP_FLAG_REMOVE);
 	bool learned = (lw->flags & OFDPA_OP_FLAG_LEARNED);
-	struct switchdev_notifier_fdb_info info;
+	struct switchdev_notifier_fdb_info info = {};
 
 	info.addr = lw->addr;
 	info.vid = lw->vid;
@@ -2599,7 +2599,7 @@ static int ofdpa_port_bridge_join(struct ofdpa_port *ofdpa_port,
 		return err;
 
 	return switchdev_bridge_port_offload(dev, dev, NULL, NULL, NULL,
-					     extack);
+					     false, extack);
 }
 
 static int ofdpa_port_bridge_leave(struct ofdpa_port *ofdpa_port)

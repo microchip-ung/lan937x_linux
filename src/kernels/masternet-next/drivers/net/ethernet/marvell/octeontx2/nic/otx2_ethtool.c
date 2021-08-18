@@ -298,15 +298,14 @@ static int otx2_set_channels(struct net_device *dev,
 	err = otx2_set_real_num_queues(dev, channel->tx_count,
 				       channel->rx_count);
 	if (err)
-		goto fail;
+		return err;
 
 	pfvf->hw.rx_queues = channel->rx_count;
 	pfvf->hw.tx_queues = channel->tx_count;
 	pfvf->qset.cq_cnt = pfvf->hw.tx_queues +  pfvf->hw.rx_queues;
 
-fail:
 	if (if_up)
-		dev->netdev_ops->ndo_open(dev);
+		err = dev->netdev_ops->ndo_open(dev);
 
 	netdev_info(dev, "Setting num Tx rings to %d, Rx rings to %d success\n",
 		    pfvf->hw.tx_queues, pfvf->hw.rx_queues);
@@ -410,7 +409,7 @@ static int otx2_set_ringparam(struct net_device *netdev,
 	qs->rqe_cnt = rx_count;
 
 	if (if_up)
-		netdev->netdev_ops->ndo_open(netdev);
+		return netdev->netdev_ops->ndo_open(netdev);
 
 	return 0;
 }
@@ -646,6 +645,7 @@ static int otx2_set_rss_hash_opts(struct otx2_nic *pfvf,
 static int otx2_get_rxnfc(struct net_device *dev,
 			  struct ethtool_rxnfc *nfc, u32 *rules)
 {
+	bool ntuple = !!(dev->features & NETIF_F_NTUPLE);
 	struct otx2_nic *pfvf = netdev_priv(dev);
 	int ret = -EOPNOTSUPP;
 
@@ -655,14 +655,18 @@ static int otx2_get_rxnfc(struct net_device *dev,
 		ret = 0;
 		break;
 	case ETHTOOL_GRXCLSRLCNT:
-		nfc->rule_cnt = pfvf->flow_cfg->nr_flows;
-		ret = 0;
+		if (netif_running(dev) && ntuple) {
+			nfc->rule_cnt = pfvf->flow_cfg->nr_flows;
+			ret = 0;
+		}
 		break;
 	case ETHTOOL_GRXCLSRULE:
-		ret = otx2_get_flow(pfvf, nfc,  nfc->fs.location);
+		if (netif_running(dev) && ntuple)
+			ret = otx2_get_flow(pfvf, nfc,  nfc->fs.location);
 		break;
 	case ETHTOOL_GRXCLSRLALL:
-		ret = otx2_get_all_flows(pfvf, nfc, rules);
+		if (netif_running(dev) && ntuple)
+			ret = otx2_get_all_flows(pfvf, nfc, rules);
 		break;
 	case ETHTOOL_GRXFH:
 		return otx2_get_rss_hash_opts(pfvf, nfc);
@@ -689,41 +693,6 @@ static int otx2_set_rxnfc(struct net_device *dev, struct ethtool_rxnfc *nfc)
 	case ETHTOOL_SRXCLSRLDEL:
 		if (netif_running(dev) && ntuple)
 			ret = otx2_remove_flow(pfvf, nfc->fs.location);
-		break;
-	default:
-		break;
-	}
-
-	return ret;
-}
-
-static int otx2vf_get_rxnfc(struct net_device *dev,
-			    struct ethtool_rxnfc *nfc, u32 *rules)
-{
-	struct otx2_nic *pfvf = netdev_priv(dev);
-	int ret = -EOPNOTSUPP;
-
-	switch (nfc->cmd) {
-	case ETHTOOL_GRXRINGS:
-		nfc->data = pfvf->hw.rx_queues;
-		ret = 0;
-		break;
-	case ETHTOOL_GRXFH:
-		return otx2_get_rss_hash_opts(pfvf, nfc);
-	default:
-		break;
-	}
-	return ret;
-}
-
-static int otx2vf_set_rxnfc(struct net_device *dev, struct ethtool_rxnfc *nfc)
-{
-	struct otx2_nic *pfvf = netdev_priv(dev);
-	int ret = -EOPNOTSUPP;
-
-	switch (nfc->cmd) {
-	case ETHTOOL_SRXFH:
-		ret = otx2_set_rss_hash_opts(pfvf, nfc);
 		break;
 	default:
 		break;
@@ -1358,8 +1327,8 @@ static const struct ethtool_ops otx2vf_ethtool_ops = {
 	.get_sset_count		= otx2vf_get_sset_count,
 	.set_channels		= otx2_set_channels,
 	.get_channels		= otx2_get_channels,
-	.get_rxnfc		= otx2vf_get_rxnfc,
-	.set_rxnfc              = otx2vf_set_rxnfc,
+	.get_rxnfc		= otx2_get_rxnfc,
+	.set_rxnfc              = otx2_set_rxnfc,
 	.get_rxfh_key_size	= otx2_get_rxfh_key_size,
 	.get_rxfh_indir_size	= otx2_get_rxfh_indir_size,
 	.get_rxfh		= otx2_get_rxfh,

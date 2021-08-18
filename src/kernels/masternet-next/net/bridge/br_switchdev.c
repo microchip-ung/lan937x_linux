@@ -8,6 +8,51 @@
 
 #include "br_private.h"
 
+static struct static_key_false br_switchdev_tx_fwd_offload;
+
+static bool nbp_switchdev_can_offload_tx_fwd(const struct net_bridge_port *p,
+					     const struct sk_buff *skb)
+{
+	if (!static_branch_unlikely(&br_switchdev_tx_fwd_offload))
+		return false;
+
+	return (p->flags & BR_TX_FWD_OFFLOAD) &&
+	       (p->hwdom != BR_INPUT_SKB_CB(skb)->src_hwdom);
+}
+
+bool br_switchdev_frame_uses_tx_fwd_offload(struct sk_buff *skb)
+{
+	if (!static_branch_unlikely(&br_switchdev_tx_fwd_offload))
+		return false;
+
+	return BR_INPUT_SKB_CB(skb)->tx_fwd_offload;
+}
+
+void br_switchdev_frame_set_offload_fwd_mark(struct sk_buff *skb)
+{
+	skb->offload_fwd_mark = br_switchdev_frame_uses_tx_fwd_offload(skb);
+}
+
+/* Mark the frame for TX forwarding offload if this egress port supports it */
+void nbp_switchdev_frame_mark_tx_fwd_offload(const struct net_bridge_port *p,
+					     struct sk_buff *skb)
+{
+	if (nbp_switchdev_can_offload_tx_fwd(p, skb))
+		BR_INPUT_SKB_CB(skb)->tx_fwd_offload = true;
+}
+
+/* Lazily adds the hwdom of the egress bridge port to the bit mask of hwdoms
+ * that the skb has been already forwarded to, to avoid further cloning to
+ * other ports in the same hwdom by making nbp_switchdev_allowed_egress()
+ * return false.
+ */
+void nbp_switchdev_frame_mark_tx_fwd_to_hwdom(const struct net_bridge_port *p,
+					      struct sk_buff *skb)
+{
+	if (nbp_switchdev_can_offload_tx_fwd(p, skb))
+		set_bit(p->hwdom, &BR_INPUT_SKB_CB(skb)->fwd_hwdoms);
+}
+
 void nbp_switchdev_frame_mark(const struct net_bridge_port *p,
 			      struct sk_buff *skb)
 {
@@ -18,8 +63,10 @@ void nbp_switchdev_frame_mark(const struct net_bridge_port *p,
 bool nbp_switchdev_allowed_egress(const struct net_bridge_port *p,
 				  const struct sk_buff *skb)
 {
-	return !skb->offload_fwd_mark ||
-	       BR_INPUT_SKB_CB(skb)->src_hwdom != p->hwdom;
+	struct br_input_skb_cb *cb = BR_INPUT_SKB_CB(skb);
+
+	return !test_bit(p->hwdom, &cb->fwd_hwdoms) &&
+		(!skb->offload_fwd_mark || cb->src_hwdom != p->hwdom);
 }
 
 /* Flags that can be offloaded to hardware */
@@ -80,7 +127,6 @@ br_switchdev_fdb_notify(struct net_bridge *br,
 			const struct net_bridge_fdb_entry *fdb, int type)
 {
 	const struct net_bridge_port *dst = READ_ONCE(fdb->dst);
-	struct net_device *dev = dst ? dst->dev : br->dev;
 	struct switchdev_notifier_fdb_info info = {
 		.addr = fdb->key.addr.addr,
 		.vid = fdb->key.vlan_id,
@@ -88,6 +134,7 @@ br_switchdev_fdb_notify(struct net_bridge *br,
 		.is_local = test_bit(BR_FDB_LOCAL, &fdb->flags),
 		.offloaded = test_bit(BR_FDB_OFFLOADED, &fdb->flags),
 	};
+	struct net_device *dev = (!dst || info.is_local) ? br->dev : dst->dev;
 
 	switch (type) {
 	case RTM_DELNEIGH:
@@ -164,8 +211,11 @@ static void nbp_switchdev_hwdom_put(struct net_bridge_port *leaving)
 
 static int nbp_switchdev_add(struct net_bridge_port *p,
 			     struct netdev_phys_item_id ppid,
+			     bool tx_fwd_offload,
 			     struct netlink_ext_ack *extack)
 {
+	int err;
+
 	if (p->offload_count) {
 		/* Prevent unsupported configurations such as a bridge port
 		 * which is a bonding interface, and the member ports are from
@@ -189,7 +239,16 @@ static int nbp_switchdev_add(struct net_bridge_port *p,
 	p->ppid = ppid;
 	p->offload_count = 1;
 
-	return nbp_switchdev_hwdom_set(p);
+	err = nbp_switchdev_hwdom_set(p);
+	if (err)
+		return err;
+
+	if (tx_fwd_offload) {
+		p->flags |= BR_TX_FWD_OFFLOAD;
+		static_branch_inc(&br_switchdev_tx_fwd_offload);
+	}
+
+	return 0;
 }
 
 static void nbp_switchdev_del(struct net_bridge_port *p)
@@ -204,6 +263,11 @@ static void nbp_switchdev_del(struct net_bridge_port *p)
 
 	if (p->hwdom)
 		nbp_switchdev_hwdom_put(p);
+
+	if (p->flags & BR_TX_FWD_OFFLOAD) {
+		p->flags &= ~BR_TX_FWD_OFFLOAD;
+		static_branch_dec(&br_switchdev_tx_fwd_offload);
+	}
 }
 
 static int nbp_switchdev_sync_objs(struct net_bridge_port *p, const void *ctx,
@@ -223,13 +287,7 @@ static int nbp_switchdev_sync_objs(struct net_bridge_port *p, const void *ctx,
 	if (err && err != -EOPNOTSUPP)
 		return err;
 
-	/* Forwarding and termination FDB entries on the port */
-	err = br_fdb_replay(br_dev, dev, ctx, true, atomic_nb);
-	if (err && err != -EOPNOTSUPP)
-		return err;
-
-	/* Termination FDB entries on the bridge itself */
-	err = br_fdb_replay(br_dev, br_dev, ctx, true, atomic_nb);
+	err = br_fdb_replay(br_dev, ctx, true, atomic_nb);
 	if (err && err != -EOPNOTSUPP)
 		return err;
 
@@ -248,37 +306,27 @@ static void nbp_switchdev_unsync_objs(struct net_bridge_port *p,
 
 	br_mdb_replay(br_dev, dev, ctx, false, blocking_nb, NULL);
 
-	/* Forwarding and termination FDB entries on the port */
-	br_fdb_replay(br_dev, dev, ctx, false, atomic_nb);
-
-	/* Termination FDB entries on the bridge itself */
-	br_fdb_replay(br_dev, br_dev, ctx, false, atomic_nb);
+	br_fdb_replay(br_dev, ctx, false, atomic_nb);
 }
 
 /* Let the bridge know that this port is offloaded, so that it can assign a
  * switchdev hardware domain to it.
  */
-int switchdev_bridge_port_offload(struct net_device *brport_dev,
-				  struct net_device *dev, const void *ctx,
-				  struct notifier_block *atomic_nb,
-				  struct notifier_block *blocking_nb,
-				  struct netlink_ext_ack *extack)
+int br_switchdev_port_offload(struct net_bridge_port *p,
+			      struct net_device *dev, const void *ctx,
+			      struct notifier_block *atomic_nb,
+			      struct notifier_block *blocking_nb,
+			      bool tx_fwd_offload,
+			      struct netlink_ext_ack *extack)
 {
 	struct netdev_phys_item_id ppid;
-	struct net_bridge_port *p;
 	int err;
-
-	ASSERT_RTNL();
-
-	p = br_port_get_rtnl(brport_dev);
-	if (!p)
-		return -ENODEV;
 
 	err = dev_get_port_parent_id(dev, &ppid, false);
 	if (err)
 		return err;
 
-	err = nbp_switchdev_add(p, ppid, extack);
+	err = nbp_switchdev_add(p, ppid, tx_fwd_offload, extack);
 	if (err)
 		return err;
 
@@ -293,23 +341,12 @@ out_switchdev_del:
 
 	return err;
 }
-EXPORT_SYMBOL_GPL(switchdev_bridge_port_offload);
 
-void switchdev_bridge_port_unoffload(struct net_device *brport_dev,
-				     const void *ctx,
-				     struct notifier_block *atomic_nb,
-				     struct notifier_block *blocking_nb)
+void br_switchdev_port_unoffload(struct net_bridge_port *p, const void *ctx,
+				 struct notifier_block *atomic_nb,
+				 struct notifier_block *blocking_nb)
 {
-	struct net_bridge_port *p;
-
-	ASSERT_RTNL();
-
-	p = br_port_get_rtnl(brport_dev);
-	if (!p)
-		return;
-
 	nbp_switchdev_unsync_objs(p, ctx, atomic_nb, blocking_nb);
 
 	nbp_switchdev_del(p);
 }
-EXPORT_SYMBOL_GPL(switchdev_bridge_port_unoffload);

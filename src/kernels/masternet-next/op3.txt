@@ -17,6 +17,7 @@
   CC      net/dsa/port.o
   CC      net/dsa/slave.o
   CC      net/dsa/switch.o
+  CC      net/dsa/tag_8021q.o
   AR      net/dsa/built-in.a
   AR      net/built-in.a
   GEN     .version

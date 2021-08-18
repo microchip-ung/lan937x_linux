@@ -329,6 +329,7 @@ struct hw_cap {
 	bool	nix_shaping;		 /* Is shaping and coloring supported */
 	bool	nix_tx_link_bp;		 /* Can link backpressure TL queues ? */
 	bool	nix_rx_multicast;	 /* Rx packet replication support */
+	bool	nix_common_dwrr_mtu;	 /* Common DWRR MTU for quantum config */
 	bool	per_pf_mbox_regs; /* PF mbox specified in per PF registers ? */
 	bool	programmable_chans; /* Channels programmable ? */
 	bool	ipolicer;
@@ -355,6 +356,7 @@ struct rvu_hwinfo {
 	u16	npc_counters;	   /* No of match stats counters */
 	u32	lbk_bufsize;	   /* FIFO size supported by LBK */
 	bool	npc_ext_set;	   /* Extended register set */
+	u64     npc_stat_ena;      /* Match stats enable bit */
 
 	struct hw_cap    cap;
 	struct rvu_block block[BLK_COUNT]; /* Block info */
@@ -415,6 +417,16 @@ struct npc_kpu_profile_adapter {
 	size_t				kpus;
 };
 
+#define RVU_SWITCH_LBK_CHAN	63
+
+struct rvu_switch {
+	struct mutex switch_lock; /* Serialize flow installation */
+	u32 used_entries;
+	u16 *entry2pcifunc;
+	u16 mode;
+	u16 start_entry;
+};
+
 struct rvu {
 	void __iomem		*afreg_base;
 	void __iomem		*pfreg_base;
@@ -445,6 +457,7 @@ struct rvu {
 
 	/* CGX */
 #define PF_CGXMAP_BASE		1 /* PF 0 is reserved for RVU PF */
+	u16			cgx_mapped_vfs; /* maximum CGX mapped VFs */
 	u8			cgx_mapped_pfs;
 	u8			cgx_cnt_max;	 /* CGX port count max */
 	u8			*pf2cgxlmac_map; /* pf to cgx_lmac map */
@@ -477,6 +490,9 @@ struct rvu {
 	struct rvu_debugfs	rvu_dbg;
 #endif
 	struct rvu_devlink	*rvu_dl;
+
+	/* RVU switch implementation over NPC with DMAC rules */
+	struct rvu_switch	rswitch;
 };
 
 static inline void rvu_write64(struct rvu *rvu, u64 block, u64 offset, u64 val)
@@ -691,6 +707,9 @@ int nix_aq_context_read(struct rvu *rvu, struct nix_hw *nix_hw,
 			struct nix_cn10k_aq_enq_req *aq_req,
 			struct nix_cn10k_aq_enq_rsp *aq_rsp,
 			u16 pcifunc, u8 ctype, u32 qidx);
+int rvu_get_nix_blkaddr(struct rvu *rvu, u16 pcifunc);
+u32 convert_dwrr_mtu_to_bytes(u8 dwrr_mtu);
+u32 convert_bytes_to_dwrr_mtu(u32 bytes);
 
 /* NPC APIs */
 int rvu_npc_init(struct rvu *rvu);
@@ -768,4 +787,10 @@ void rvu_dbg_exit(struct rvu *rvu);
 static inline void rvu_dbg_init(struct rvu *rvu) {}
 static inline void rvu_dbg_exit(struct rvu *rvu) {}
 #endif
+
+/* RVU Switch */
+void rvu_switch_enable(struct rvu *rvu);
+void rvu_switch_disable(struct rvu *rvu);
+void rvu_switch_update_rules(struct rvu *rvu, u16 pcifunc);
+
 #endif /* RVU_H */
