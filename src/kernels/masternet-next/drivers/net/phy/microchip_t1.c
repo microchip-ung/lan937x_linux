@@ -84,7 +84,7 @@
 #define T1_INTERRUPT2_SOURCE_REG	0x08
 
 #define LAN87XX_LINK_UP 		0x01
-#define LAN87XX_MAX_SQI 		0x08
+#define LAN87XX_MAX_SQI 		0x07
 #define LAN87XX_SQI_ENTRY		200
 
 #define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
@@ -517,24 +517,22 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 	sqi_avg /= 120;
 	link_avg /= LAN87XX_SQI_ENTRY;
 
-	if (sqi_avg >= 299) {
-		sqi_num = 0;
-	} else if ((sqi_avg <= 298) && (sqi_avg >=237)) {
-		sqi_num = 1;
-	} else if ((sqi_avg <= 236) && (sqi_avg >=189)) {
-		sqi_num = 2;
-	} else if ((sqi_avg <= 188) && (sqi_avg >=150)) {
-		sqi_num = 3;
-	} else if ((sqi_avg <= 149) && (sqi_avg >=119)) {
-		sqi_num = 4;
-	} else if ((sqi_avg <= 118) && (sqi_avg >=94)) {
-		sqi_num = 5;
+	if ((sqi_avg <= 74) && (sqi_avg >=0)) {
+		sqi_num = 7;
 	} else if ((sqi_avg <= 93) && (sqi_avg >=75)) {
 		sqi_num = 6;
-	} else if ((sqi_avg <= 74) && (sqi_avg >=0)) {
-		sqi_num = 7;
+	} else if ((sqi_avg <= 118) && (sqi_avg >=94)) {
+		sqi_num = 5;
+	} else if ((sqi_avg <= 149) && (sqi_avg >=119)) {
+		sqi_num = 4;
+	} else if ((sqi_avg <= 188) && (sqi_avg >=150)) {
+		sqi_num = 3;
+	} else if ((sqi_avg <= 236) && (sqi_avg >=189)) {
+		sqi_num = 2;
+	} else if ((sqi_avg <= 298) && (sqi_avg >=237)) {
+		sqi_num = 1;
 	} else {
-		sqi_num = 8;
+		sqi_num = 0;
 	}
 
 	if (link_avg != LAN87XX_LINK_UP) {
