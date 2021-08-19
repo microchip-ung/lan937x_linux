@@ -169,8 +169,6 @@
 					compatible = "microchip,lan9370";
 					reg = <3>;
 					spi-max-frequency = <44000000>;
-					spi-cpha;
-					spi-cpol;
 					interrupt-parent = <&pioB>;
 					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;					
 					status = "okay";
