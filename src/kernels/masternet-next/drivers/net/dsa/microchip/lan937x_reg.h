@@ -653,7 +653,7 @@
 /* Get fid from vid, fid 0 is not used if vid is greater than 127 */
 #define LAN937X_GET_FID(vid)	(((vid) % ALU_FID_SIZE) + 1)
 
-/* Driver set switch broadcast storm protection at 10% rate. */
+/* Driver set switch broadcast storm protection at 10% rate */
 #define BR_STORM_PROT_RATE	10
 
 #define MII_BMSR_100BASE_TX_FD		BIT(14)
@@ -661,7 +661,7 @@
 #define PHY_LINK_UP				1
 #define PHY_LINK_DOWN				0
 
-/*The port number as per the datasheet*/
+/* The port number as per the datasheet */
 #define RGMII_2_PORT_NUM		5
 #define RGMII_1_PORT_NUM		6
 #define SGMII_PORT_NUM			4

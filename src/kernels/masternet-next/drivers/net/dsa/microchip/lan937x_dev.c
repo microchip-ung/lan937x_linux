@@ -73,11 +73,6 @@ int lan937x_port_cfg(struct ksz_device *dev, int port, int offset, u8 bits,
 				  bits, set ? bits : 0);
 }
 
-int lan937x_cfg32(struct ksz_device *dev, u32 addr, u32 bits, bool set)
-{
-	return regmap_update_bits(dev->regmap[2], addr, bits, set ? bits : 0);
-}
-
 int lan937x_pread8(struct ksz_device *dev, int port, int offset, u8 *data)
 {
 	return ksz_read8(dev, PORT_CTRL_ADDR(port, offset), data);
@@ -159,7 +154,7 @@ static void lan937x_r_mib_cnt(struct ksz_device *dev, int port, u16 addr,
 	u32 data;
 	int ret;
 
-	/* Enable MIB Counter read*/
+	/* Enable MIB Counter read */
 	data = MIB_COUNTER_READ;
 	data |= (addr << MIB_COUNTER_INDEX_S);
 	lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT, data);
@@ -213,7 +208,7 @@ int lan937x_reset_switch(struct ksz_device *dev)
 	if (ret < 0)
 		return ret;
 
-	/* Enable Auto Aging*/
+	/* Enable Auto Aging */
 	ret = ksz_write8(dev, REG_SW_LUE_CTRL_1, data8 | SW_LINK_AUTO_AGING);
 	if (ret < 0)
 		return ret;
@@ -257,10 +252,8 @@ static void lan937x_switch_exit(struct ksz_device *dev)
 {
 	lan937x_reset_switch(dev);
 
-	if (dev->mdio_np) {
-		mdiobus_unregister(dev->ds->slave_mii_bus);
-		of_node_put(dev->mdio_np);
-	}
+	mdiobus_unregister(dev->ds->slave_mii_bus);
+	mdiobus_free(dev->ds->slave_mii_bus);
 }
 
 int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
@@ -275,7 +268,7 @@ int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
 
 	/* Check if PHY register is blocked */
 	if (data8 & SW_PHY_REG_BLOCK) {
-		/* Enable Phy access through SPI*/
+		/* Enable Phy access through SPI */
 		data8 &= ~SW_PHY_REG_BLOCK;
 
 		ret = ksz_write8(dev, REG_GLOBAL_CTRL_0, data8);
@@ -386,7 +379,7 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
 	unsigned int value;
 	int ret;
 
-	/* Check for internal phy port, return 0xffff for non-existent phy*/
+	/* Check for internal phy port, return 0xffff for non-existent phy */
 	if (!lan937x_is_internal_phy_port(dev, addr))
 		return 0xffff;
 
@@ -402,7 +395,7 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
 	if (ret < 0)
 		return ret;
 
-	/* Write Read and Busy bit to start the transaction*/
+	/* Write Read and Busy bit to start the transaction */
 	ret = ksz_write16(dev, REG_VPHY_IND_CTRL__2, VPHY_IND_BUSY);
 	if (ret < 0)
 		return ret;
@@ -415,7 +408,7 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
 		return ret;
 	}
 
-	/* Read the VPHY register which has the PHY data*/
+	/* Read the VPHY register which has the PHY data */
 	ret = ksz_read16(dev, REG_VPHY_IND_DATA__2, val);
 
 	return ret;
@@ -534,7 +527,7 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 				 PORT_TAIL_TAG_ENABLE, true);
 	}
 
-	/*disable frame check length field*/
+	/* disable frame check length field */
 	lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0, PORT_FR_CHK_LENGTH,
 			 false);
 
@@ -584,12 +577,12 @@ static int lan937x_sw_mdio_write(struct mii_bus *bus, int addr, int regnum,
 
 static int lan937x_mdio_register(struct dsa_switch *ds)
 {
-	struct ksz_device *dev = ds->priv;
+	struct device_node *mdio_np;
 	int ret;
 
-	dev->mdio_np = of_get_child_by_name(ds->dev->of_node, "mdio");
+	mdio_np = of_get_child_by_name(ds->dev->of_node, "mdio");
 
-	if (!dev->mdio_np) {
+	if (!mdio_np) {
 		dev_err(ds->dev, "no MDIO bus node\n");
 		return -ENODEV;
 	}
@@ -606,15 +599,15 @@ static int lan937x_mdio_register(struct dsa_switch *ds)
 	ds->slave_mii_bus->parent = ds->dev;
 	ds->slave_mii_bus->phy_mask = ~ds->phys_mii_mask;
 
-	ret = of_mdiobus_register(ds->slave_mii_bus, dev->mdio_np);
+	ret = of_mdiobus_register(ds->slave_mii_bus, mdio_np);
 	if (ret) {
 		dev_err(ds->dev, "unable to register MDIO bus %s\n",
 			ds->slave_mii_bus->id);
-		of_node_put(dev->mdio_np);
-		return ret;
 	}
 
-	return 0;
+	of_node_put(mdio_np);
+
+	return ret;
 }
 
 static int lan937x_switch_init(struct ksz_device *dev)

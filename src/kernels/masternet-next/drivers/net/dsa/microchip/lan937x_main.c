@@ -251,16 +251,13 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 		break;
 	case BR_STATE_FORWARDING:
 		data |= (PORT_TX_ENABLE | PORT_RX_ENABLE);
-
 		member = dev->host_mask | p->vid_member;
-		mutex_lock(&dev->dev_mutex);
 
 		/* Port is a member of a bridge. */
 		if (dev->br_member & (1 << port)) {
 			dev->member |= (1 << port);
 			member = dev->member;
 		}
-		mutex_unlock(&dev->dev_mutex);
 		break;
 	case BR_STATE_BLOCKING:
 		data |= PORT_LEARN_DISABLE;
@@ -275,7 +272,6 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 	lan937x_pwrite8(dev, port, P_STP_CTRL, data);
 
 	p->stp_state = state;
-	mutex_lock(&dev->dev_mutex);
 
 	/* Port membership may share register with STP state. */
 	if (member >= 0 && member != p->member)
@@ -292,8 +288,6 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 	 */
 	if (forward != dev->member)
 		ksz_update_port_member(dev, port);
-
-	mutex_unlock(&dev->dev_mutex);
 }
 
 static int lan937x_port_vlan_filtering(struct dsa_switch *ds, int port,
@@ -554,16 +548,10 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 
 			/* if there is no port to forward, clear table */
 			if ((alu_table[1] & ALU_V_PORT_MAP) == 0) {
-				alu_table[0] = 0;
-				alu_table[1] = 0;
-				alu_table[2] = 0;
-				alu_table[3] = 0;
+				memset(&alu_table, 0, sizeof(alu_table));
 			}
 		} else {
-			alu_table[0] = 0;
-			alu_table[1] = 0;
-			alu_table[2] = 0;
-			alu_table[3] = 0;
+			memset(&alu_table, 0, sizeof(alu_table));
 		}
 
 		ret = lan937x_write_table(dev, alu_table);
@@ -818,10 +806,7 @@ static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
 
 	if ((static_table[1] & ALU_V_PORT_MAP) == 0) {
 		/* delete entry */
-		static_table[0] = 0;
-		static_table[1] = 0;
-		static_table[2] = 0;
-		static_table[3] = 0;
+		memset(&static_table, 0, sizeof(static_table));
 	}
 
 	ret = lan937x_write_table(dev, static_table);
@@ -867,7 +852,7 @@ static int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
 	 * If yes, instruct the user to remove the previous entry & exit
 	 */
 	for (p = 0; p < dev->port_cnt; p++) {
-		/*Skip the current sniffing port*/
+		/* Skip the current sniffing port */
 		if (p == mirror->to_local_port)
 			continue;
 
@@ -901,7 +886,7 @@ static void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
 	u8 data;
 	int p;
 
-	/* clear ingress/egress mirroring port*/
+	/* clear ingress/egress mirroring port */
 	if (mirror->ingress)
 		lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX,
 				 false);
@@ -909,7 +894,7 @@ static void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
 		lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX,
 				 false);
 
-	/* Check if any of the port is still referring to sniffer port*/
+	/* Check if any of the port is still referring to sniffer port */
 	for (p = 0; p < dev->port_cnt; p++) {
 		lan937x_pread8(dev, p, P_MIRROR_CTRL, &data);
 
@@ -919,7 +904,7 @@ static void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
 		}
 	}
 
-	/* delete sniffing if there are no other mirroring rule exist*/
+	/* delete sniffing if there are no other mirroring rule exist */
 	if (!in_use)
 		lan937x_port_cfg(dev, mirror->to_local_port, P_MIRROR_CTRL,
 				 PORT_MIRROR_SNIFFER, false);
@@ -1030,10 +1015,10 @@ static int lan937x_setup(struct dsa_switch *ds)
 	 */
 	ds->vlan_filtering_is_global = true;
 
-	/* Configure cpu port*/
+	/* Configure cpu port */
 	lan937x_config_cpu_port(ds);
 
-	/* Enable aggressive back off for half duplex & UNH mode*/
+	/* Enable aggressive back off for half duplex & UNH mode */
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_0,
 		    (SW_PAUSE_UNH_MODE | SW_NEW_BACKOFF | SW_AGGR_BACKOFF),
 		    true);
@@ -1049,7 +1034,7 @@ static int lan937x_setup(struct dsa_switch *ds)
 	/* enable global MIB counter freeze function */
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FREEZE, true);
 
-	/* disable CLK125 & CLK25, 1: disable, 0: enable*/
+	/* disable CLK125 & CLK25, 1: disable, 0: enable */
 	lan937x_cfg(dev, REG_SW_GLOBAL_OUTPUT_CTRL__1,
 		    (SW_CLK125_ENB | SW_CLK25_ENB), true);
 
@@ -1174,7 +1159,7 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 		phylink_set(mask, Asym_Pause);
 	}
 
-	/*  For RGMII interface */
+	/* For RGMII interface */
 	if (phy_interface_mode_is_rgmii(state->interface))
 		phylink_set(mask, 1000baseT_Full);
 

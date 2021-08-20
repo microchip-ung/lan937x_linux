@@ -233,7 +233,7 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	if (is_link_local_ether_addr(hdr->h_dest))
 		val |= LAN937X_TAIL_TAG_BLOCKING_OVERRIDE;
 
-	/* Tail tag valid bit - This bit should always be set by the CPU*/
+	/* Tail tag valid bit - This bit should always be set by the CPU */
 	val |= LAN937X_TAIL_TAG_VALID;
 
 	*tag = cpu_to_be16(val);
