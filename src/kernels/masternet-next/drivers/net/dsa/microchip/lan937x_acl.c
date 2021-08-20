@@ -33,18 +33,134 @@ const struct lan937x_acl_rfr acl_rfrs_table[MAX_ACL_PARSER][MAX_RFR] = {
 			.len = 6,
 			.rng_ofst = 0, },
 
-		{	.rfr_valid = false, },
-		{	.rfr_valid = false, },
-		{	.rfr_valid = false, },
-		{	.rfr_valid = false, },
-		{	.rfr_valid = false, },
-		{	.rfr_valid = false, },
-		{	.rfr_valid = false, },
+		{	.rfr_valid = true,
+			.dissectors_covered = ETHTYPE_DISSECTOR_PRESENT,
+			.l4 = false,
+			.l3 = false,
+			.l2 = true,
+			.rng_match_en = false,
+			.ofst =12,
+			.len = 2,
+			.rng_ofst = 0, },
+
+		{	.rfr_valid = true,
+			.dissectors_covered = IPV4_TOS_DISSECTOR_PRESENT,
+			.l4 = false,
+			.l3 = true,
+			.l2 = false,
+			.rng_match_en = false,
+			.ofst =0,
+			.len = 4,
+			.rng_ofst = 0, },
+
+
+		{	.rfr_valid = true,
+			.dissectors_covered = (IPV4_TTL_DISSECTOR_PRESENT | 
+					       IPV4_PROTO_DISSECTOR_PRESENT),
+			.l4 = false,
+			.l3 = true,
+			.l2 = false,
+			.rng_match_en = false,
+			.ofst =8,
+			.len = 4,
+			.rng_ofst = 0, },
+
+		{	.rfr_valid = true,
+			.dissectors_covered = (IPV4_SRC_IP_DISSECTOR_PRESENT),
+			.l4 = false,
+			.l3 = true,
+			.l2 = false,
+			.rng_match_en = false,
+			.ofst =12,
+			.len = 4,
+			.rng_ofst = 0, },
+
+		{	.rfr_valid = true,
+			.dissectors_covered = (IPV4_DST_IP_DISSECTOR_PRESENT),
+			.l4 = false,
+			.l3 = true,
+			.l2 = false,
+			.rng_match_en = false,
+			.ofst =16,
+			.len = 4,
+			.rng_ofst = 0, },
+
+		{	.rfr_valid = true,
+			.dissectors_covered = (L4_SRC_PORT_DISSECTOR_PRESENT),
+			.l4 = true,
+			.l3 = false,
+			.l2 = false,
+			.rng_match_en = false,
+			.ofst =0,
+			.len = 2,
+			.rng_ofst = 0, },
+
+		{	.rfr_valid = true,
+			.dissectors_covered = (L4_DST_PORT_DISSECTOR_PRESENT),
+			.l4 = true,
+			.l3 = false,
+			.l2 = false,
+			.rng_match_en = false,
+			.ofst =2,
+			.len = 2,
+			.rng_ofst = 0, },
+
 		{	.rfr_valid = false, },
 
 	},
 
 	{/**RFRs Supported in PARSER 1*/
+		{	.rfr_valid = true,
+			.dissectors_covered = IPV6_TC_DISSECTOR_PRESENT,
+			.l4 = false,
+			.l3 = true,
+			.l2 = false,
+			.rng_match_en = false,
+			.ofst =0,
+			.len = 4,
+			.rng_ofst = 0, },
+
+
+		{	.rfr_valid = true,
+			.dissectors_covered = (IPV6_HOP_DISSECTOR_PRESENT |
+					       IPV6_NXT_HDR_DISSECTOR_PRESENT),
+			.l4 = false,
+			.l3 = true,
+			.l2 = false,
+			.rng_match_en = false,
+			.ofst =4,
+			.len = 4,
+			.rng_ofst = 0, },
+
+		{	.rfr_valid = true,
+			.dissectors_covered = (IPV6_SRC_IP_DISSECTOR_PRESENT),
+			.l4 = false,
+			.l3 = true,
+			.l2 = false,
+			.rng_match_en = false,
+			.ofst =8,
+			.len = 16,
+			.rng_ofst = 0, },
+
+		{	.rfr_valid = true,
+			.dissectors_covered = (IPV6_DST_IP_DISSECTOR_PRESENT),
+			.l4 = false,
+			.l3 = true,
+			.l2 = false,
+			.rng_match_en = false,
+			.ofst =24,
+			.len = 16,
+			.rng_ofst = 0, },
+
+		{	.rfr_valid = false, },
+		{	.rfr_valid = false, },
+		{	.rfr_valid = false, },
+		{	.rfr_valid = false, },
+		{	.rfr_valid = false, },
+		{	.rfr_valid = false, },
+	},	
+
+	{/**RFRs Supported in PARSER 2*/
 		{	.rfr_valid = true,
 			.dissectors_covered = DST_MAC_DISSECTOR_PRESENT,
 			.l4 = false,
@@ -84,19 +200,6 @@ const struct lan937x_acl_rfr acl_rfrs_table[MAX_ACL_PARSER][MAX_RFR] = {
 		{	.rfr_valid = false, },
 	},
 
-	{/**RFRs Supported in PARSER 2*/
-		{	.rfr_valid = false, },
-		{	.rfr_valid = false, },
-		{	.rfr_valid = false, },
-		{	.rfr_valid = false, },
-		{	.rfr_valid = false, },
-		{	.rfr_valid = false, },
-		{	.rfr_valid = false, },
-		{	.rfr_valid = false, },
-		{	.rfr_valid = false, },
-		{	.rfr_valid = false, },
-	},
-
 	{/**RFRs Supported in PARSER 3*/
 		{	.rfr_valid = false, },
 		{	.rfr_valid = false, },
@@ -111,23 +214,22 @@ const struct lan937x_acl_rfr acl_rfrs_table[MAX_ACL_PARSER][MAX_RFR] = {
 	}
 };
 
-int lan937x_get_acl_req(enum lan937x_filter_type filter_type,
+int lan937x_get_acl_req(enum lan937x_filter_type type,
 			u8 *parser_idx, u8 *n_entries)
 {
-	switch (filter_type) {
+	switch (type) {
 
 	case LAN937x_VLAN_UNAWARE_FILTER:
 		*parser_idx = 0;
-		*n_entries = 1;	/*Also determines num parsers*/
+		*n_entries = 2;	/*Also determines num parsers*/
 		break;
 	case LAN937x_VLAN_AWARE_FILTER:
-		*parser_idx = 1;
-		*n_entries = 1; /*Also determines num parsers*/
+		*parser_idx = 2;
+		*n_entries = 2; /*Also determines num parsers*/
 		break;
 	case LAN937x_BCAST_FILTER:
 	default:
 		return -EINVAL;
-
 	}
 
 	return 0;
@@ -135,14 +237,13 @@ int lan937x_get_acl_req(enum lan937x_filter_type filter_type,
 
 static int lan937x_wait_tcam_busy(struct ksz_device *dev, int port)
 {
-	int timeout_us = 1000; /**To-Do: Proper Justification needed*/
+	int timeout_us = 10000; /**To-Do: Proper Justification needed*/
 	int poll_us = 10;
 	unsigned int val;
 	int rc;
 	
 	rc = regmap_read_poll_timeout(dev->regmap[2], 
-				      (ACL_CTRL_PORT_BASE_ADDR(port) + 
-				       REG_ACL_PORT_ARACR),
+				      PORT_CTRL_ADDR(port, REG_ACL_PORT_ARACR),
 				      val, 
 				      val & ACL_ARACR_TCAM_OP_STS,
 				      poll_us, 
@@ -280,6 +381,20 @@ static int lan937x_acl_entry_write(struct ksz_device *dev,
 	return rc;
 }
 
+static void lan937x_cpy_array_to_tcam_entry (u8 *s_data, u8* s_mask, 
+					     u8 *d_data, u8* d_mask,
+					     u8 n)
+{
+	u8 i;
+
+	for (i=0; i < n; i++) {
+		s_data[i] &= s_mask[i];
+		s_mask[i] &= (~s_data[i]);
+		d_mask[i] |= (s_mask[i]);
+		d_data[i] |= (s_data[i]);
+	}
+}
+
 static int lan937x_acl_fill_entry(struct ksz_device *dev,
 				  int port, u8 parser_idx,
 				  enum lan937x_acl_dissector_type type,
@@ -287,13 +402,11 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 				  struct lan937x_acl_entry *acl_entry)
 {
 	const struct lan937x_acl_rfr *rfr_ptr = acl_rfrs_table[parser_idx];
-	u8 *mask = &acl_entry->acl_mask[TCAM_MULTI_KEY_ENTRY_START];
-	u8 *data = &acl_entry->acl_data[TCAM_MULTI_KEY_ENTRY_START];
-	struct vlan_tag *t_data;
-	struct vlan_tag *t_msk;
+	u8 *acl_mask = &acl_entry->acl_mask[TCAM_MULTI_KEY_ENTRY_START];
+	u8 *acl_data = &acl_entry->acl_data[TCAM_MULTI_KEY_ENTRY_START];
 	u8 ofst = 0;
 	int i;
-
+	pr_info("%s",__func__);
 	for (i = 0; i < MAX_RFR_PER_PARSER; i++) {
 
 		if (!(rfr_ptr[i].rfr_valid)) 
@@ -302,54 +415,201 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 		if (rfr_ptr[i].dissectors_covered & BIT(type)) {
 
 			switch (type) {
+			case acl_dst_mac_dissector: {
+				u64 tdata = key->dst_mac.value;
+				u64 tmask = key->dst_mac.mask;
 
-			case acl_dst_mac_dissector:
 				pr_info("acl_dst_mac_dissector");
-				u64_to_ether_addr(key->dst_mac.mask,
-							&mask[ofst]);
-				u64_to_ether_addr(key->dst_mac.value,
-							&data[ofst]);
-				break;
-
-			case acl_src_mac_dissector:
-				pr_info("acl_src_mac_dissector");
-				u64_to_ether_addr(key->src_mac.mask,
-							&mask[ofst]);
-				u64_to_ether_addr(key->src_mac.value,
-							&data[ofst]);
-				break;
-
-			case acl_vlan_id_dissector:
-				t_msk = (struct vlan_tag *)&mask[ofst];
-				t_data = (struct vlan_tag *)&data[ofst];
-
-				t_msk->tci[0] |= (key->vlan_id.mask
-							& 0x0F00) >> 8;
-				t_msk->tci[1] |= (key->vlan_id.mask);
-				t_data->tci[0] |= (key->vlan_id.value
-							& 0x0F00) >> 8;
-				t_data->tci[1] |= (key->vlan_id.value);
-				break;
-
-			case acl_vlan_pcp_dissector:
-				t_msk = (struct vlan_tag *)&mask[ofst];
-				t_data = (struct vlan_tag *)&data[ofst];
-
-				t_msk->tci[0] |= (key->vlan_prio.mask
-							& 0x07) << 5;
-				t_data->tci[0] |= (key->vlan_prio.value
-							& 0x07) << 5;
-				break;
-				
-			case acl_ethtype_dissector:
-				mask[ofst] |= ((key->ethtype.mask
-						& 0xFF00) >> 8);
-				mask[ofst + 1] |= (key->ethtype.mask & 0x00FF);
-				data[ofst] |= (key->ethtype.value
-						& 0xFF00) >> 5;
-				data[ofst + 1] |= (key->ethtype.mask & 0x00FF);
+				tdata &= tmask;
+				tmask &= (~tdata);
+				u64_to_ether_addr(tmask, &acl_mask[ofst]);
+				u64_to_ether_addr(tdata, &acl_data[ofst]);
 				break;
 			}
+
+			case acl_src_mac_dissector:{
+				u64 tdata = key->src_mac.value;
+				u64 tmask = key->src_mac.mask;
+
+				pr_info("acl_src_mac_dissector");
+				tdata &= tmask;
+				tmask &= (~tdata);
+				u64_to_ether_addr(tmask, &acl_mask[ofst]);
+				u64_to_ether_addr(tdata, &acl_data[ofst]);
+				break;
+			}
+
+			case acl_vlan_id_dissector:{
+				u16 tdata = key->vlan_id.value;
+				u16 tmask = key->vlan_id.mask;
+				struct vlan_tag *td;
+				struct vlan_tag *tm;
+
+				tdata &= tmask;
+				tmask &= (~tdata);
+				tm = (struct vlan_tag *)&acl_mask[ofst];
+				td = (struct vlan_tag *)&acl_data[ofst];
+
+				/*Why did you put tci as arrary instead of u16 ? */
+				tm->tci[0] |= (tmask	& 0x0F00) >> 8;
+				tm->tci[1] |= (tmask & 0xFF);
+				td->tci[0] |= (tdata & 0x0F00) >> 8;
+				td->tci[1] |= (tdata & 0xFF);
+				break;
+			}
+
+			case acl_vlan_pcp_dissector:{
+				u16 tdata = key->vlan_prio.value;
+				u16 tmask = key->vlan_prio.mask;			
+				struct vlan_tag *td;
+				struct vlan_tag *tm;
+
+				tdata &= tmask;
+				tmask &= (~tdata);
+				tm = (struct vlan_tag *)&acl_mask[ofst];
+				td = (struct vlan_tag *)&acl_data[ofst];
+
+				tm->tci[0] |= (tmask & 0x07) << 5;
+				td->tci[0] |= (tdata & 0x07) << 5;
+				break;
+			}	
+			case acl_ethtype_dissector:{
+				u16 tdata = key->ethtype.value;
+				u16 tmask = key->ethtype.mask;
+
+				tdata &= tmask;
+				tmask &= (~tdata);
+
+				acl_mask[ofst] |= ((tmask & 0xFF00) >> 8);
+				acl_mask[ofst + 1] |= (tmask & 0x00FF);
+				acl_data[ofst] |= (tdata & 0xFF00) >> 8;
+				acl_data[ofst + 1] |= (tdata & 0x00FF);
+				break;
+			}
+			case acl_ipv4_tos_dissector:{
+				u8 tdata = key->ipv4.tos.value;
+				u8 tmask = key->ipv4.tos.mask;
+
+				tdata &= tmask;
+				tmask &= (~tdata);
+				acl_mask[ofst + 1] |= (tmask);
+				acl_data[ofst + 1] |= (tdata);			
+				break;
+			}
+			case acl_ipv4_ttl_dissector:{
+				u8 tdata = key->ipv4.ttl.value;
+				u8 tmask = key->ipv4.ttl.mask;
+				
+				tdata &= tmask;
+				tmask &= (~tdata);
+				acl_mask[ofst] |= (tmask);
+				acl_data[ofst] |= (tdata);			
+				break;
+			}
+			case acl_ipv4_protocol_dissector:{
+				u8 tdata = key->ipv4.proto.value;
+				u8 tmask = key->ipv4.proto.mask;
+				
+				tdata &= tmask;
+				tmask &= (~tdata);
+				acl_mask[ofst + 1] |= (tmask);
+				acl_data[ofst + 1] |= (tdata);		
+				break;
+			}
+			case acl_ipv4_src_ip_dissector:{
+				u8 *tdata = key->ipv4.sip.value;
+				u8 *tmask = key->ipv4.sip.mask;
+
+				lan937x_cpy_array_to_tcam_entry(tdata, tmask,
+								&acl_data[ofst],
+								&acl_mask[ofst],
+								0x04);
+				break;
+			}
+			case acl_ipv4_dst_ip_dissector:{
+				u8 *tdata = key->ipv4.dip.value;
+				u8 *tmask = key->ipv4.dip.mask;
+				
+				lan937x_cpy_array_to_tcam_entry(tdata, tmask,
+								&acl_data[ofst],
+								&acl_mask[ofst],
+								0x04);
+				break;
+			}
+			case acl_ipv6_tc_dissector:{
+				u8 tdata = key->ipv6.tc.value;
+				u8 tmask = key->ipv6.tc.mask;
+				pr_info("acl_ipv6_tc_dissector");
+				tdata &= tmask;
+				tmask &= (~tdata);
+				acl_mask[ofst] |= ((tmask & 0xF0) >> 0x04);
+				acl_data[ofst] |= ((tdata & 0xF0) >> 0x04);
+				acl_mask[ofst + 1] |= ((tmask & 0x0F) << 0x04);
+				acl_data[ofst + 1] |= ((tdata & 0x0F) << 0x04);						
+				break;
+			}
+			case acl_ipv6_nxt_hdr_dissector:{
+				u8 tdata = key->ipv6.next_hdr.value;
+				u8 tmask = key->ipv6.next_hdr.mask;
+				
+				tdata &= tmask;
+				tmask &= (~tdata);
+				acl_mask[ofst + 2] |= (tmask);
+				acl_data[ofst + 2] |= (tdata);		
+				break;	
+			}
+			case acl_ipv6_hop_dissector:{
+				u8 tdata = key->ipv6.hop.value;
+				u8 tmask = key->ipv6.hop.mask;
+				
+				tdata &= tmask;
+				tmask &= (~tdata);
+				acl_mask[ofst + 3] |= (tmask);
+				acl_data[ofst + 3] |= (tdata);			
+				break;
+			}
+			case acl_ipv6_src_ip_dissector:{
+				u8 *tdata = key->ipv6.sip.value;
+				u8 *tmask = key->ipv6.sip.mask;
+
+				lan937x_cpy_array_to_tcam_entry(tdata, tmask,
+								&acl_data[ofst],
+								&acl_mask[ofst],
+								16);
+				break;
+			}
+			case acl_ipv6_dst_ip_dissector:{
+				u8 *tdata = key->ipv6.dip.value;
+				u8 *tmask = key->ipv6.dip.mask;
+				
+				lan937x_cpy_array_to_tcam_entry(tdata, tmask,
+								&acl_data[ofst],
+								&acl_mask[ofst],
+								16);
+				break;
+			}
+			case acl_l4_src_port_dissector:{
+				u8 *tdata = (u8 *)&key->src_port.value;
+				u8 *tmask = (u8 *)&key->src_port.mask;
+				
+				lan937x_cpy_array_to_tcam_entry(tdata, tmask,
+								&acl_data[ofst],
+								&acl_mask[ofst],
+								sizeof(u16));
+				break;
+			}
+			case acl_l4_dst_port_dissector:{
+				u8 *tdata = (u8 *)&key->dst_port.value;
+				u8 *tmask = (u8 *)&key->dst_port.mask;
+				
+				lan937x_cpy_array_to_tcam_entry(tdata, tmask,
+								&acl_data[ofst],
+								&acl_mask[ofst],
+								sizeof(u16));
+				break;
+			}
+
+			}/*switch ends*/
 			return 0;
 		}
 		ofst += rfr_ptr[i].len;
@@ -371,15 +631,18 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 	u8 n_entries;
 	u8 parser;
 	u8 i,j;
-
+	pr_info("%s",__func__);
 	n_entries = resrc->type.tcam.n_entries;
 	parser = resrc->type.tcam.parser;
 
 	acl_entry = devm_kzalloc(dev->dev, sizeof(*acl_entry) * n_entries, 
 				 GFP_KERNEL);
-
-	if (!acl_entry)
+	
+	if (!acl_entry){
+		pr_info("Insufficient Space");
 		return -ENOSPC;
+	}
+
 
 	for (i = 0; ((acl_dissector_map != 0) &&
 		     (i < LAN937X_NUM_DISSECTORS_SUPPORTED)); i++) {
@@ -454,8 +717,8 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 	/* For Multiple format Key
 	Bit 383:382 PARSER_NUM Programmed to the 1st parser used TCAM rule*/
 	for (j = 0; j < n_entries; j++) {
-		acl_entry[j].acl_mask[0] |= ((~(parser /*+ j*/)) << 6);
-		acl_entry[j].acl_data[0] |= ((parser /*+ j*/) << 6);
+		//acl_entry[j].acl_mask[0] |= ((~(parser + j)) << 6);
+		//acl_entry[j].acl_data[0] |= ((parser + j) << 6);
 		
 		rc = lan937x_acl_entry_write(dev, port,
 					     resrc->type.tcam.index + j,
@@ -577,8 +840,9 @@ int lan937x_init_acl_parsers(struct ksz_device *dev, int port)
 		return rc;
 
 	rc = lan937x_pwrite32(dev, port, REG_ACL_PORT_PCTRL,
-			      (BIT(30) | BIT(18) |
-			       BIT(26) | BIT(27) | BIT(14)));
+			      (BIT(30) | BIT(29) |BIT(17) |
+			       BIT(26) | BIT(27) | BIT(14)|
+			       BIT(25) | BIT(24)));
 	if (rc)
 		return rc;
 

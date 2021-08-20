@@ -53,18 +53,41 @@ struct lan937x_val_mask_u16 {
 	u16 mask;
 };
 
-enum lan937x_dissector_id {
-	LAN937X_DISSECTOR_DST_MAC,
-	LAN937X_DISSECTOR_SRC_MAC,
-	LAN937X_DISSECTOR_VLAN_ID,
-	LAN937X_DISSECTOR_VLAN_PRIO,
-	LAN937X_DISSECTOR_ETHTYPE,
+struct lan937x_val_mask_u8 {
+	u8 value;
+	u8 mask;
+};
 
-	LAN937X_NUM_DISSECTORS_SUPPORTED,
+struct lan937x_ipv4_addr {
+	u8 value[4];
+	u8 mask[4];
+};
+
+struct lan937x_ipv6_addr {
+	u8 value[16];
+	u8 mask[16];
+};
+
+#define LAN937X_NUM_DISSECTORS_SUPPORTED acl_num_dissectors_supported
+
+struct 	lan937x_ipv4{
+	struct lan937x_ipv4_addr sip;
+	struct lan937x_ipv4_addr dip;
+	struct lan937x_val_mask_u8 ttl;
+	struct lan937x_val_mask_u8 tos;
+	struct lan937x_val_mask_u8 proto;
+};
+
+struct 	lan937x_ipv6{
+	struct lan937x_ipv6_addr sip;
+	struct lan937x_ipv6_addr dip;
+	struct lan937x_val_mask_u8 hop;
+	struct lan937x_val_mask_u8 tc;
+	struct lan937x_val_mask_u8 next_hdr;
 };
 
 struct lan937x_key {
-	u16 acl_dissector_map; /*Bits follow lan937x_dissector_id order.*/
+	u32 acl_dissector_map; /*Bits follow lan937x_dissector_id order.*/
 
 	struct {
 		struct lan937x_val_mask_u64 dst_mac;
@@ -72,11 +95,17 @@ struct lan937x_key {
 		struct lan937x_val_mask_u16 vlan_id;
 		struct lan937x_val_mask_u16 vlan_prio;
 		struct lan937x_val_mask_u16 ethtype;
+		union{
+			struct lan937x_ipv4 ipv4;
+			struct lan937x_ipv6 ipv6;
+		};
+		struct lan937x_val_mask_u16 src_port;
+		struct lan937x_val_mask_u16 dst_port;
 	};
 };
 
 struct lan937x_flower_filter {
-	enum	lan937x_filter_type filter_type;
+	enum	lan937x_filter_type type;
 	struct  lan937x_key key;
 };
 
@@ -162,7 +191,7 @@ int lan937x_tc_flower_del(struct dsa_switch *ds, int port,
 int lan937x_tc_flower_stats(struct dsa_switch *ds, int port,
 			    struct flow_cls_offload *cls, bool ingress);
 
-int lan937x_get_acl_req(enum lan937x_filter_type filter_type,
+int lan937x_get_acl_req(enum lan937x_filter_type type,
 			u8 *parser_idx, u8 *num_entries);
 struct lan937x_flr_blk *lan937x_get_flr_blk (struct ksz_device *dev,
 					     int port);

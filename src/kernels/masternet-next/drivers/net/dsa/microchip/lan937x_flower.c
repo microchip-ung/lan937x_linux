@@ -36,13 +36,14 @@ static int lan937x_assign_stream_filter(struct ksz_device *dev, int port,
 {
 	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
 	int i;
-
+	pr_info("%s",__func__);
 	for (i = 0; i < LAN937X_NUM_STREAM_FILTERS; i++) {
 		if (!(res->stream_filters_used[i])) {
 			*stream_idx = i;
 			return 0;
 		}
 	}
+	pr_info("Stream Filters not available");
 	return -ENOSPC;
 }
 
@@ -50,9 +51,11 @@ static int lan937x_check_tc_pol_availability(struct ksz_device *dev, int port,
 					     int traffic_class)
 {
 	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
-
-	if (res->tc_policers_used[traffic_class])
+	pr_info("%s",__func__);
+	if (res->tc_policers_used[traffic_class]) {
+		pr_info("Traffic class policer already exist");
 		return -ENOSPC;
+	}
 
 	return 0;
 }
@@ -62,10 +65,14 @@ int lan937x_assign_tcam_entries(struct ksz_device *dev, int port,
 {
 	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
 	int i, j, count;
-
+	pr_info("%s",__func__);
 	for (i = 0; i < LAN937X_NUM_TCAM_ENTRIES; i++) {
 		count = 0;
 		for (j = 0; j < num_entry_reqd; j++) {
+
+			if (i+j > LAN937X_NUM_TCAM_ENTRIES)
+				goto out;
+			pr_info("%d",i+j);
 			if (!(res->tcam_entries_used[i + j]))
 				count++;
 		}
@@ -74,6 +81,8 @@ int lan937x_assign_tcam_entries(struct ksz_device *dev, int port,
 			return 0;
 		}
 	}
+out:
+	pr_info("TCAM Entry not available");
 	return -ENOSPC;
 }
 
@@ -99,32 +108,37 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
 	struct flow_dissector *dissector = rule->match.dissector;
 	struct lan937x_key *key = &filter->key;
+	u16 proto = ntohs(cls->common.protocol);	
 	bool is_bcast_dmac = false;
-	u64 dmac_mask = U64_MAX;
-	u64 smac_mask = U64_MAX;
-	u16 vid_mask = U16_MAX;
-	u16 pcp_mask = U16_MAX;
-	u64 dmac = U64_MAX;
-	u64 smac = U64_MAX;
-	u16 vid = U16_MAX;
-	u16 pcp = U16_MAX;
 
 	if (dissector->used_keys &
 	    ~(BIT(FLOW_DISSECTOR_KEY_BASIC) | BIT(FLOW_DISSECTOR_KEY_CONTROL) |
 	      BIT(FLOW_DISSECTOR_KEY_VLAN) |
-	      BIT(FLOW_DISSECTOR_KEY_ETH_ADDRS))) {
+	      BIT(FLOW_DISSECTOR_KEY_ETH_ADDRS) |
+	      BIT(FLOW_DISSECTOR_KEY_IPV4_ADDRS) |
+	      BIT(FLOW_DISSECTOR_KEY_IPV6_ADDRS) |
+	      BIT(FLOW_DISSECTOR_KEY_IP) | 
+	      BIT(FLOW_DISSECTOR_KEY_PORTS))) {
 		NL_SET_ERR_MSG_MOD(extack, "Unsupported keys used");
 		return -EOPNOTSUPP;
 	}
-
+	pr_info("%s",__func__);
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_BASIC)) {
 		struct flow_match_basic match;
 
 		flow_rule_match_basic(rule, &match);
-		if (match.key->n_proto) {
-			NL_SET_ERR_MSG_MOD(
-				extack, "Matching on protocol not supported");
-			return -EOPNOTSUPP;
+		if (ntohs(match.key->n_proto) == ETH_P_IP) {
+			pr_info("IPv4");
+			key->acl_dissector_map |=IPV4_PROTO_DISSECTOR_PRESENT;
+			key->ipv4.proto.value = match.key->ip_proto;
+			key->ipv4.proto.mask = match.mask->ip_proto;
+		}
+		if (ntohs(match.key->n_proto) == ETH_P_IPV6) {
+			pr_info("IPv6");
+
+			key->acl_dissector_map |=IPV6_NXT_HDR_DISSECTOR_PRESENT;
+			key->ipv6.next_hdr.value = match.key->ip_proto;
+			key->ipv6.next_hdr.mask = match.mask->ip_proto;
 		}
 	}
 
@@ -137,13 +151,14 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 
 		if (!ether_addr_equal_masked(match.key->src, null,
 					     match.mask->src)) {
-			smac_mask = ether_addr_to_u64(match.mask->src);
-			smac = ether_addr_to_u64(match.key->src);
+			key->src_mac.mask = ether_addr_to_u64(match.mask->src);
+			key->src_mac.value = ether_addr_to_u64(match.key->src);
+			key->acl_dissector_map |= SRC_MAC_DISSECTOR_PRESENT;
 		}
-
-		dmac_mask = ether_addr_to_u64(match.mask->dst);
-		dmac = ether_addr_to_u64(match.key->dst);
 		is_bcast_dmac = ether_addr_equal(match.key->dst, bcast);
+		key->dst_mac.mask = ether_addr_to_u64(match.mask->dst);
+		key->dst_mac.value = ether_addr_to_u64(match.key->dst);
+		key->acl_dissector_map |= DST_MAC_DISSECTOR_PRESENT;
 	}
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_VLAN)) {
@@ -152,62 +167,119 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		flow_rule_match_vlan(rule, &match);
 
 		if (match.mask->vlan_id) {
-			vid = match.key->vlan_id;
-			vid_mask = match.mask->vlan_id;
+			key->vlan_id.value = match.key->vlan_id;
+			key->vlan_id.mask = match.mask->vlan_id;
+			key->acl_dissector_map |= VLAN_ID_DISSECTOR_PRESENT;
 		}
 
 		if (match.mask->vlan_priority) {
-			pcp = match.key->vlan_priority;
-			pcp_mask = match.mask->vlan_priority;
-		}
-	}
-
-	if (vid == U16_MAX && pcp == U16_MAX) {
-		/**Key has NO parameter from VLAN Tag */
-		if (smac != U64_MAX) {
-			key->acl_dissector_map |= SRC_MAC_DISSECTOR_PRESENT;
-			key->src_mac.value = smac;
-			key->src_mac.mask = ~(smac & smac_mask);
-			filter->filter_type = LAN937x_VLAN_UNAWARE_FILTER;
-		} else if (is_bcast_dmac) {
-			filter->filter_type = LAN937x_BCAST_FILTER;
-			return 0;
-		}
-
-		if (dmac != U64_MAX) {
-			key->acl_dissector_map |= DST_MAC_DISSECTOR_PRESENT;
-			key->dst_mac.value = dmac;
-			key->dst_mac.mask = ~(dmac & dmac_mask);
-			filter->filter_type = LAN937x_VLAN_UNAWARE_FILTER;
-		}
-		return 0;
-	} else { /**Key has at least one parameter from VLAN Tag */
-		if (smac != U64_MAX) {
-			key->acl_dissector_map |= SRC_MAC_DISSECTOR_PRESENT;
-			key->src_mac.value = smac;
-			key->src_mac.mask = ~(smac & smac_mask);
-		}
-		if (dmac != U64_MAX) {
-			key->acl_dissector_map |= DST_MAC_DISSECTOR_PRESENT;
-			key->dst_mac.value = dmac;
-			key->dst_mac.mask = ~(dmac & dmac_mask);
-		}
-		if (vid != U16_MAX) {
-			key->acl_dissector_map |= VLAN_ID_DISSECTOR_PRESENT;
-			key->vlan_id.value = vid;
-			key->vlan_id.mask = ~(vid & vid_mask);
-		}
-		if (pcp != U16_MAX) {
+			key->vlan_prio.value = match.key->vlan_priority;
+			key->vlan_prio.mask = match.mask->vlan_priority;
 			key->acl_dissector_map |= VLAN_PCP_DISSECTOR_PRESENT;
-			key->vlan_prio.value = pcp;
-			key->vlan_prio.mask = ~(pcp & pcp_mask);
 		}
-		filter->filter_type = LAN937x_VLAN_AWARE_FILTER;
-		return 0;
 	}
 
-	NL_SET_ERR_MSG_MOD(extack, "Not matching on any known key");
-	return -EOPNOTSUPP;
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IPV4_ADDRS) &&
+	    proto == ETH_P_IP) {
+		struct flow_match_ipv4_addrs match;
+		u8 *tmp;
+
+		flow_rule_match_ipv4_addrs(rule, &match);
+
+		tmp = &key->ipv4.sip.value[0];
+		memcpy(tmp, &match.key->src, 4);
+
+		tmp = &key->ipv4.sip.mask[0];
+		memcpy(tmp, &match.mask->src, 4);
+
+		tmp = &key->ipv4.dip.value[0];
+		memcpy(tmp, &match.key->dst, 4);
+
+		tmp = &key->ipv4.dip.mask[0];
+		memcpy(tmp, &match.mask->dst, 4);
+
+		key->acl_dissector_map |= (IPV4_SRC_IP_DISSECTOR_PRESENT | 
+					   IPV4_DST_IP_DISSECTOR_PRESENT);
+	}
+
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IPV6_ADDRS) &&
+	    proto == ETH_P_IPV6) {
+		struct flow_match_ipv6_addrs match;
+		u8 *tmp;
+
+		flow_rule_match_ipv6_addrs(rule, &match);
+
+		tmp = &key->ipv6.sip.value[0];
+		memcpy(tmp, &match.key->src.s6_addr[0], 16);
+
+		tmp = &key->ipv6.sip.mask[0];
+		memcpy(tmp, &match.mask->src.s6_addr[0], 16);
+
+		tmp = &key->ipv6.dip.value[0];
+		memcpy(tmp, &match.key->dst.s6_addr[0], 16);
+
+		tmp = &key->ipv6.dip.mask[0];
+		memcpy(tmp, &match.mask->dst.s6_addr[0], 16);
+
+		key->acl_dissector_map |= (IPV6_SRC_IP_DISSECTOR_PRESENT | 
+					   IPV6_DST_IP_DISSECTOR_PRESENT);
+	}
+
+	if(flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IP)) {
+		struct flow_match_ip match;
+		pr_info("FLOW_DISSECTOR_KEY_IP");
+		flow_rule_match_ip(rule, &match);
+
+		if(proto == ETH_P_IP) {
+			pr_info("ipv4");
+			key->ipv4.tos.value= match.key->tos;
+			key->ipv4.tos.mask = match.mask->tos;
+
+			key->ipv4.ttl.value= match.key->ttl;
+			key->ipv4.ttl.mask = match.mask->ttl;
+
+			key->acl_dissector_map |= (IPV4_TOS_DISSECTOR_PRESENT |
+						   IPV4_TTL_DISSECTOR_PRESENT);
+		}
+
+		if(proto == ETH_P_IPV6) {
+			pr_info("ipv6");
+			key->ipv6.tc.value= match.key->tos;
+			key->ipv6.tc.mask = match.mask->tos;
+
+			key->ipv6.hop.value= match.key->ttl;
+			key->ipv6.hop.mask = match.mask->ttl;
+
+			key->acl_dissector_map |= (IPV6_TC_DISSECTOR_PRESENT |
+						   IPV6_HOP_DISSECTOR_PRESENT);
+		}
+	}
+
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_PORTS)) {
+		struct flow_match_ports match;
+
+		flow_rule_match_ports(rule, &match);
+		key->src_port.value = ntohs(match.key->src);
+		key->src_port.mask = ntohs(match.mask->src);
+		key->dst_port.value = ntohs(match.key->dst);
+		key->dst_port.mask = ntohs(match.mask->dst);
+	}
+
+	/**TO DO: Ethertype is pending*/	
+
+	if(key->acl_dissector_map == DST_MAC_DISSECTOR_PRESENT 
+	   && is_bcast_dmac) {
+			filter->type = LAN937x_BCAST_FILTER;
+	}
+	else if(key->acl_dissector_map & (VLAN_ID_DISSECTOR_PRESENT | 
+					  VLAN_PCP_DISSECTOR_PRESENT)){
+		filter->type = LAN937x_VLAN_AWARE_FILTER;
+	}
+	else{
+		filter->type = LAN937x_VLAN_UNAWARE_FILTER;
+	}
+
+	return 0;
 }
 
 static int lan937x_setup_bcast_policer(struct ksz_device *dev,
@@ -218,10 +290,10 @@ static int lan937x_setup_bcast_policer(struct ksz_device *dev,
 	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
 	struct lan937x_resrc_alloc *rsrc = rule->resrc;
 	struct lan937x_flower *flower = rule->flower;
-	int rc;
+	int rc = 0;
 
 	flower->action.actions_presence_mask |= BIT(LAN937X_ACT_BCAST_POLICE);
-
+	pr_info("%s",__func__);
 	if (res->broadcast_pol_used) {
 		NL_SET_ERR_MSG_MOD(extack, "Broadcast Policer already exists");
 		return -ENOSPC;
@@ -248,9 +320,9 @@ static int lan937x_setup_action_redirect(struct ksz_device *dev,
 	int rc = 0;
 
 	flower->action.actions_presence_mask |= BIT(LAN937X_ACT_REDIRECT_FLOW);
-
+	pr_info("%s",__func__);
 	if (!rsrc->type.tcam.n_entries) {
-		rc = lan937x_get_acl_req(flower->filter.filter_type,
+		rc = lan937x_get_acl_req(flower->filter.type,
 					 &rsrc->type.tcam.parser,
 					 &rsrc->type.tcam.n_entries);
 		if (rc)
@@ -282,9 +354,9 @@ static int lan937x_setup_action_drop(struct ksz_device *dev,
 	int rc = 0;
 
 	flower->action.actions_presence_mask |= BIT(LAN937X_ACT_DROP);
-
+	pr_info("%s",__func__);
 	if (flower->action.n_actions == 1) {
-		rc = lan937x_get_acl_req(flower->filter.filter_type,
+		rc = lan937x_get_acl_req(flower->filter.type,
 					 parser, n_entries);
 		if (rc)
 			return rc;
@@ -309,7 +381,7 @@ static int lan937x_setup_tc_policer(struct ksz_device *dev,
 
 	action = &flower->action;
 	action->actions_presence_mask |= BIT(LAN937X_ACT_TC_POLICE);
-
+	pr_info("%s",__func__);
 	key = &flower->filter.key;
 	rc = lan937x_check_tc_pol_availability(dev, port, key->vlan_prio.value);
 	if (rc) {
@@ -340,14 +412,14 @@ static int lan937x_setup_stream_policer(struct ksz_device *dev,
 
 	action = &flower->action;
 	action->actions_presence_mask |= BIT(LAN937X_ACT_STREAM_POLICE);
-
+	pr_info("%s",__func__);
 	if (!rsrc->type.strm_flt.en) {
 		rc = lan937x_assign_stream_filter(dev, port,
 						  &rsrc->type.strm_flt.index);
 		if (rc)
 			return rc;
 
-		rc = lan937x_get_acl_req(flower->filter.filter_type,
+		rc = lan937x_get_acl_req(flower->filter.type,
 					 &rsrc->type.tcam.parser,
 					 &rsrc->type.tcam.n_entries);
 		if (rc)
@@ -381,7 +453,7 @@ static int lan937x_flower_policer(struct ksz_device *dev,
 	struct lan937x_key *key;
 
 	//TODO:Balaje
-	switch (flower->filter.filter_type) {
+	switch (flower->filter.type) {
 	case LAN937x_BCAST_FILTER:
 		return lan937x_setup_bcast_policer(dev, extack, port, rule,
 						   rate_bytes_per_sec, burst);

@@ -260,7 +260,21 @@ enum lan937x_acl_dissector_type {
 	acl_src_mac_dissector,
 	acl_vlan_id_dissector,
 	acl_vlan_pcp_dissector,
-	acl_ethtype_dissector
+	acl_ethtype_dissector,
+	acl_ipv4_tos_dissector,
+	acl_ipv4_ttl_dissector,
+	acl_ipv4_protocol_dissector,
+	acl_ipv4_src_ip_dissector,
+	acl_ipv4_dst_ip_dissector,
+	acl_ipv6_tc_dissector,
+	acl_ipv6_hop_dissector,
+	acl_ipv6_nxt_hdr_dissector,
+	acl_ipv6_src_ip_dissector,
+	acl_ipv6_dst_ip_dissector,
+	acl_l4_src_port_dissector,
+	acl_l4_dst_port_dissector,
+
+	acl_num_dissectors_supported,
 };
 
 #define DST_MAC_DISSECTOR_PRESENT	BIT(acl_dst_mac_dissector)
@@ -268,6 +282,18 @@ enum lan937x_acl_dissector_type {
 #define VLAN_ID_DISSECTOR_PRESENT	BIT(acl_vlan_id_dissector)
 #define VLAN_PCP_DISSECTOR_PRESENT	BIT(acl_vlan_pcp_dissector)
 #define ETHTYPE_DISSECTOR_PRESENT	BIT(acl_ethtype_dissector)
+#define IPV4_TOS_DISSECTOR_PRESENT	BIT(acl_ipv4_tos_dissector)
+#define IPV4_TTL_DISSECTOR_PRESENT	BIT(acl_ipv4_ttl_dissector)
+#define IPV4_PROTO_DISSECTOR_PRESENT	BIT(acl_ipv4_protocol_dissector)
+#define IPV4_SRC_IP_DISSECTOR_PRESENT	BIT(acl_ipv4_src_ip_dissector)
+#define IPV4_DST_IP_DISSECTOR_PRESENT	BIT(acl_ipv4_dst_ip_dissector)
+#define IPV6_TC_DISSECTOR_PRESENT	BIT(acl_ipv6_tc_dissector)
+#define IPV6_HOP_DISSECTOR_PRESENT	BIT(acl_ipv6_hop_dissector)
+#define IPV6_NXT_HDR_DISSECTOR_PRESENT	BIT(acl_ipv6_nxt_hdr_dissector)
+#define IPV6_SRC_IP_DISSECTOR_PRESENT	BIT(acl_ipv6_src_ip_dissector)
+#define IPV6_DST_IP_DISSECTOR_PRESENT	BIT(acl_ipv6_dst_ip_dissector)
+#define L4_SRC_PORT_DISSECTOR_PRESENT	BIT(acl_l4_src_port_dissector)
+#define L4_DST_PORT_DISSECTOR_PRESENT	BIT(acl_l4_dst_port_dissector)
 
 #define VLAN_TAG_DISSECTORS_PRESENT	(VLAN_ID_DISSECTOR_PRESENT | \
 					VLAN_PCP_DISSECTOR_PRESENT)
@@ -333,7 +359,7 @@ struct lan937x_acl_entry {
 
 struct lan937x_acl_rfr {
 	bool rfr_valid;
-	u16 dissectors_covered;
+	u32 dissectors_covered;
 	bool rng_match_en;
 	bool l4;
 	bool l3;
