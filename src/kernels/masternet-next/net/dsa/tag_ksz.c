@@ -236,7 +236,7 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	/* Tail tag valid bit - This bit should always be set by the CPU */
 	val |= LAN937X_TAIL_TAG_VALID;
 
-	*tag = cpu_to_be16(val);
+	put_unaligned_be16(val,tag);
 
 	return skb;
 }
