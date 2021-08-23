@@ -251,9 +251,7 @@ static int lan937x_switch_detect(struct ksz_device *dev)
 static void lan937x_switch_exit(struct ksz_device *dev)
 {
 	lan937x_reset_switch(dev);
-
 	mdiobus_unregister(dev->ds->slave_mii_bus);
-	mdiobus_free(dev->ds->slave_mii_bus);
 }
 
 int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
@@ -287,6 +285,11 @@ int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
 	return ret;
 }
 
+static u32 lan937x_get_port_addr(int port, int offset)
+{
+	return PORT_CTRL_ADDR(port, offset);
+}
+
 bool lan937x_is_internal_phy_port(struct ksz_device *dev, int port)
 {
 	/* Check if the port is RGMII */
@@ -301,12 +304,7 @@ bool lan937x_is_internal_phy_port(struct ksz_device *dev, int port)
 	return true;
 }
 
-static u32 lan937x_get_port_addr(int port, int offset)
-{
-	return PORT_CTRL_ADDR(port, offset);
-}
-
-bool lan937x_is_internal_100BTX_phy_port(struct ksz_device *dev, int port)
+bool lan937x_is_internal_base_tx_phy_port(struct ksz_device *dev, int port)
 {
 	/* Check if the port is internal tx phy port */
 	if (lan937x_is_internal_phy_port(dev, port) &&
@@ -318,11 +316,11 @@ bool lan937x_is_internal_100BTX_phy_port(struct ksz_device *dev, int port)
 	return false;
 }
 
-bool lan937x_is_internal_t1_phy_port(struct ksz_device *dev, int port)
+bool lan937x_is_internal_base_t1_phy_port(struct ksz_device *dev, int port)
 {
 	/* Check if the port is internal t1 phy port */
 	if (lan937x_is_internal_phy_port(dev, port) &&
-	    !lan937x_is_internal_100BTX_phy_port(dev, port))
+	    !lan937x_is_internal_base_tx_phy_port(dev, port))
 		return true;
 
 	return false;
@@ -339,7 +337,7 @@ int lan937x_internal_phy_write(struct ksz_device *dev, int addr, int reg,
 	if (!lan937x_is_internal_phy_port(dev, addr))
 		return -EOPNOTSUPP;
 
-	if (lan937x_is_internal_100BTX_phy_port(dev, addr))
+	if (lan937x_is_internal_base_tx_phy_port(dev, addr))
 		addr_base = REG_PORT_TX_PHY_CTRL_BASE;
 	else
 		addr_base = REG_PORT_T1_PHY_CTRL_BASE;
@@ -383,7 +381,7 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
 	if (!lan937x_is_internal_phy_port(dev, addr))
 		return 0xffff;
 
-	if (lan937x_is_internal_100BTX_phy_port(dev, addr))
+	if (lan937x_is_internal_base_tx_phy_port(dev, addr))
 		addr_base = REG_PORT_TX_PHY_CTRL_BASE;
 	else
 		addr_base = REG_PORT_T1_PHY_CTRL_BASE;
@@ -581,7 +579,6 @@ static int lan937x_mdio_register(struct dsa_switch *ds)
 	int ret;
 
 	mdio_np = of_get_child_by_name(ds->dev->of_node, "mdio");
-
 	if (!mdio_np) {
 		dev_err(ds->dev, "no MDIO bus node\n");
 		return -ENODEV;

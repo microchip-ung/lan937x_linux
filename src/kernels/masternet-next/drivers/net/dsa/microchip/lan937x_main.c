@@ -314,7 +314,7 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 
 	ret = lan937x_get_vlan_table(dev, vlan->vid, &vlan_entry);
 	if (ret < 0) {
-		NL_SET_ERR_MSG_MOD(extack, "Failed to get vlan table\n");
+		NL_SET_ERR_MSG_MOD(extack, "Failed to get vlan table");
 		return ret;
 	}
 
@@ -837,17 +837,7 @@ static int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
 	int ret, p;
 	u8 data;
 
-	/* Configure ingress/egress mirroring*/
-	if (ingress)
-		ret = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX,
-				       true);
-	else
-		ret = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX,
-				       true);
-	if (ret < 0)
-		return ret;
-
-	/* Configure sniffer port meanwhile limit to one sniffer port
+	/* Limit to one sniffer port
 	 * Check if any of the port is already set for sniffing
 	 * If yes, instruct the user to remove the previous entry & exit
 	 */
@@ -868,14 +858,25 @@ static int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
 		}
 	}
 
+	/* Configure ingress/egress mirroring */
+	if (ingress)
+		ret = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX,
+				       true);
+	else
+		ret = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX,
+				       true);
+	if (ret < 0)
+		return ret;
+	
+	/* Configure sniffer port as other ports do not have
+	 * PORT_MIRROR_SNIFFER is set
+	 */
 	ret = lan937x_port_cfg(dev, mirror->to_local_port, P_MIRROR_CTRL,
 			       PORT_MIRROR_SNIFFER, true);
 	if (ret < 0)
 		return ret;
 
-	ret = lan937x_cfg(dev, S_MIRROR_CTRL, SW_MIRROR_RX_TX, false);
-
-	return ret;
+	return lan937x_cfg(dev, S_MIRROR_CTRL, SW_MIRROR_RX_TX, false);
 }
 
 static void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
@@ -1137,6 +1138,7 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 	if (!phy_interface_mode_is_rgmii(state->interface) &&
 	    state->interface != PHY_INTERFACE_MODE_RMII &&
 	    state->interface != PHY_INTERFACE_MODE_MII &&
+	    state->interface != PHY_INTERFACE_MODE_NA &&
 	    state->interface != PHY_INTERFACE_MODE_INTERNAL) {
 		bitmap_zero(supported, __ETHTOOL_LINK_MODE_MASK_NBITS);
 		dev_err(ds->dev, "Unsupported interface '%s' for port %d\n",
@@ -1144,11 +1146,15 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 		return;
 	}
 
-	/* For RGMII, RMII, MII and internal TX phy port */
+	/* For RGMII, RMII, MII and internal TX phy port and
+	 * as per phylink.h, when @state->interface is %PHY_INTERFACE_MODE_NA,
+	 * phylink expects the MAC driver to return all supported link modes.
+	 */
 	if (phy_interface_mode_is_rgmii(state->interface) ||
 	    state->interface == PHY_INTERFACE_MODE_RMII ||
 	    state->interface == PHY_INTERFACE_MODE_MII ||
-	    lan937x_is_internal_100BTX_phy_port(dev, port)) {
+	    state->interface == PHY_INTERFACE_MODE_NA ||
+	    lan937x_is_internal_base_tx_phy_port(dev, port)) {
 		phylink_set(mask, 10baseT_Half);
 		phylink_set(mask, 10baseT_Full);
 		phylink_set(mask, 100baseT_Half);
@@ -1160,11 +1166,13 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 	}
 
 	/* For RGMII interface */
-	if (phy_interface_mode_is_rgmii(state->interface))
+	if (phy_interface_mode_is_rgmii(state->interface) ||
+	    state->interface == PHY_INTERFACE_MODE_NA)
 		phylink_set(mask, 1000baseT_Full);
 
 	/* For T1 PHY */
-	if (lan937x_is_internal_t1_phy_port(dev, port)) {
+	if (lan937x_is_internal_base_t1_phy_port(dev, port) ||
+	    state->interface == PHY_INTERFACE_MODE_NA) {
 		phylink_set(mask, 100baseT1_Full);
 		phylink_set_port_modes(mask);
 	}
