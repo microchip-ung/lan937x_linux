@@ -172,7 +172,7 @@
 					spi-cpol;
 					interrupt-parent = <&pioB>;
 					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;					
-					status = "okay";
+					status = "disabled";
 					pps_led_index = <1>;
 					ports {
 						#address-cells = <1>;
