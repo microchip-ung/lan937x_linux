@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/iopoll.h>
 #include <linux/phy.h>
+#include <linux/of_net.h>
 #include <linux/if_bridge.h>
 #include <linux/if_vlan.h>
 #include <net/dsa.h>
@@ -331,7 +332,7 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 
 	ret = lan937x_set_vlan_table(dev, vlan->vid, &vlan_entry);
 	if (ret < 0) {
-		NL_SET_ERR_MSG_MOD(extack, "Failed to set vlan table\n");
+		NL_SET_ERR_MSG_MOD(extack, "Failed to set vlan table");
 		return ret;
 	}
 
@@ -340,7 +341,7 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 		ret = lan937x_pwrite16(dev, port, REG_PORT_DEFAULT_VID,
 				       vlan->vid);
 		if (ret < 0) {
-			NL_SET_ERR_MSG_MOD(extack, "Failed to set pvid\n");
+			NL_SET_ERR_MSG_MOD(extack, "Failed to set pvid");
 			return ret;
 		}
 	}
@@ -1001,6 +1002,69 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 	}
 }
 
+static void lan937x_set_rgmii_delay(struct ksz_device *dev, int port,
+									u32 val, bool is_tx)
+{
+	struct ksz_port *p = &dev->ports[port];
+
+	if (is_tx)
+		p->rgmii_tx_val = val;
+	else
+		p->rgmii_rx_val = val;
+}
+
+static int lan937x_parse_dt_rgmii_delay (struct ksz_device *dev)
+{
+	struct device_node *ports, *port;
+	int err, p;
+	u32 val;
+
+	ports = of_get_child_by_name(dev->dev->of_node, "ports");
+	if (!ports)
+		ports = of_get_child_by_name(dev->dev->of_node, 
+					     "ethernet-ports");
+
+	if (!ports) {
+		dev_err(dev->dev, "no ports child node found\n");
+		return -EINVAL;
+	}
+
+	for_each_available_child_of_node(ports, port) {
+		err = of_property_read_u32(port, "reg", &p);
+		if (err) {
+			dev_err(dev->dev, "Port number not defined in the"
+				" device tree, \"reg\" property\n");
+			of_node_put(ports);
+			of_node_put(port);
+			return err;
+		}
+		pr_info("reg:%d\n", p);
+		/* skip for internal ports */
+		if (lan937x_is_internal_phy_port(dev, p))
+			continue;
+
+		pr_info("am here\n");
+		if (of_property_read_u32(port, "rx-internal-delay-ps", &val)) {
+			/* TODO: default delay */
+			val = 0;
+			pr_info("am here2\n");
+		}
+		/* TODO MAX DELAY VALIDATION */
+		lan937x_set_rgmii_delay(dev, p, val, false);
+
+		if (!of_property_read_u32(port, "tx-internal-delay-ps", &val)) {
+			/* TODO: default delay */
+			val = 0;
+			pr_info("am here3\n");
+		}
+		/* TODO MAX DELAY VALIDATION */
+		lan937x_set_rgmii_delay(dev, p, val, true);
+	}
+
+	of_node_put(ports);
+	return 0;
+}
+
 static int lan937x_setup(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
@@ -1011,6 +1075,12 @@ static int lan937x_setup(struct dsa_switch *ds)
 		dev_err(ds->dev, "failed to reset switch\n");
 		return ret;
 	}
+
+	/* Apply rgmii internal delay for the mac based on device tree */
+	ret = lan937x_parse_dt_rgmii_delay(dev);
+	if (ret < 0)
+		return ret;
+
 	/* The VLAN aware is a global setting. Mixed vlan
 	 * filterings are not supported.
 	 */
@@ -1094,6 +1164,8 @@ static void lan937x_phylink_mac_config(struct dsa_switch *ds, int port,
 				       const struct phylink_link_state *state)
 {
 	struct ksz_device *dev = ds->priv;
+
+	pr_info("called for mac config: %d", port);
 
 	/* Internal PHYs */
 	if (lan937x_is_internal_phy_port(dev, port))

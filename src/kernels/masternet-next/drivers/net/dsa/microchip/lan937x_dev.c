@@ -103,17 +103,9 @@ int lan937x_pwrite32(struct ksz_device *dev, int port, int offset, u32 data)
 	return ksz_write32(dev, PORT_CTRL_ADDR(port, offset), data);
 }
 
-int lan937x_port_cfg32(struct ksz_device *dev, int port, int offset, u32 bits,
-		       bool set)
-{
-	return regmap_update_bits(dev->regmap[2], PORT_CTRL_ADDR(port, offset),
-				  bits, set ? bits : 0);
-}
-
 void lan937x_cfg_port_member(struct ksz_device *dev, int port, u8 member)
 {
 	lan937x_pwrite32(dev, port, REG_PORT_VLAN_MEMBERSHIP__4, member);
-
 	dev->ports[port].member = member;
 }
 
@@ -420,6 +412,32 @@ static void lan937x_config_gbit(struct ksz_device *dev, bool gbit, u8 *data)
 		*data |= PORT_MII_NOT_1GBIT;
 }
 
+static void lan937x_apply_rgmii_delay(struct ksz_device *dev, int port)
+{
+	struct ksz_port *p = &dev->ports[port];
+	u8 data8;
+
+	/* clear the bits */
+	lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
+	data8 &= ~(PORT_RGMII_ID_EG_ENABLE | PORT_RGMII_ID_IG_ENABLE);
+
+	if (p->rgmii_tx_val)
+		data8 |= PORT_RGMII_ID_EG_ENABLE;
+	
+	if (p->rgmii_rx_val)
+		data8 |= PORT_RGMII_ID_IG_ENABLE;
+
+	/* Write the updated value */
+	lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, data8);
+
+	/* Applied standard delay(2ns) for any value of *-internal-delay-ps,
+	 * hence throwing an error might not be useful, so pass the information
+	 * to the user
+	 */
+	dev_info(dev->dev, "Applied rgmii standard delay (2ns) for"
+		 " port %d\n",port);
+}
+
 void lan937x_mac_config(struct ksz_device *dev, int port,
 			phy_interface_t interface)
 {
@@ -441,22 +459,17 @@ void lan937x_mac_config(struct ksz_device *dev, int port,
 		data8 |= PORT_RMII_SEL;
 		break;
 	case PHY_INTERFACE_MODE_RGMII:
+		lan937x_config_gbit(dev, true, &data8);
+		data8 |= PORT_RGMII_SEL;
+		break;
 	case PHY_INTERFACE_MODE_RGMII_ID:
 	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_RGMII_RXID:
 		lan937x_config_gbit(dev, true, &data8);
 		data8 |= PORT_RGMII_SEL;
 
-		/* Add RGMII internal delay for cpu port*/
-		if (dsa_is_cpu_port(dev->ds, port)) {
-			if (interface == PHY_INTERFACE_MODE_RGMII_ID ||
-			    interface == PHY_INTERFACE_MODE_RGMII_RXID)
-				data8 |= PORT_RGMII_ID_IG_ENABLE;
-
-			if (interface == PHY_INTERFACE_MODE_RGMII_ID ||
-			    interface == PHY_INTERFACE_MODE_RGMII_TXID)
-				data8 |= PORT_RGMII_ID_EG_ENABLE;
-		}
+		/* Apply rgmii internal delay for the mac */
+		lan937x_apply_rgmii_delay (dev, port);
 		break;
 	default:
 		dev_err(dev->dev, "Unsupported interface '%s' for port %d\n",
@@ -541,7 +554,6 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 		lan937x_port_cfg(dev, port, REG_PORT_XMII_CTRL_0,
 				 PORT_TX_FLOW_CTRL | PORT_RX_FLOW_CTRL,
 				 true);
-		lan937x_mac_config(dev, port, p->interface);
 	}
 
 	if (cpu_port)
