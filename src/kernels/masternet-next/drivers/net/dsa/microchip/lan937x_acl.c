@@ -707,6 +707,15 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 			acl_action[5] |= ((0x00 << TCAM_AAR_DP_L_POS)
 						& LAN937X_ACL_AAR_DPORT_L);
 		break;
+		case LAN937X_ACT_PRIORITY:
+			acl_action[2] |= ((0x03 >> TCAM_AAR_QUE_EN_POS)
+							  & LAN937X_ACL_AAR_QUE_EN);
+			acl_action[3] |= ((action->skbedit_prio >> TCAM_AAR_QUE_SEL_POS)
+							  & LAN937X_ACL_AAR_QUE_SEL);
+			/*to be removed*/
+			acl_action[0] |= (1 << TCAM_AAR_COUNT_POS);
+			
+		break;
 		default:
 			rc = -EINVAL;
 			goto out;

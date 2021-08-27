@@ -121,6 +121,7 @@
 #define TCAM_AAR_VID_DATA_H_POS 6
 /* AAR2 [47:40] */
 #define TCAM_AAR_VID_DATA_L_POS 2
+#define TCAM_AAR_QUE_EN_POS  0
 /* ARR3 [39:32] */
 #define TCAM_AAR_QUE_SEL_POS  5
 #define TCAM_AAR_RP_POS 4

@@ -368,6 +368,35 @@ static int lan937x_setup_action_drop(struct ksz_device *dev,
 	return rc;
 }
 
+static int lan937x_setup_action_priority(struct ksz_device *dev,
+				     	 struct netlink_ext_ack *extack,
+					 int port, u32 priority,
+				    	 struct lan937x_flower_rule *rule)
+{
+	struct lan937x_resrc_alloc *rsrc = rule->resrc;
+	struct lan937x_flower *flower = rule->flower;
+	u8 *n_entries = &rsrc->type.tcam.n_entries;
+	u8 *parser = &rsrc->type.tcam.parser;
+	u8 *index = &rsrc->type.tcam.index;
+	int rc = 0;
+
+	flower->action.actions_presence_mask |= BIT(LAN937X_ACT_PRIORITY);
+	pr_info("%s",__func__);
+
+	/*TODO*/
+	rc = lan937x_get_acl_req(flower->filter.type,
+					parser, n_entries);
+	if (rc)
+		return rc;
+	rc = lan937x_assign_tcam_entries(dev, port, *n_entries, index);
+	if (rc)
+		return rc;
+
+	flower->action.skbedit_prio = priority;
+	rsrc->resrc_used_mask |= BIT(LAN937X_TCAM_ENTRIES);
+	return rc;
+}
+
 static int lan937x_setup_tc_policer(struct ksz_device *dev,
 				    struct netlink_ext_ack *extack, int port,
 				    struct lan937x_flower_rule *rule,
@@ -466,6 +495,7 @@ static int lan937x_flower_policer(struct ksz_device *dev,
 							rate_bytes_per_sec,
 							burst);
 		}
+		fallthrough;
 	case LAN937x_VLAN_UNAWARE_FILTER:
 		return lan937x_setup_stream_policer(dev, extack, port, rule,
 						    rate_bytes_per_sec, burst,
@@ -560,11 +590,13 @@ static int lan937x_flower_parse_actions(struct ksz_device *dev,
 			rc = -EOPNOTSUPP;
 			break;
 		case FLOW_ACTION_PRIORITY:
-			NL_SET_ERR_MSG_MOD(extack, "To be supported");
-			NL_SET_ERR_MSG_MOD(extack, "To be supported");
-			pr_info("To be supported");
-			pr_info("To be supported");
-			pr_info("To be supported");
+			if (act->priority >= dev->ds->num_tx_queues) {
+				NL_SET_ERR_MSG_MOD(extack, "Only priorities 0..7 are supported");
+				return -EINVAL;
+			}
+
+			rc = lan937x_setup_action_priority(dev, extack, port,
+						       				   act->priority, flower_rule);
 			break;
 		default:
 			NL_SET_ERR_MSG_MOD(extack, "Action not supported");
@@ -874,7 +906,7 @@ static int lan937x_flower_free_resrcs(struct ksz_device *dev, int port,
 	return 0;
 }
 
-int lan937x_tc_flower_add(struct dsa_switch *ds, int port,
+int lan937x_cls_flower_add(struct dsa_switch *ds, int port,
 			  struct flow_cls_offload *cls, bool ingress)
 {
 	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
@@ -916,7 +948,7 @@ err:
 	return rc;
 }
 
-int lan937x_tc_flower_del(struct dsa_switch *ds, int port,
+int lan937x_cls_flower_del(struct dsa_switch *ds, int port,
 			  struct flow_cls_offload *cls, bool ingress)
 {
 	struct ksz_device *dev = ds->priv;
@@ -942,14 +974,6 @@ int lan937x_tc_flower_del(struct dsa_switch *ds, int port,
 	pr_info("Flower Deletion: %lu", cls->cookie);
 
 	return rc;
-}
-
-int lan937x_tc_flower_stats(struct dsa_switch *ds, int port,
-			    struct flow_cls_offload *cls, bool ingress)
-{
-	pr_info("%s",__func__);
-	pr_info("%lu", cls->cookie);
-	return 0;
 }
 
 int lan937x_flower_setup(struct dsa_switch *ds)

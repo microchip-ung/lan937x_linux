@@ -40,6 +40,7 @@ enum lan937x_actions_id {
 	LAN937X_ACT_STREAM_POLICE,
 	LAN937X_ACT_STREAM_GATE,
 	LAN937X_ACT_DROP,
+	LAN937X_ACT_PRIORITY,
 	LAN937X_NUM_ACTIONS_SUPPORTED,
 };
 
@@ -129,6 +130,7 @@ struct lan937x_flower_action {
 	} gate;
 
 	u8 redirect_port_mask;
+	u8 skbedit_prio;
 
 };
 
@@ -178,7 +180,7 @@ struct lan937x_flower_rule {
 	struct lan937x_resrc_alloc *resrc;
 };
 
-int lan937x_tc_flower_add(struct dsa_switch *ds, int port,
+int lan937x_cls_flower_add(struct dsa_switch *ds, int port,
 			  struct flow_cls_offload *cls, bool ingress);
 int lan937x_flower_setup(struct dsa_switch *ds);
 
@@ -186,11 +188,8 @@ int lan937x_init_acl_parsers(struct ksz_device *dev, int port);
 
 int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 			      struct lan937x_flower_rule *rule);
-int lan937x_tc_flower_del(struct dsa_switch *ds, int port,
+int lan937x_cls_flower_del(struct dsa_switch *ds, int port,
 			  struct flow_cls_offload *cls, bool ingress);
-int lan937x_tc_flower_stats(struct dsa_switch *ds, int port,
-			    struct flow_cls_offload *cls, bool ingress);
-
 int lan937x_get_acl_req(enum lan937x_filter_type type,
 			u8 *parser_idx, u8 *num_entries);
 struct lan937x_flr_blk *lan937x_get_flr_blk (struct ksz_device *dev,
