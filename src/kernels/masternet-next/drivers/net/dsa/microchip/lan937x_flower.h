@@ -21,6 +21,16 @@ struct lan937x_p_res {
 	bool broadcast_pol_used;
 };
 
+/*
+struct lan937x_flr_blk : 
+
+Flower Rule and Hw Resource Management data structure. Members are,
+	rules- List for holding already implemented TC Flower Rules. Each Node 
+		is of type lan937x_flower_rule.
+	res - Data Structure for tracking allocated and available hardware 
+	      resources.
+Memory for this data structure is allocated through dev->port->priv member.
+*/
 struct lan937x_flr_blk {
 	struct list_head rules;	/**Element type: lan937x_flower_rule*/
 	struct lan937x_p_res res;

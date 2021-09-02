@@ -43,7 +43,6 @@ static int lan937x_assign_stream_filter(struct ksz_device *dev, int port,
 			return 0;
 		}
 	}
-	pr_info("Stream Filters not available");
 	return -ENOSPC;
 }
 
@@ -65,24 +64,25 @@ int lan937x_assign_tcam_entries(struct ksz_device *dev, int port,
 {
 	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
 	int i, j, count;
-	pr_info("%s",__func__);
+
 	for (i = 0; i < LAN937X_NUM_TCAM_ENTRIES; i++) {
+
 		count = 0;
 		for (j = 0; j < num_entry_reqd; j++) {
 
 			if (i+j > LAN937X_NUM_TCAM_ENTRIES)
 				goto out;
-			pr_info("%d",i+j);
+
 			if (!(res->tcam_entries_used[i + j]))
 				count++;
 		}
+
 		if (count == num_entry_reqd) {
 			*tcam_idx = i;
 			return 0;
 		}
 	}
 out:
-	pr_info("TCAM Entry not available");
 	return -ENOSPC;
 }
 
@@ -112,7 +112,8 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 	bool is_bcast_dmac = false;
 
 	if (dissector->used_keys &
-	    ~(BIT(FLOW_DISSECTOR_KEY_BASIC) | BIT(FLOW_DISSECTOR_KEY_CONTROL) |
+	    ~(BIT(FLOW_DISSECTOR_KEY_BASIC) | 
+              BIT(FLOW_DISSECTOR_KEY_CONTROL) |
 	      BIT(FLOW_DISSECTOR_KEY_VLAN) |
 	      BIT(FLOW_DISSECTOR_KEY_ETH_ADDRS) |
 	      BIT(FLOW_DISSECTOR_KEY_IPV4_ADDRS) |
@@ -127,6 +128,7 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		struct flow_match_basic match;
 
 		flow_rule_match_basic(rule, &match);
+		pr_info("n_proto : %x",match.key->n_proto);
 		if (ntohs(match.key->n_proto) == ETH_P_IP) {
 			pr_info("IPv4");
 			key->acl_dissector_map |=IPV4_PROTO_DISSECTOR_PRESENT;
@@ -293,7 +295,7 @@ static int lan937x_setup_bcast_policer(struct ksz_device *dev,
 	int rc = 0;
 
 	flower->action.actions_presence_mask |= BIT(LAN937X_ACT_BCAST_POLICE);
-	pr_info("%s",__func__);
+
 	if (res->broadcast_pol_used) {
 		NL_SET_ERR_MSG_MOD(extack, "Broadcast Policer already exists");
 		return -ENOSPC;
@@ -331,8 +333,10 @@ static int lan937x_setup_action_redirect(struct ksz_device *dev,
 		rc = lan937x_assign_tcam_entries(dev, port,
 						 rsrc->type.tcam.n_entries,
 						 &rsrc->type.tcam.index);
-		if (rc)
+		if (rc){
+			NL_SET_ERR_MSG_MOD(extack, "TCAM entry unavailable");
 			return rc;
+		}
 	}
 
 	flower->action.redirect_port_mask |= destport_mask;
@@ -354,15 +358,17 @@ static int lan937x_setup_action_drop(struct ksz_device *dev,
 	int rc = 0;
 
 	flower->action.actions_presence_mask |= BIT(LAN937X_ACT_DROP);
-	pr_info("%s",__func__);
+
 	if (flower->action.n_actions == 1) {
 		rc = lan937x_get_acl_req(flower->filter.type,
 					 parser, n_entries);
 		if (rc)
 			return rc;
 		rc = lan937x_assign_tcam_entries(dev, port, *n_entries, index);
-		if (rc)
+		if (rc){
+			NL_SET_ERR_MSG_MOD(extack, "TCAM entry unavailable");
 			return rc;
+		}
 	}
 	rsrc->resrc_used_mask |= BIT(LAN937X_TCAM_ENTRIES);
 	return rc;
@@ -410,7 +416,7 @@ static int lan937x_setup_tc_policer(struct ksz_device *dev,
 
 	action = &flower->action;
 	action->actions_presence_mask |= BIT(LAN937X_ACT_TC_POLICE);
-	pr_info("%s",__func__);
+
 	key = &flower->filter.key;
 	rc = lan937x_check_tc_pol_availability(dev, port, key->vlan_prio.value);
 	if (rc) {
@@ -421,7 +427,8 @@ static int lan937x_setup_tc_policer(struct ksz_device *dev,
 	action->police.rate_bytes_per_sec = div_u64(rate_bytes_per_sec *
 						    512, 1000000);
 	action->police.burst = burst;
-	//flower->action.police.mtu = mtu;
+	/* Burst Setting is not supported by Queue Policer Hardware*/
+	NL_SET_ERR_MSG_MOD(extack, "Burst setting is ignored");
 	rsrc->type.tc_pol_used = key->vlan_prio.value;
 	rsrc->resrc_used_mask |= BIT(LAN937X_TC_POLICER);
 	return rc;
@@ -441,12 +448,14 @@ static int lan937x_setup_stream_policer(struct ksz_device *dev,
 
 	action = &flower->action;
 	action->actions_presence_mask |= BIT(LAN937X_ACT_STREAM_POLICE);
-	pr_info("%s",__func__);
+
 	if (!rsrc->type.strm_flt.en) {
 		rc = lan937x_assign_stream_filter(dev, port,
 						  &rsrc->type.strm_flt.index);
-		if (rc)
+		if (rc){
+			NL_SET_ERR_MSG_MOD(extack, "Stream filtr unavailable");
 			return rc;
+		}
 
 		rc = lan937x_get_acl_req(flower->filter.type,
 					 &rsrc->type.tcam.parser,
@@ -457,14 +466,15 @@ static int lan937x_setup_stream_policer(struct ksz_device *dev,
 		rc = lan937x_assign_tcam_entries(dev, port,
 						 rsrc->type.tcam.n_entries,
 						 &rsrc->type.tcam.index);
-		if (rc)
+		if (rc) {
+			NL_SET_ERR_MSG_MOD(extack, "TCAM entry unavailable");
 			return rc;
+		}
 
 		rsrc->type.strm_flt.en = true;
 	}
 
 	action->police.rate_bytes_per_sec = rate_bytes_per_sec;
-	//div_u64(rate_bytes_per_sec * 512, 1000000);
 	action->police.burst = burst;
 	action->police.mtu = mtu;
 
@@ -481,7 +491,6 @@ static int lan937x_flower_policer(struct ksz_device *dev,
 	struct lan937x_flower *flower = rule->flower;
 	struct lan937x_key *key;
 
-	//TODO:Balaje
 	switch (flower->filter.type) {
 	case LAN937x_BCAST_FILTER:
 		return lan937x_setup_bcast_policer(dev, extack, port, rule,
@@ -510,7 +519,7 @@ int lan937x_flower_rule_init(struct ksz_device *dev,
 			     struct lan937x_flower_rule **flower_rule)
 {
 	struct lan937x_flower_rule *t;
-	pr_info("%s",__func__);
+
 	t = devm_kzalloc(dev->dev, sizeof(*t), GFP_KERNEL);
 	if (!t)
 		return -ENOMEM;
@@ -527,6 +536,7 @@ int lan937x_flower_rule_init(struct ksz_device *dev,
 		devm_kfree(dev->dev,t);
 		return -ENOMEM;
 	}
+
 	pr_info("%x", t);	
 	*flower_rule = t;
 	return 0;
@@ -542,7 +552,6 @@ static int lan937x_flower_parse_actions(struct ksz_device *dev,
 	int rc = 0;
 	int i;
 
-	pr_info("%s",__func__);
 	flower = flower_rule->flower;
 	flower->action.n_actions = rule->action.num_entries;
 
@@ -629,6 +638,7 @@ static int lan937x_init_tc_policer_hw(struct ksz_device *dev, int port)
 			return rc;
 		res->tc_policers_used[i] = false;
 	}
+
 	return 0;
 }
 
@@ -644,10 +654,10 @@ static int lan937x_cfg_tc_policer_hw(struct ksz_device *dev, int port,
 	if (rc)
 		return rc;
 
-	rc = lan937x_port_cfg(dev, port, REG_PORT_MAC_IN_RATE_LIMIT,
-			      PORT_RATE_LIMIT, true);
-	if (rc)
-		return rc;
+	// rc = lan937x_port_cfg(dev, port, REG_PORT_MAC_IN_RATE_LIMIT,
+	// 		      PORT_RATE_LIMIT, true);
+	// if (rc)
+	// 	return rc;
 
 	i = resrc->type.tc_pol_used;
 	rc = lan937x_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL + i, code);
@@ -697,12 +707,12 @@ bring it further near the desired value. This function returns a value that is
 greater than or equal to the desired value*/
 static u16 lan937x_psfp_rate_to_reg(u64 rate_bytes_per_sec)
 {
-	u8 i;
-	u32 t;
-	int j;
-	u16 regcode;
-	u64 t_rate = 0;
 	u64 rate_bps = (8 * rate_bytes_per_sec);
+	u64 t_rate = 0;
+	u16 regcode;
+	int j;
+	u32 t;
+	u8 i;
 	const u32 regbit_weightage_bps[] = {	1525, /*BIT 0*/
 						3051, /*BIT 1*/
 						6103, /*BIT 2*/
@@ -726,8 +736,9 @@ static u16 lan937x_psfp_rate_to_reg(u64 rate_bytes_per_sec)
 			/*accumulate until desired frequency is exceeded*/
 			t_rate = t_rate + regbit_weightage_bps[i];
 			regcode |= BIT(i);
-		} else
+		} else {
 			break;
+		}
 		i++;
 	}
 
@@ -750,12 +761,12 @@ static int lan937x_cfg_strm_policer_hw(struct ksz_device *dev, int port,
 				       struct lan937x_resrc_alloc *resrc,
 				       struct lan937x_flower_action *action)
 {
-	int rc;
+	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
+	u32 burst;
+	u8 index;
 	u16 cir;
 	u32 val;
-	u8 index;
-	u32 burst;
-	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
+	int rc;
 
 	if (!resrc->type.strm_flt.en)
 		return -EINVAL;
@@ -832,8 +843,7 @@ static int lan937x_flower_configure_hw(struct ksz_device *dev, int port,
 		switch (i) {
 		case LAN937X_ACT_TC_POLICE:
 			rc = lan937x_cfg_tc_policer_hw(dev, port, resrc, rate);
-			/*Identify if mtu can be configured*/
-			/*Show to user that burst setting is ignored**/
+			/* Identify if mtu can be configured */
 			break;
 
 		case LAN937X_ACT_BCAST_POLICE:
@@ -875,9 +885,8 @@ static int lan937x_flower_free_resrcs(struct ksz_device *dev, int port,
 	}
 
 	if (resrc->resrc_used_mask & BIT(LAN937X_TCAM_ENTRIES)) {
-		if (resrc->type.tcam.n_entries) {
+		if (resrc->type.tcam.n_entries) 
 			rc = lan937x_acl_free_entry(dev, port, rule);
-		}
 	}
 
 	if (resrc->resrc_used_mask & BIT(LAN937X_STREAM_FILTER)) {
@@ -898,9 +907,8 @@ static int lan937x_flower_free_resrcs(struct ksz_device *dev, int port,
 	}
 
 	if (resrc->resrc_used_mask & BIT(LAN937X_BROADCAST_POLICER)) {
-		if (resrc->type.broadcast_pol_en) {
-			/* To Do*/
-		}
+		if (resrc->type.broadcast_pol_en)
+			res->broadcast_pol_used = false;
 	}
 
 	return 0;
