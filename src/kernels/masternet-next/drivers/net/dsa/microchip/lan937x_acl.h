@@ -267,6 +267,14 @@
 #define RFR_IDX_8			8
 #define RFR_IDX_9			9
 
+/**Key Format
+ * Multi Key Format - First byte of Entry should match Parser index to 
+ * avoid false matches
+ * Univerasal Format - No Parser index matches. Only dissector classification
+*/
+#define PARSER_UNIVERSAL_FORMAT		0x00
+#define PARSER_MULTI_KEY_FORMAT		0x01
+
 enum lan937x_acl_dissector_type {
 	acl_dst_mac_dissector,
 	acl_src_mac_dissector,
@@ -404,9 +412,9 @@ enum layer{
 
 /**Defines to set RFR fields*/
 #define RFR_RNG_MATCH_EN(X)	((X << TCAM_RFR_RN_EN_POS) & TCAM_RFR_EN_RNGM)
-#define RFR_OSFT_L4_RELATV(X)	((X<< TCAM_RFR_L4_POS) & TCAM_RFR_L4)
-#define RFR_OSFT_L3_RELATV(X)	((X<< TCAM_RFR_L3_POS) & TCAM_RFR_L3)
-#define RFR_OSFT_L2_RELATV(X)	((X<< TCAM_RFR_L2_POS) & TCAM_RFR_L2)
+#define RFR_OSFT_L4_RELATV(X)	((((u32)X)<< TCAM_RFR_L4_POS) & TCAM_RFR_L4)
+#define RFR_OSFT_L3_RELATV(X)	((((u32)X)<< TCAM_RFR_L3_POS) & TCAM_RFR_L3)
+#define RFR_OSFT_L2_RELATV(X)	((((u32)X)<< TCAM_RFR_L2_POS) & TCAM_RFR_L2)
 
 /* Set offset address to extract field from packet, Offset address is 
  * expected interms of number of words instead of bytes, */

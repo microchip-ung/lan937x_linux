@@ -259,12 +259,16 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_PORTS)) {
 		struct flow_match_ports match;
-
+		
 		flow_rule_match_ports(rule, &match);
+		
 		key->src_port.value = ntohs(match.key->src);
-		key->src_port.mask = ntohs(match.mask->src);
+		key->src_port.mask =  ntohs(match.mask->src);
 		key->dst_port.value = ntohs(match.key->dst);
 		key->dst_port.mask = ntohs(match.mask->dst);
+		key->acl_dissector_map |= (L4_SRC_PORT_DISSECTOR_PRESENT |
+					   L4_DST_PORT_DISSECTOR_PRESENT);
+		pr_info("Ports %x %x",key->dst_port.value,key->dst_port.mask );		
 	}
 
 	/**TO DO: Ethertype is pending*/	

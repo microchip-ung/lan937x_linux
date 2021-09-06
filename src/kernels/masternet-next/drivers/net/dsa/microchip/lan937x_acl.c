@@ -11,6 +11,13 @@
 #include "lan937x_flower.h"
 #include "lan937x_acl.h"
 
+const u8 parser_key_format[MAX_ACL_PARSER] = {
+	[PARSER_IDX_0] =PARSER_MULTI_KEY_FORMAT,
+	[PARSER_IDX_1] =PARSER_UNIVERSAL_FORMAT,
+	[PARSER_IDX_2] =PARSER_MULTI_KEY_FORMAT,
+	[PARSER_IDX_3] =PARSER_UNIVERSAL_FORMAT
+};
+
 const struct lan937x_acl_rfr acl_rfrs_table[MAX_ACL_PARSER][MAX_RFR] = {
 	[PARSER_IDX_0] = {
 		[RFR_IDX_0] = {
@@ -338,7 +345,7 @@ static int lan937x_readback(struct ksz_device *dev, int port,
 	if (rc)
 		return rc;
 	
-	dev_dbg(dev->dev, "Readback\n");
+	pr_info("Readback\n");
 	for (i = 0; i < size_dwords; i++) {
 		rc = lan937x_pread32(dev, port, REG_ACL_PORT_ADR + (4 * i),
 				     &val);
@@ -393,6 +400,7 @@ static int lan937x_acl_entry_write(struct ksz_device *dev,
 	rc = lan937x_pwrite16(dev, port, 0x66C, 0xFFFF);
 	if (rc)
 		return rc;
+
 	rc = lan937x_pwrite16(dev, port, 0x672, 0xFFFF);
 	if (rc)
 		return rc;
@@ -430,8 +438,8 @@ static void lan937x_cpy_array_to_entry(u8 *s_data, u8 *s_mask,
 				       u8 offset,
 				       u8 n)
 {
-	u8 *d_mask = &acl_entry->acl_mask[TCAM_MULTI_KEY_ENTRY_START+offset];
-	u8 *d_data = &acl_entry->acl_data[TCAM_MULTI_KEY_ENTRY_START+offset];
+	u8 *d_mask = &acl_entry->acl_mask[offset];
+	u8 *d_data = &acl_entry->acl_data[offset];
 	u8 i;
 
 	for (i = 0; i < n; i++) {
@@ -452,7 +460,6 @@ static void lan937x_cpy_ethaddr_to_entry(struct lan937x_val_mask_u64 *ethaddr,
 	tdata &= tmask;
 	tmask &= (~tdata);
 
-	offset += TCAM_MULTI_KEY_ENTRY_START;
 	u64_to_ether_addr(tmask, &acl_entry->acl_mask[offset]);
 	u64_to_ether_addr(tdata, &acl_entry->acl_data[offset]);
 }
@@ -467,7 +474,6 @@ static void lan937x_cpy_u8_to_entry(struct lan937x_val_mask_u8 *field,
 	tdata &= tmask;
 	tmask &= (~tdata);
 
-	offset += TCAM_MULTI_KEY_ENTRY_START;
 	acl_entry->acl_mask[offset] |= (tmask);
 	acl_entry->acl_data[offset] |= (tdata);
 }
@@ -484,7 +490,6 @@ static void lan937x_cpy_u16_to_entry(struct lan937x_val_mask_u16 *field,
 	tdata &= tmask;
 	tmask &= (~tdata);
 
-	offset += TCAM_MULTI_KEY_ENTRY_START;
 	acl_entry->acl_mask[offset + 1] |= ((tmask & 0xFF00) >> 8);
 	acl_entry->acl_mask[offset] |= (tmask & 0x00FF);
 	acl_entry->acl_data[offset + 1] |= (tdata & 0xFF00) >> 8;
@@ -498,10 +503,13 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 				  struct lan937x_acl_entry *acl_entry)
 {
 	const struct lan937x_acl_rfr *rfr_ptr = acl_rfrs_table[parser_idx];
-	u8 *acl_mask = &acl_entry->acl_mask[TCAM_MULTI_KEY_ENTRY_START];
-	u8 *acl_data = &acl_entry->acl_data[TCAM_MULTI_KEY_ENTRY_START];
+	u8 *acl_mask = acl_entry->acl_mask;
+	u8 *acl_data = acl_entry->acl_data;
 	u8 ofst = 0;
 	int i;
+
+	if(parser_key_format[parser_idx] == PARSER_MULTI_KEY_FORMAT)
+		ofst += TCAM_MULTI_KEY_ENTRY_START;
 
 	for (i = 0; i < MAX_RFR_PER_PARSER; i++) {
 
@@ -653,7 +661,7 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 	u32 actions_presence_mask = action->actions_presence_mask;
 	struct lan937x_key *key = &rule->flower->filter.key;
 	struct lan937x_resrc_alloc *resrc = rule->resrc;
-	u16 acl_dissector_map = key->acl_dissector_map;
+	u32 acl_dissector_map = key->acl_dissector_map;
 	struct lan937x_acl_entry *acl_entry;
 	int rc = EINVAL;
 	u8 *acl_action;
@@ -692,6 +700,7 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 
 	for (i = 0; ((actions_presence_mask != 0) &&
 		     (i < LAN937X_NUM_ACTIONS_SUPPORTED)); i++) {
+
 		if (!(actions_presence_mask & BIT(i)))
 			continue;
 
@@ -734,10 +743,14 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 	/* For Multiple format Key
 	 * Bit 383:382 PARSER_NUM Programmed to the 1st parser used TCAM rule
 	 */
+	if (parser_key_format[parser] == PARSER_MULTI_KEY_FORMAT)
+	{
+		acl_entry[0].acl_mask[0] |= ((~parser) << 6);
+		acl_entry[0].acl_data[0] |= (parser<< 6);
+	}
+
 	for (j = 0; j < n_entries; j++) {
 		//To Do identify the problem
-		//acl_entry[j].acl_mask[0] |= ((~(parser + j)) << 6);
-		//acl_entry[j].acl_data[0] |= ((parser + j) << 6);
 
 		rc = lan937x_acl_entry_write(dev, port,
 					     resrc->type.tcam.index + j,
@@ -854,7 +867,7 @@ int lan937x_init_acl_parsers(struct ksz_device *dev, int port)
 
 	rc = lan937x_pwrite32(dev, port, REG_ACL_PORT_PCTRL,
 			      (BIT(30) | BIT(29) | BIT(17) |
-			       BIT(26) | BIT(27) | BIT(14) |
+			       /*BIT(26) |*/ BIT(27) |
 			       BIT(25) | BIT(24)));
 	if (rc)
 		return rc;
