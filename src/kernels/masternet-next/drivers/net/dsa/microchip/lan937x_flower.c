@@ -128,14 +128,14 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		struct flow_match_basic match;
 
 		flow_rule_match_basic(rule, &match);
-		pr_info("n_proto : %x",match.key->n_proto);
-		if (ntohs(match.key->n_proto) == ETH_P_IP) {
+		pr_info("n_proto : %x",match.key->ip_proto);
+		if (proto == ETH_P_IP) {
 			pr_info("IPv4");
 			key->acl_dissector_map |=IPV4_PROTO_DISSECTOR_PRESENT;
 			key->ipv4.proto.value = match.key->ip_proto;
 			key->ipv4.proto.mask = match.mask->ip_proto;
 		}
-		if (ntohs(match.key->n_proto) == ETH_P_IPV6) {
+		if (proto == ETH_P_IPV6) {
 			pr_info("IPv6");
 
 			key->acl_dissector_map |=IPV6_NXT_HDR_DISSECTOR_PRESENT;
