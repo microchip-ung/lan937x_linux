@@ -1,7 +1,7 @@
 From 9b5c9d112569e50499d91c58a83569a530fb2fec Mon Sep 17 00:00:00 2001
 From: arun <arun.ramadoss@microchip.com>
 Date: Thu, 26 Aug 2021 15:43:32 +0530
-Subject: [RFC PATCH net-next 2/2] added the ksz files
+Subject: [RFC PATCH net-next 2/3] added the ksz files
 
 Signed-off-by: arun <arun.ramadoss@microchip.com>
 ---

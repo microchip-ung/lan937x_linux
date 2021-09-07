@@ -293,10 +293,10 @@ if {! [file exists $rootfsFile]} {
 ## NandFlash Mapping
 set bootStrapAddr	0x00000000
 set ubootAddr		0x00040000
-set ubootEnvAddr	0x00100000
-set dtbAddr		0x00180000
-set kernelAddr		0x00200000
-set rootfsAddr		0x00800000
+set ubootEnvAddr	0x00140000
+set dtbAddr		0x001c0000
+set kernelAddr		0x00240000
+set rootfsAddr		0x00840000
 
 ## u-boot variable
 set kernelLoadAddr [get_kernel_load_addr $boardFamily]
@@ -318,10 +318,16 @@ lappend u_boot_variables \
     "bootargs=console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,768k(uboot)ro,256k(env),256k(env_redundant),512k(dtb),6M(kernel)ro,-(rootfs) rootfstype=ubifs ubi.mtd=6 root=ubi0:rootfs rw $videoMode" \
     "_bootargs=console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,768k(uboot)ro,256k(env),256k(env_redundant),512k(dtb),6M(kernel)ro,-(rootfs) rootfstype=ubifs ubi.mtd=6 root=ubi0:rootfs rw $videoMode" \
     "ethaddr=00:10:A1:93:74:10" \
-    "ipaddr=192.168.0.111" \
-    "serverip=192.168.0.100" \
+    "ipaddr=192.43.1.9" \
+    "serverip=192.43.1.1" \
     "subst_var=0" \
     "prep_boot=setenv -f subst_var 1; setenv -f bootargs \"\${_bootargs}\"" \
+    "phymode= kw.b 0x0007 0x10; kw.w 0x077c 0x130c; kw.w 0x75c 0x1108; kw.w 0x768 0x0001; kr.w 0x0760" \
+    "phymode1=kw.w 0x75c 0x1124; kw.w 0x0760 0x1800; kw.w 0x768 0x0003" \
+    "phymode2= kw.w 0x75c 0x2124; kw.w 0x0760 0x1800; kw.w 0x768 0x0003" \
+    "phymode3= kw.w 0x75c 0x3124; kw.w 0x0760 0x1800; kw.w 0x768 0x0003" \
+    "phymode4= kw.w 0x75c 0x4124; kw.w 0x0760 0x1800; kw.w 0x768 0x0003" \
+    "phymode5= kw.w 0x75c 0x5124; kw.w 0x0760 0x1800; kw.w 0x768 0x0003" \
     "$loadDts" \
     "$bootCmd"
 
@@ -365,15 +371,15 @@ if {$program == "yes"} {
 
    puts "-I- === Load the Kernel image and device tree database ==="
    send_file {NandFlash} "$dtbFile" $dtbAddr 0
-   send_file {NandFlash} "$kernelFile" $kernelAddr 0
+   #send_file {NandFlash} "$kernelFile" $kernelAddr 0
 
    if {$pmeccConfig != "none"} {
       puts "-I- === Enable trimffs ==="
       NANDFLASH::NandSetTrimffs 1
    }
 
-   puts "-I- === Load the linux file system ==="
-   send_file {NandFlash} "$rootfsFile" $rootfsAddr 0
+   #puts "-I- === Load the linux file system ==="
+   #send_file {NandFlash} "$rootfsFile" $rootfsAddr 0
 
    puts "-I- === DONE. ==="
 }

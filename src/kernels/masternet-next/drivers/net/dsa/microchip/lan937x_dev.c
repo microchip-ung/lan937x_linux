@@ -430,6 +430,8 @@ void lan937x_mac_config(struct ksz_device *dev, int port,
 
 	lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
 
+	pr_err("mac config\n");
+
 	/* clear MII selection & set it based on interface later */
 	data8 &= ~PORT_MII_SEL_M;
 
@@ -442,6 +444,7 @@ void lan937x_mac_config(struct ksz_device *dev, int port,
 	case PHY_INTERFACE_MODE_RMII:
 		lan937x_config_gbit(dev, false, &data8);
 		data8 |= PORT_RMII_SEL;
+		pr_err("rmii mode %d", port);
 		break;
 	case PHY_INTERFACE_MODE_RGMII:
 	case PHY_INTERFACE_MODE_RGMII_ID:
@@ -452,6 +455,7 @@ void lan937x_mac_config(struct ksz_device *dev, int port,
 
 		/* Add RGMII internal delay for cpu port*/
 		if (dsa_is_cpu_port(dev->ds, port)) {
+			pr_err("cpu port is %d", port);
 			if (interface == PHY_INTERFACE_MODE_RGMII_ID ||
 			    interface == PHY_INTERFACE_MODE_RGMII_RXID)
 				data8 |= PORT_RGMII_ID_IG_ENABLE;

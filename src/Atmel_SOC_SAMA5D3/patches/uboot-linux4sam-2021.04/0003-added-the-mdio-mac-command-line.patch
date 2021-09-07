@@ -1,0 +1,457 @@
+From bc40846adc3f07a8835d91063c4f4aaab9389b33 Mon Sep 17 00:00:00 2001
+From: arun <arun.ramadoss@microchip.com>
+Date: Tue, 7 Sep 2021 11:29:14 +0530
+Subject: [RFC PATCH net-next 3/3] added the mdio mac command line
+
+Signed-off-by: arun <arun.ramadoss@microchip.com>
+---
+ drivers/net/macb.c | 382 +++++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 336 insertions(+), 46 deletions(-)
+
+diff --git uboot-linux4sam-2021.04/drivers/net/macb.c uboot-linuxrsam-2021.04/drivers/net/macb.c
+index 57ea45e2dc..dec43f322d 100644
+--- uboot-linux4sam-2021.04/drivers/net/macb.c
++++ uboot-linuxrsam-2021.04/drivers/net/macb.c
+@@ -9,6 +9,9 @@
+ #include <log.h>
+ #include <asm/global_data.h>
+ #include <linux/delay.h>
++#include <spi.h>
++#include <eth_phy.h>
++#include <miiphy.h>
+ 
+ /*
+  * The u-boot networking stack is a little weird.  It seems like the
+@@ -178,6 +181,310 @@ static int macb_is_gem(struct macb_device *macb)
+ #define cpu_is_sama5d4() 0
+ #endif
+ 
++#define REG_VPHY_SPECIAL_CTRL__2	0x077C
++#define REG_VPHY_IND_ADDR__2		0x075C
++#define REG_VPHY_IND_DATA__2		0x0760
++#define REG_VPHY_IND_CTRL__2		0x0768
++
++#define VPHY_IND_WRITE			BIT(1)
++#define VPHY_IND_BUSY			BIT(0)
++
++#ifndef MAX_SPI_BYTES
++#   define MAX_SPI_BYTES 32	/* Maximum number of bytes we can handle */
++#endif
++
++#define MAX_SPI_DATA_BYTES	(MAX_SPI_BYTES - 4)
++
++/*
++ * Values from last command.
++ */
++static unsigned int	bus = CONFIG_DEFAULT_KSZ_SPI_BUS;
++static unsigned int	cs = 0;
++static unsigned int	mode = CONFIG_DEFAULT_KSZ_SPI_MODE;
++static unsigned int	speed = 1000000;
++static int		debug_spi = 0;
++static int		bitlen;
++static uchar 		dout[MAX_SPI_BYTES];
++static uchar 		din[MAX_SPI_BYTES];
++
++/* SPI frame opcodes */
++#define KS_SPIOP_RD			3
++#define KS_SPIOP_WR			2
++
++#define SPI_ADDR_SHIFT			24
++#define SPI_ADDR_MASK			((1 << SPI_ADDR_SHIFT) - 1)
++#define SPI_TURNAROUND_SHIFT		5
++
++#define PORT_CTRL_ADDR(port, addr) ((addr) | (((port + 1)) << 12))
++
++#define REG_CHIP_ID0__1                        0x0000
++
++/* Operation control */
++#define REG_SW_OPERATION               0x0300
++#define SW_RESET                       BIT(1)
++#define SW_START                       BIT(0)
++
++int macb_miiphy_write(struct mii_dev *bus, int phy_adr, int devad, int reg, u16 value);
++int macb_miiphy_read(struct mii_dev *bus, int phy_adr, int devad, int reg);
++
++struct ksz_phy_priv {
++      struct udevice *dev;
++       struct mii_dev *bus;
++       phy_interface_t interface;
++       int phy_port_cnt;
++       int phy_port_cpu;
++       int phy_ports;
++};
++
++static int spi_cmd(uint addr, int read)
++{
++	int j;
++	uint op = KS_SPIOP_WR;
++
++	if (read)
++		op = KS_SPIOP_RD;
++	addr &= SPI_ADDR_MASK;
++	addr |= op << SPI_ADDR_SHIFT;
++	addr <<= SPI_TURNAROUND_SHIFT;
++	for (j = 0; j < 4; j++) {
++		dout[3 - j] = (uchar) addr;
++		addr >>= 8;
++	}
++	return j;
++}
++
++
++static int do_spi_xfer()
++{
++	struct spi_slave *slave;
++	int ret = 0;
++
++	char name[30], *str;
++	struct udevice *dev;
++
++	snprintf(name, sizeof(name), "generic_%d:%d", bus, cs);
++	str = strdup(name);
++	ret = spi_get_bus_and_cs(bus, cs, speed, mode, "spi_generic_drv",
++				 str, &dev, &slave);
++	if (ret)
++		return ret;
++
++	ret = spi_claim_bus(slave);
++	if (ret)
++		goto done;
++	ret = spi_xfer(slave, bitlen, dout, din,
++		       SPI_XFER_BEGIN | SPI_XFER_END);
++	if (ret) {
++		printf("Error %d during SPI transaction\n", ret);
++	} else if (debug_spi) {
++		int j;
++
++		for (j = 0; j < ((bitlen + 7) / 8); j++)
++			printf("%02X", din[j]);
++		printf("\n");
++	}
++done:
++	spi_release_bus(slave);
++
++	return ret;
++}
++
++static int ksz_read32(u32 reg, u32 *val)
++{
++	spi_cmd(reg, 1);
++	bitlen = 64;
++
++	do_spi_xfer();
++
++	*val  = ((din[4] << 24) | (din[5]<<16) | (din[6] << 8) | din[7]);
++	
++	return 0;
++}
++
++static int ksz_write32(u32 reg, u32 val)
++{
++	spi_cmd(reg, 0);
++	bitlen = 64;
++
++	dout[4] = (val >> 24 ) & 0xff;
++	dout[5] = (val >> 16) & 0xff;
++	dout[6] = (val >> 8) & 0xff;
++	dout[7] = val;
++	do_spi_xfer();
++
++	return 0;
++}
++
++static int ksz_read16(u32 reg, u16 *val)
++{
++	spi_cmd(reg, 1);
++	bitlen = 48;
++
++	do_spi_xfer();
++
++	*val  = (din[4] << 8 | din[5]);
++	
++	return 0;
++}
++
++static int ksz_write16(u32 reg, u16 val)
++{
++	spi_cmd(reg, 0);
++	bitlen = 48;
++
++	dout[4] = val >> 8;
++	dout[5] = val;
++	do_spi_xfer();
++
++	return 0;
++}
++
++static int ksz_read8(u32 reg, u8 *val)
++{
++	spi_cmd(reg, 1);
++	bitlen = 40;
++
++	do_spi_xfer();
++
++	*val  = din[4];
++	
++	return 0;
++}
++
++static int ksz_write8(u32 reg, u8 val)
++{
++	spi_cmd(reg, 0);
++	bitlen = 40;
++
++	dout[4] = val;
++	do_spi_xfer();
++
++	return 0;
++}
++
++static int ksz9477_phy_config(struct phy_device *phydev)
++{
++       struct ksz_phy_priv *priv = (struct ksz_phy_priv *)phydev->bus->priv;
++       int i;
++       u8 data8;
++       int ret;
++
++       for (i = 0; i < priv->phy_port_cnt; i++) {
++               if ((1 << i) & priv->phy_ports) {
++                       phydev->addr = i;
++
++
++		       printf("phy reset \n");
++                       ret = phy_reset(phydev);
++                       if (ret) {
++                               printf("Error resetting P%d PHY %d\n", i + 1, ret);
++                               continue;
++                       }
++               }
++       }
++
++       /* start switch */
++       ksz_read8( REG_SW_OPERATION, &data8);
++       data8 |= SW_START;
++       ksz_write8( REG_SW_OPERATION, data8);
++
++       return 0;
++}
++
++static int ksz9477_phy_startup(struct phy_device *phydev)
++{
++       struct ksz_phy_priv *priv = (struct ksz_phy_priv *)phydev->bus->priv;
++       int i;
++       int link = 0;
++       int speed = phydev->speed;
++       int duplex = phydev->duplex;
++       int ret;
++
++       for (i = 0; i < priv->phy_port_cnt; i++) {
++               if ((1 << i) & priv->phy_ports) {
++                       phydev->addr = i;
++                       /* skip if not linked to avoid timeout waiting for aneg */
++                       if (!(macb_miiphy_read(phydev->bus, i, 0, MII_BMSR) & BMSR_LSTATUS))
++                               continue;
++                       ret = genphy_update_link(phydev);
++                       if (ret < 0)
++                               continue;
++                       ret = genphy_parse_link(phydev);
++                       if (ret < 0)
++                               continue;
++
++                       link = (link || phydev->link);
++               }
++       }
++       phydev->link = link;
++
++       /* Restore CPU interface speed and duplex after it was changed for 
++other ports */
++       phydev->speed = speed;
++       phydev->duplex = duplex;
++
++       return 0;
++}
++
++static struct phy_driver ksz9477_phy_driver = {
++       .name = "ksz9477-phy",
++       .uid = 0x0007c181,
++       .mask = 0x00ffffff,
++       .features = PHY_BASIC_FEATURES,
++       .config = &ksz9477_phy_config,
++       .startup = &ksz9477_phy_startup,
++       .shutdown = &genphy_shutdown,
++};
++
++static int ksz_probe(struct udevice *dev)
++{
++	struct ksz_phy_priv *priv = dev_get_priv(dev);
++	int ret;
++	u32 id;
++
++	/* default config */
++	priv->dev = dev;
++	priv->phy_port_cnt = 5;
++	priv->interface = PHY_INTERFACE_MODE_NONE;
++	priv->phy_ports = 0x0F;
++
++	//enable vphy on
++	ksz_write8(0x0007, 0x10);
++
++	//indirect mode
++	ksz_write16(REG_VPHY_SPECIAL_CTRL__2, 0x130c);
++
++	/* read chip id */
++	ret = ksz_read32(REG_CHIP_ID0__1, &id);
++	if (ret)
++		return ret;
++
++	switch (id & 0xffffff00) {
++	case 0x00937000:
++		puts("Microchip LAN9370\n");
++		break;
++	case 0x00937100:
++		puts("Microchip LAN9371\n");
++		break;
++	case 0x00937200:
++		puts("Microchip LAN9372\n");
++		break;
++	case 0x00937300:
++		puts("Microchip LAN9373\n");
++		break;
++	case 0x00937400:
++		puts("Microchip LAN9374\n");
++		break;
++	default:
++		printf("invalid chip id: 0x%08x\n", id);
++		return -EINVAL;
++	}
++
++	phy_register(&ksz9477_phy_driver);
++
++	return 0;
++}
++
+ static int gem_is_gigabit_capable(struct macb_device *macb)
+ {
+ 	/*
+@@ -190,59 +497,39 @@ static int gem_is_gigabit_capable(struct macb_device *macb)
+ static void macb_mdio_write(struct macb_device *macb, u8 phy_adr, u8 reg,
+ 			    u16 value)
+ {
+-	unsigned long netctl;
+-	unsigned long netstat;
+-	unsigned long frame;
+-
+-	netctl = macb_readl(macb, NCR);
+-	netctl |= MACB_BIT(MPE);
+-	macb_writel(macb, NCR, netctl);
+-
+-	frame = (MACB_BF(SOF, 1)
+-		 | MACB_BF(RW, 1)
+-		 | MACB_BF(PHYA, phy_adr)
+-		 | MACB_BF(REGA, reg)
+-		 | MACB_BF(CODE, 2)
+-		 | MACB_BF(DATA, value));
+-	macb_writel(macb, MAN, frame);
++	u16 temp;
+ 
+-	do {
+-		netstat = macb_readl(macb, NSR);
+-	} while (!(netstat & MACB_BIT(IDLE)));
++	temp = PORT_CTRL_ADDR(phy_adr, (0x100 + (reg << 2)));
++	ksz_write16(REG_VPHY_IND_ADDR__2, temp);
++	ksz_write16(REG_VPHY_IND_DATA__2, value);
++	ksz_write16(REG_VPHY_IND_CTRL__2,(VPHY_IND_BUSY | VPHY_IND_WRITE));
+ 
+-	netctl = macb_readl(macb, NCR);
+-	netctl &= ~MACB_BIT(MPE);
+-	macb_writel(macb, NCR, netctl);
++	while(1)
++	{
++		ksz_read16(REG_VPHY_IND_CTRL__2, &temp);
++		if((temp & VPHY_IND_BUSY) == 0x0000)
++			break;
++	}
+ }
+ 
+ static u16 macb_mdio_read(struct macb_device *macb, u8 phy_adr, u8 reg)
+ {
+-	unsigned long netctl;
+-	unsigned long netstat;
+-	unsigned long frame;
++	u16 value = 0xffff;
++	u16 temp;
+ 
+-	netctl = macb_readl(macb, NCR);
+-	netctl |= MACB_BIT(MPE);
+-	macb_writel(macb, NCR, netctl);
+-
+-	frame = (MACB_BF(SOF, 1)
+-		 | MACB_BF(RW, 2)
+-		 | MACB_BF(PHYA, phy_adr)
+-		 | MACB_BF(REGA, reg)
+-		 | MACB_BF(CODE, 2));
+-	macb_writel(macb, MAN, frame);
+-
+-	do {
+-		netstat = macb_readl(macb, NSR);
+-	} while (!(netstat & MACB_BIT(IDLE)));
++	temp = PORT_CTRL_ADDR(phy_adr, (0x100 + (reg << 2)));
++	ksz_write16(REG_VPHY_IND_ADDR__2, temp);
++	ksz_write16(REG_VPHY_IND_CTRL__2, VPHY_IND_BUSY);
+ 
+-	frame = macb_readl(macb, MAN);
+-
+-	netctl = macb_readl(macb, NCR);
+-	netctl &= ~MACB_BIT(MPE);
+-	macb_writel(macb, NCR, netctl);
++	while(1)
++	{
++		ksz_read16(REG_VPHY_IND_CTRL__2, &temp);
++		if((temp & VPHY_IND_BUSY) == 0x0000)
++			break;
++	}
++	ksz_read16(REG_VPHY_IND_DATA__2, &value);
+ 
+-	return MACB_BFEXT(DATA, frame);
++	return value;
+ }
+ 
+ void __weak arch_get_mdio_control(const char *name)
+@@ -673,7 +960,7 @@ static int macb_phy_init(struct macb_device *macb, const char *name)
+ 	struct macb_device *macb = dev_get_priv(dev);
+ #endif
+ 	u32 ncfgr;
+-	u16 phy_id, status, adv, lpa;
++	u16 phy_id, status = 0, adv, lpa;
+ 	int media, speed, duplex;
+ 	int ret;
+ 	int i;
+@@ -706,6 +993,7 @@ static int macb_phy_init(struct macb_device *macb, const char *name)
+ 	}
+ 
+ 	phy_config(macb->phydev);
++	mdelay(30);
+ #endif
+ 
+ 	status = macb_mdio_read(macb, macb->phy_addr, MII_BMSR);
+@@ -1367,6 +1655,9 @@ static int macb_eth_probe(struct udevice *dev)
+ 	struct ofnode_phandle_args phandle_args;
+ 	const char *phy_mode;
+ 	int ret;
++	u16 val;
++
++	ksz_probe(dev);
+ 
+ 	phy_mode = dev_read_prop(dev, "phy-mode", NULL);
+ 
+@@ -1382,7 +1673,6 @@ static int macb_eth_probe(struct udevice *dev)
+ 					&phandle_args))
+ 		macb->phy_addr = ofnode_read_u32_default(phandle_args.node,
+ 							 "reg", -1);
+-
+ 	macb->regs = (void *)pdata->iobase;
+ 
+ 	macb->is_big_endian = (cpu_to_be32(0x12345678) == 0x12345678);
+-- 
+2.32.0
+
