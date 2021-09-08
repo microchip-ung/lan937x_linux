@@ -19,9 +19,10 @@
 #include <pthread.h>     /* pthread functions and data structures */
 
 
-#define ETHER_ADDR_LEN 6
 
-#define MAGIC 0xCC
+#define ETHER_ADDR_LEN      6
+#define MAGIC               0xCC
+#define SOC_RECV_TO_SEC     1
 
 //#define DEBUG
 
@@ -44,7 +45,6 @@ static uint32_t sipv4addr = 0;
 static int pkt_rcd = 0;
 static int pkt_txd = 0;
 uint16_t eth_type = ETH_P_IPV6;
-pthread_mutex_t lock;
 
 static struct argp_option options[] = {
     {"tx-iname", 'T', "IFNAME", 0, "Network Interface to send packets" },
@@ -62,7 +62,7 @@ static struct argp_option options[] = {
 	{"delay", 'D', "NUM", 0, "Delay (in us) between packet transmission" },
 	{"prio", 'p', "NUM", 0, "SO_PRIORITY to be set in socket" },
 	{"packet-size", 'S', "NUM", 0, "Size of packets to be transmitted" },
-    {"eth-type", 'e', "NUM", 0, "Ethernet Packet Type" },
+    {"eth-type", 'e', "NUM", 0, "Ethernet Packet Type, 0 - ipv6, 1 - ipv4" },
     {"vid", 'v', "NUM", 0, "VLAN ID" },
 	{ 0 }
 };
@@ -177,6 +177,7 @@ static int setup_socket (int is_tx, struct sockaddr_ll *sk_addr)
 	struct ifreq req;
     struct ifreq if_mac;
     struct ethhdr *eh; 
+    struct timeval tv;
 
     int sockopt;
 
@@ -218,14 +219,22 @@ static int setup_socket (int is_tx, struct sockaddr_ll *sk_addr)
 
         /* Allow the socket to be reused - incase connection is closed prematurely */
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof sockopt) == -1) {
-            perror("setsockopt");
+            perror("Setting socket reuse failed");
             close(fd);
             return -1;
         }
-
+        
+        tv.tv_sec = SOC_RECV_TO_SEC;
+        tv.tv_usec = 0;
+        if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv) == -1) {
+            perror("Setting recv time out failed");
+            close(fd);
+            return -1;
+        }
+        
         /* Bind to device */
         if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, ifname, IFNAMSIZ-1) == -1)	{
-            perror("SO_BINDTODEVICE");
+            perror("Failed SO_BINDTODEVICE");
             close(fd);
             return -1;
         }
@@ -263,7 +272,9 @@ static void* recv_packet(void *rthreaddata)
     socklen_t addr_len = sizeof(addr);
     uint32_t expected_seq = 0;
     int buflen;
-  
+    int prev = 0;
+    int try_count = 5;
+ 
    
     while (num_rx_packets)
     {
@@ -277,7 +288,9 @@ static void* recv_packet(void *rthreaddata)
         //buflen = recv(rt->fd, buffer, 1514, 0);
 
         if(buflen < 0) {
-            printf("error in reading recvfrom function\n");
+#ifdef DEBUG 
+            printf("error in reading recvfrom function, Error code %d\n", buflen);
+#endif
             goto err;
         }
 
@@ -295,13 +308,36 @@ static void* recv_packet(void *rthreaddata)
                 continue;
 
             /* For the first time expected_seq is 0 */
-            if (*seq == expected_seq)
-            {
+            if (*seq == expected_seq) {
                 num_rx_packets--;
                 expected_seq++;
                 pkt_rcd++;
-            }
+            }   
         }
+
+        /* All packets are transferred, lets do some analysis to exit from infinite
+         * loop
+         */
+        if (num_tx_packets == 0){
+
+            if (prev == pkt_rcd) {
+
+                if (!try_count)
+                    goto err;
+                else
+                    try_count--;
+            }
+
+            /* Note down the pkt_rcd count */
+            prev = pkt_rcd;
+
+            /* prev count and current count are matching which means
+             *  even after SOC_RECV_TO_SEC, packets are not arriving
+             * lets break the loop
+             */
+        }
+
+
 
 #ifdef DEBUG
         for (int i=0; i < size; i++)
@@ -316,6 +352,7 @@ out1:
     return 0;
 
 err:
+    printf("\n Number of packets received %d\n\n", pkt_rcd);
     close(rt->fd);
     return (void *)-1;
 }
