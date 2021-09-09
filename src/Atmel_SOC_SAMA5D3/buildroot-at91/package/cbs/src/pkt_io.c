@@ -41,6 +41,8 @@ static uint64_t num_rx_packets = 0;
 static uint64_t dport = 0;
 static uint64_t sport = 0;
 static uint16_t vlanid = 0;
+static struct in6_addr	dip6saddr;
+static struct in6_addr	sip6saddr;
 uint8_t vlan_prio = 0;
 static uint32_t dipv4addr = 0;
 static uint32_t sipv4addr = 0;
@@ -124,7 +126,6 @@ static error_t parser(int key, char *arg, struct argp_state *state)
 		dipv4addr |= (ipv4addr[1] << 8) & 0xFFFF;
 		dipv4addr |= (ipv4addr[2] << 16) & 0xFFFFFF;
 		dipv4addr |= (ipv4addr[3] << 24) & 0xFFFFFFFF;
-		//printf("\n%x\n",dipv4addr);
 		break;
 	case 'J':
 		res = sscanf(arg, "%d.%d.%d.%d",
@@ -140,8 +141,31 @@ static error_t parser(int key, char *arg, struct argp_state *state)
 		sipv4addr |= (ipv4addr[1] << 8) & 0xFFFF;
 		sipv4addr |= (ipv4addr[2] << 16) & 0xFFFFFF;
 		sipv4addr |= (ipv4addr[3] << 24) & 0xFFFFFFFF;
-		//printf("\n%x\n",sipv4addr);
-
+		break;
+    case 'i':
+        memset(&dip6saddr, 0, sizeof(dip6saddr));
+		res = sscanf(arg, "%x:%x:%x:%x:%x:%x:%x:%x",
+                    &dip6saddr.s6_addr16[0], &dip6saddr.s6_addr16[1], 
+                    &dip6saddr.s6_addr16[2], &dip6saddr.s6_addr16[3],
+                    &dip6saddr.s6_addr16[4], &dip6saddr.s6_addr16[5], 
+                    &dip6saddr.s6_addr16[6], &dip6saddr.s6_addr16[7]);
+		if (res != 8) {
+			printf("Invalid dest ipv6 addr\n");
+			exit(EXIT_FAILURE);
+		}
+		
+		break;
+	case 'I':
+        memset(&sip6saddr, 0, sizeof(sip6saddr));
+		res = sscanf(arg, "%x:%x:%x:%x:%x:%x:%x:%x",
+                    &sip6saddr.s6_addr16[0], &sip6saddr.s6_addr16[1], 
+                    &sip6saddr.s6_addr16[2], &sip6saddr.s6_addr16[3],
+                    &sip6saddr.s6_addr16[4], &sip6saddr.s6_addr16[5], 
+                    &sip6saddr.s6_addr16[6], &sip6saddr.s6_addr16[7]);
+		if (res != 8) {
+			printf("Invalid src ipv6 addr\n");
+			exit(EXIT_FAILURE);
+		}
 		break;
 	case 'h':
 		ip_ttl = atoi(arg);
@@ -164,7 +188,6 @@ static error_t parser(int key, char *arg, struct argp_state *state)
 			ip_proto = 132;
 		}
 	break;
-	
 	case 'T':
 		strncpy(tifname, arg, IFNAMSIZ-1);
 		break;
@@ -493,7 +516,6 @@ static int tx_packet (int fd, struct sockaddr_ll *sk_addr)
 	{
 		eh = (struct ethhdr *) &data[0];
 
-
 		/* fill src address */
 		//memcpy (eh->h_source, srcaddr, ETH_ALEN);
 
@@ -506,7 +528,6 @@ static int tx_packet (int fd, struct sockaddr_ll *sk_addr)
 
 		/* fill dst address */
 		//memcpy (eh->h_dest, dstaddr, ETH_ALEN);
-
 
 		sethdr = sizeof(struct ethhdr);
 
@@ -539,6 +560,9 @@ static int tx_packet (int fd, struct sockaddr_ll *sk_addr)
 		ip6h->payload_len = htons(size);
 		ip6h->nexthdr = ip_proto;
 		ip6h->hop_limit = ip_ttl;
+
+        	memcpy(&iph->daddr, &dip6saddr, sizeof(dip6saddr));
+        	memcpy(&iph->saddr, &sip6saddr, sizeof(sip6saddr));
 	}
 	else {
 		iph = (struct iphdr *) (data + sethdr);
