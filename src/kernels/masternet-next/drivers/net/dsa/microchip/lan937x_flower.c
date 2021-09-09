@@ -658,10 +658,11 @@ static int lan937x_cfg_tc_policer_hw(struct ksz_device *dev, int port,
 	if (rc)
 		return rc;
 
-	// rc = lan937x_port_cfg(dev, port, REG_PORT_MAC_IN_RATE_LIMIT,
-	// 		      PORT_RATE_LIMIT, true);
-	// if (rc)
-	// 	return rc;
+	/** Clear Port Rate Limit to Priority based Rate Limit*/
+	rc = lan937x_port_cfg(dev, port, REG_PORT_MAC_IN_RATE_LIMIT,
+			      PORT_RATE_LIMIT, false);
+	if (rc)
+		return rc;
 
 	i = resrc->type.tc_pol_used;
 	rc = lan937x_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL + i, code);
@@ -702,7 +703,7 @@ static int lan937x_init_strm_filter_hw(struct ksz_device *dev, int port)
 }
 
 /*The PSFP rate limiting register contains 16 bit field each for CIR and PIR
-The individual bits in CIR/PIR is assigned weightage in terms of bps.
+The individual bits in CIR/PIR is assigned weightage in bits/sec unit.
 To arrive at desired frequency, set one or more registers bits, which 
 cumulatively match the desired frequency approximately.
 The below logic identifies the reg value by accumulating the weights until the 
@@ -714,27 +715,27 @@ static u16 lan937x_psfp_rate_to_reg(u64 rate_bytes_per_sec)
 	u64 rate_bps = (8 * rate_bytes_per_sec);
 	u64 t_rate = 0;
 	u16 regcode;
+	u8 i = 0;
 	int j;
 	u32 t;
-	u8 i;
-	const u32 regbit_weightage_bps[] = {	1525, /*BIT 0*/
-						3051, /*BIT 1*/
-						6103, /*BIT 2*/
-						12207, /*BIT 3*/
-						24414, /*BIT 4*/
-						48828, /*BIT 5*/
-						97656, /*BIT 6*/
-						195312, /*BIT 7*/
-						390625, /*BIT 8*/
-						781250, /*BIT 9*/
-						1562500, /*BIT 10*/
-						3125000, /*BIT 11*/
-						6250000, /*BIT 12*/
-						12500000, /*BIT 13*/
-						25000000, /*BIT 14*/
-						50000000 /*BIT 15*/
+	const u32 regbit_weightage_bps[] = {	1525, 		/*BIT 0*/
+						3051, 		/*BIT 1*/
+						6103, 		/*BIT 2*/
+						12207, 		/*BIT 3*/
+						24414, 		/*BIT 4*/
+						48828, 		/*BIT 5*/
+						97656, 		/*BIT 6*/
+						195312, 	/*BIT 7*/
+						390625, 	/*BIT 8*/
+						781250, 	/*BIT 9*/
+						1562500, 	/*BIT 10*/
+						3125000, 	/*BIT 11*/
+						6250000, 	/*BIT 12*/
+						12500000, 	/*BIT 13*/
+						25000000, 	/*BIT 14*/
+						50000000 	/*BIT 15*/
 	};
-	i = 0;
+
 	while (i < 16) { /*Reg Field Size is 16 bits*/
 		if (t_rate < rate_bps) {
 			/*accumulate until desired frequency is exceeded*/
@@ -791,24 +792,23 @@ static int lan937x_cfg_strm_policer_hw(struct ksz_device *dev, int port,
 
 	cir = lan937x_psfp_rate_to_reg(action->police.rate_bytes_per_sec);
 
-	val = (((cir & METER_SR_MASK) << METER_SR_CIR_POS) |
-	       (cir & METER_SR_MASK)); /*fill PIR with same vaue*/
+	val = METER_SR_UPDT_RATE(cir, cir);/*fill PIR with same vaue*/
+
 	rc = lan937x_pwrite32(dev, port, REG_PORT_RX_QCI_METER_SR, val);
 	if (rc)
 		return rc;
 
 	burst = action->police.burst;
-	val = (((burst & METER_BS_MASK) << METER_BS_CBS_POS) |
-	       (burst & METER_BS_MASK));
+	val = METER_SR_UPDT_BURST(burst, burst);/*fill Peak burst same */
+
 	rc = lan937x_pwrite32(dev, port, REG_PORT_RX_QCI_METER_BS, val);
 	if (rc)
 		return rc;
 
 	/**Enable flow meter of Id (same as stream ID)*/
 	val = (FS_CTL_METER_EN |
-	       ((index & FS_CTL_METER_IDX_MSK) << FS_CTL_METER_IDX_POS) |
-	       ((action->police.mtu & FS_CTL_MAX_SDU_MASK)
-		<< FS_CTL_MAX_SDU_POS) |
+	       FS_UPDT_METER_IDX(index) |
+	       FS_UPDT_MTU(action->police.mtu) |
 	       FS_CTL_MAX_SDU_EN);
 	rc = lan937x_pwrite32(dev, port, REG_PORT_RX_QCI_FS_CTL, val);
 	if (rc)

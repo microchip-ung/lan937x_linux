@@ -998,6 +998,20 @@
 #define METER_BS_CBS_POS			16
 #define PORT_METER_RED_INT_MSK_ALL		0xFF
 
+/*defines to update Stream Policer Burst and Rate*/
+#define METER_SR_UPDT_RATE(C,P) (((C & METER_SR_MASK) << METER_SR_CIR_POS) | \
+	       		         (P & METER_SR_MASK))
+
+#define METER_SR_UPDT_BURST(C,P) (((C & METER_BS_MASK) << METER_BS_CBS_POS) | \
+	       		          (P & METER_BS_MASK))
+
+/*defines to update Stream filter paramters*/
+#define FS_UPDT_METER_IDX(IDX)	((IDX & FS_CTL_METER_IDX_MSK)\
+				 << FS_CTL_METER_IDX_POS)
+
+#define FS_UPDT_MTU(MTU)	((MTU & FS_CTL_MAX_SDU_MASK)\
+				 << FS_CTL_MAX_SDU_POS)
+
 /**TCAM/ACL Register space*/
 /* ACL Registers START */
 #define ACL_CTRL_BASE_ADDR  (0x600)

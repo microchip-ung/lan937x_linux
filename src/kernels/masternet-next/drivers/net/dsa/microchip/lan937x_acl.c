@@ -645,6 +645,8 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 							 ofst);
 				break;
 			}
+			default:
+				break;
 
 			} /*switch ends*/
 			return 0;
@@ -750,7 +752,6 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 	}
 
 	for (j = 0; j < n_entries; j++) {
-		//To Do identify the problem
 
 		rc = lan937x_acl_entry_write(dev, port,
 					     resrc->type.tcam.index + j,
