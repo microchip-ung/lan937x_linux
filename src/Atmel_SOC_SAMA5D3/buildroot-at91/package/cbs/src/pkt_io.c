@@ -38,6 +38,7 @@ static uint32_t seq;
 static int delay = 2; /*2us Minimum delay required*/
 static uint64_t num_tx_packets = 1;
 static uint64_t num_rx_packets = 0;
+static uint64_t exp_rx_packets = 0;
 static uint64_t dport = 0;
 static uint64_t sport = 0;
 static uint16_t vlanid = 0;
@@ -76,6 +77,7 @@ static struct argp_option options[] = {
 	{"vlan_ethtype", 'e', "NUM", 0, "Ethernet Packet Type, 0 - ipv6, 1 - ipv4" },
 	{"vlan_id", 'v', "NUM", 0, "VLAN ID" },
 	{"vlan_prio", 'x', "NUM", 0, "VLAN priority code point" },
+    	{"exp",'E',"NUM", 0, "Expected packets to be received"},
 	{ 0 }
 };
 
@@ -228,6 +230,9 @@ static error_t parser(int key, char *arg, struct argp_state *state)
 			printf("Invalid address\n");
 			exit(EXIT_FAILURE);
 		}
+		break;
+	case 'E':
+		exp_rx_packets = atoi(arg);
 		break;
 	}
 		
@@ -700,6 +705,15 @@ int main(int argc, char *argv[])
 
 	printf("\n Number of packets Transmitted %d\n", pkt_txd);
 	pthread_join(thread_id, NULL);
+    close(tx_fd);
 
-	close(tx_fd);
+    if (pkt_rcd == exp_rx_packets) {
+        printf("\n Test Result: PASS\n"); 
+        exit(EXIT_SUCCESS);
+    }
+    else {
+        printf("\n Test Result: FAIL\n"); 
+        exit(EXIT_FAILURE);
+    }
+	
 }
