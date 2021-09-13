@@ -561,8 +561,8 @@ static int tx_packet (int fd, struct sockaddr_ll *sk_addr)
 		ip6h->nexthdr = ip_proto;
 		ip6h->hop_limit = ip_ttl;
 
-        	memcpy(&iph->daddr, &dip6saddr, sizeof(dip6saddr));
-        	memcpy(&iph->saddr, &sip6saddr, sizeof(sip6saddr));
+        	memcpy(&ip6h->daddr, &dip6saddr, sizeof(dip6saddr));
+        	memcpy(&ip6h->saddr, &sip6saddr, sizeof(sip6saddr));
 	}
 	else {
 		iph = (struct iphdr *) (data + sethdr);
