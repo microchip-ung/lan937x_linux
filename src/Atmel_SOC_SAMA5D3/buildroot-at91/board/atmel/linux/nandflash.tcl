@@ -308,6 +308,10 @@ set dtbSize	[format "0x%08X" [expr (([file size $dtbFile] + 1023) / 1024) * 1024
 set loadDts "load_dts=nand read $dtbLoadAddr $dtbAddr $dtbSize; bootz $kernelLoadAddr - $dtbLoadAddr"
 set bootCmd "bootcmd=nand read $kernelLoadAddr $kernelAddr $kernelSize; run prep_boot; run load_dts"
 set rootfsSize	[format "0x%08X" [file size $rootfsFile]]
+#set bootCmd "bootcmd=run nfsboot;"
+#set rootpath "192.43.1.1:/home/administrator/linux_dd/rootfs"
+#set ip_full "192.43.1.9:192.43.1.1::255.255.255.0:root:lan1:off"
+    #"bootargs=console=ttyS0,115200 root=/dev/nfs nfsroot=${rootpath},nolock,v3,tcp ip=${ip_full} rw"\
 
 lappend u_boot_variables \
     "bootdelay=1" \
@@ -322,13 +326,8 @@ lappend u_boot_variables \
     "serverip=192.43.1.1" \
     "subst_var=0" \
     "prep_boot=setenv -f subst_var 1; setenv -f bootargs \"\${_bootargs}\"" \
-    "phymode= kw.b 0x0007 0x10; kw.w 0x077c 0x130c; kw.w 0x75c 0x1108; kw.w 0x768 0x0001; kr.w 0x0760" \
-    "phymode1=kw.w 0x75c 0x1124; kw.w 0x0760 0x1800; kw.w 0x768 0x0003" \
-    "phymode2= kw.w 0x75c 0x2124; kw.w 0x0760 0x1800; kw.w 0x768 0x0003" \
-    "phymode3= kw.w 0x75c 0x3124; kw.w 0x0760 0x1800; kw.w 0x768 0x0003" \
-    "phymode4= kw.w 0x75c 0x4124; kw.w 0x0760 0x1800; kw.w 0x768 0x0003" \
-    "phymode5= kw.w 0x75c 0x5124; kw.w 0x0760 0x1800; kw.w 0x768 0x0003" \
     "$loadDts" \
+    "nfsboot=tftp $kernelLoadAddr zImage; tftp $dtbLoadAddr at91-sama5d3_xplained.dtb; bootz $kernelLoadAddr - $dtbLoadAddr"\
     "$bootCmd"
 
 if {$program == "yes"} {
@@ -371,7 +370,7 @@ if {$program == "yes"} {
 
    puts "-I- === Load the Kernel image and device tree database ==="
    send_file {NandFlash} "$dtbFile" $dtbAddr 0
-   #send_file {NandFlash} "$kernelFile" $kernelAddr 0
+   send_file {NandFlash} "$kernelFile" $kernelAddr 0
 
    if {$pmeccConfig != "none"} {
       puts "-I- === Enable trimffs ==="
@@ -379,7 +378,7 @@ if {$program == "yes"} {
    }
 
    #puts "-I- === Load the linux file system ==="
-   #send_file {NandFlash} "$rootfsFile" $rootfsAddr 0
+   send_file {NandFlash} "$rootfsFile" $rootfsAddr 0
 
    puts "-I- === DONE. ==="
 }
