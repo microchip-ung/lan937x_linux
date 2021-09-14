@@ -1053,6 +1053,20 @@ static int lan937x_setup(struct dsa_switch *ds)
 
 	lan937x_enable_spi_indirect_access(dev);
 
+	/* Look into the device tree for some configuration values. */
+	/* If we have valid pointers to get into the device tree, ... */
+	if ((dev->dev) && (dev->dev->of_node)) {
+		const int* pVal;
+
+		pVal = of_get_property(dev->dev->of_node, "led-t1-sel", NULL);
+		/* if an entry was found for led-t1-sel, use it. */
+		if (pVal) {
+			pr_info("led-t1-sel: 0x%x", be32_to_cpu(*pVal));
+			ksz_write32(dev, REG32_SW_GLOBAL_LED_T1_SEL,
+				    be32_to_cpu(*pVal));
+		}
+	}
+
 	ret = lan937x_ptp_init(dev);
 	if (ret) 
                 return ret;

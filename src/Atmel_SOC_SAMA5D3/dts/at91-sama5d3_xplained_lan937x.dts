@@ -173,6 +173,7 @@
 					spi-cpol;
 					interrupt-parent = <&pioB>;
 					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;					
+					led-t1-sel = <0731777704>; // this value is octal.  hex is <0x0767ffc4>
 					status = "okay";
 					ports {
 						#address-cells = <1>;

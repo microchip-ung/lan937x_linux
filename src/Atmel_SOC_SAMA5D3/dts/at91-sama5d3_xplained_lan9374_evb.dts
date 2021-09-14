@@ -215,7 +215,8 @@
 					interrupt-parent = <&pioB>;
 					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
 					resetb-gpios = <&pioD 18 GPIO_ACTIVE_LOW>;
-					pinctrl-0 = <&pinctrl_spi_ksz_rst>;					
+					pinctrl-0 = <&pinctrl_spi_ksz_rst>;	
+					led-t1-sel = <07754321077>;    // this value is octal.  hex is <0x3fb1a23f>
 					status = "okay";
 					ports {
 						#address-cells = <1>;
