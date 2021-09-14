@@ -1,4 +1,4 @@
-From bc40846adc3f07a8835d91063c4f4aaab9389b33 Mon Sep 17 00:00:00 2001
+From 698dcc84327829d7e107abd492997b07dbca5564 Mon Sep 17 00:00:00 2001
 From: arun <arun.ramadoss@microchip.com>
 Date: Tue, 7 Sep 2021 11:29:14 +0530
 Subject: [RFC PATCH net-next 3/3] added the mdio mac command line
