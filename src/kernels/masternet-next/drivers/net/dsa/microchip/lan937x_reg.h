@@ -983,6 +983,14 @@
 #define REG_PORT_STREAM_CNT_STS			0x088C
 #define REG_PORT_METER_RED_INT_MSK		0x08C7
 
+/* RX_AUTH_CTRL register defines*/
+
+/*10b: Pass Mode. Authentication is disabled. When ACL is enabled, all traffic
+that misses the ACL rules is forwarded; otherwise ACL actions apply.*/
+#define AUTH_CTL_ACL_PASS_MODE				BIT(1)
+#define AUTH_CTL_ACL_ENABLE				BIT(2)
+
+/**PSFP register field defines*/
 #define FS_CTL_OVR_SIZE_FRAME_BLOCK_EN		BIT(1)
 #define FS_CTL_METER_EN				BIT(11)
 #define FS_CTL_GATE_EN				BIT(7)
@@ -1016,7 +1024,7 @@
 /* ACL Registers START */
 #define ACL_CTRL_BASE_ADDR  (0x600)
 #define ACL_CTRL_PORT_BASE_ADDR(port) ((port) * 0x1000)
-/* Reg Base address */
+/* Reg Base address */						     /*size */
 #define REG_ACL_PORT_ADR 		(ACL_CTRL_BASE_ADDR + 0x00)  /* 96b */
 #define REG_ACL_PORT_AAR 		(ACL_CTRL_BASE_ADDR + 0x60)  /* 08b */
 #define REG_ACL_PORT_ABER		(ACL_CTRL_BASE_ADDR + 0x68)  /* 14b */
@@ -1036,5 +1044,19 @@
 #define REG_ACL_PORT_TCAM_BIST3		(ACL_CTRL_BASE_ADDR + 0xD4)  /* 01b */
 #define REG_ACL_PORT_TCAM_BITMAP	(ACL_CTRL_BASE_ADDR + 0xE0)  /* 16b */
 
+/************Parser control register defines***********/
+#define PCTRL_TWO_FORMAT_TWO_PARSER_EACH	(BIT(29) | BIT(30))
+#define PCTRL_KEYTYPE0_MULTI_FMT		BIT(27)
+#define PCTRL_KEYTYPE1_MULTI_FMT		BIT(26)
+#define PCTRL_KEYTYPE2_MULTI_FMT		BIT(25)
+#define PCTRL_KEYTYPE3_MULTI_FMT		BIT(24)
+#define PCTRL_KEYTYPE0_UNIV_FMT			0
+#define PCTRL_KEYTYPE1_UNIV_FMT			0
+#define PCTRL_KEYTYPE2_UNIV_FMT			0
+#define PCTRL_KEYTYPE3_UNIV_FMT			0
+#define PCTRL_KEY2_VLAN_TAG_EN			BIT(17)
+#define PCTRL_KEY3_VLAN_TAG_EN			BIT(16) 
+#define PCTRL_KEY1_VLAN_TAG_EN			BIT(18)
+#define PCTRL_KEY0_VLAN_TAG_EN			BIT(19)
 
 #endif

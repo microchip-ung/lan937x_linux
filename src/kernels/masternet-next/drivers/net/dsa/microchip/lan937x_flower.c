@@ -36,7 +36,7 @@ static int lan937x_assign_stream_filter(struct ksz_device *dev, int port,
 {
 	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
 	int i;
-	pr_info("%s",__func__);
+
 	for (i = 0; i < LAN937X_NUM_STREAM_FILTERS; i++) {
 		if (!(res->stream_filters_used[i])) {
 			*stream_idx = i;
@@ -50,9 +50,8 @@ static int lan937x_check_tc_pol_availability(struct ksz_device *dev, int port,
 					     int traffic_class)
 {
 	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
-	pr_info("%s",__func__);
+
 	if (res->tc_policers_used[traffic_class]) {
-		pr_info("Traffic class policer already exist");
 		return -ENOSPC;
 	}
 
@@ -92,12 +91,12 @@ struct lan937x_flower_rule *lan937x_rule_find(struct ksz_device *dev, int port,
 	struct lan937x_flower_rule *rule;
 	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
 
-	pr_info("%s",__func__);
-	list_for_each_entry (rule, &blk->rules, list)
+	list_for_each_entry (rule, &blk->rules, list){
 		if(rule->cookie == cookie){
-			pr_info("%lu",  rule->cookie);
+
 			return rule;
 		}
+	}
 	return NULL;
 }
 
@@ -110,6 +109,7 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 	struct lan937x_key *key = &filter->key;
 	u16 proto = ntohs(cls->common.protocol);	
 	bool is_bcast_dmac = false;
+	bool match_proto = false;
 
 	if (dissector->used_keys &
 	    ~(BIT(FLOW_DISSECTOR_KEY_BASIC) | 
@@ -123,24 +123,22 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		NL_SET_ERR_MSG_MOD(extack, "Unsupported keys used");
 		return -EOPNOTSUPP;
 	}
-	pr_info("%s",__func__);
+
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_BASIC)) {
 		struct flow_match_basic match;
 
 		flow_rule_match_basic(rule, &match);
-		pr_info("n_proto : %x",match.key->ip_proto);
 		if (proto == ETH_P_IP) {
-			pr_info("IPv4");
-			key->acl_dissector_map |=IPV4_PROTO_DISSECTOR_PRESENT;
 			key->ipv4.proto.value = match.key->ip_proto;
 			key->ipv4.proto.mask = match.mask->ip_proto;
+			key->acl_dissector_map |= IPV4_PROTO_DISSECTOR_PRESENT;
+			match_proto = true;
 		}
 		if (proto == ETH_P_IPV6) {
-			pr_info("IPv6");
-
-			key->acl_dissector_map |=IPV6_NXT_HDR_DISSECTOR_PRESENT;
 			key->ipv6.next_hdr.value = match.key->ip_proto;
 			key->ipv6.next_hdr.mask = match.mask->ip_proto;
+			key->acl_dissector_map |=IPV6_NXT_HDR_DISSECTOR_PRESENT;
+			match_proto = true;			  
 		}
 	}
 
@@ -179,6 +177,7 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 			key->vlan_prio.mask = match.mask->vlan_priority;
 			key->acl_dissector_map |= VLAN_PCP_DISSECTOR_PRESENT;
 		}
+
 	}
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IPV4_ADDRS) &&
@@ -229,11 +228,10 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 
 	if(flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IP)) {
 		struct flow_match_ip match;
-		pr_info("FLOW_DISSECTOR_KEY_IP");
+
 		flow_rule_match_ip(rule, &match);
 
 		if(proto == ETH_P_IP) {
-			pr_info("ipv4");
 			key->ipv4.tos.value= match.key->tos;
 			key->ipv4.tos.mask = match.mask->tos;
 
@@ -245,7 +243,6 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		}
 
 		if(proto == ETH_P_IPV6) {
-			pr_info("ipv6");
 			key->ipv6.tc.value= match.key->tos;
 			key->ipv6.tc.mask = match.mask->tos;
 
@@ -268,10 +265,16 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		key->dst_port.mask = ntohs(match.mask->dst);
 		key->acl_dissector_map |= (L4_SRC_PORT_DISSECTOR_PRESENT |
 					   L4_DST_PORT_DISSECTOR_PRESENT);
-		pr_info("Ports %x %x",key->dst_port.value,key->dst_port.mask );		
 	}
 
-	/**TO DO: Ethertype is pending*/	
+	if ((proto != ETH_P_ALL) && match_proto) {
+		/* TODO: support SNAP, LLC etc */
+		if (proto < ETH_P_802_3_MIN)
+			return -EOPNOTSUPP;
+		key->ethtype.value = (proto);
+		key->ethtype.mask = (0xffff);
+		key->acl_dissector_map |= ETHTYPE_DISSECTOR_PRESENT;		
+	}	
 
 	if(key->acl_dissector_map == DST_MAC_DISSECTOR_PRESENT 
 	   && is_bcast_dmac) {
@@ -326,7 +329,7 @@ static int lan937x_setup_action_redirect(struct ksz_device *dev,
 	int rc = 0;
 
 	flower->action.actions_presence_mask |= BIT(LAN937X_ACT_REDIRECT_FLOW);
-	pr_info("%s",__func__);
+
 	if (!rsrc->type.tcam.n_entries) {
 		rc = lan937x_get_acl_req(flower->filter.type,
 					 &rsrc->type.tcam.parser,
@@ -391,7 +394,6 @@ static int lan937x_setup_action_priority(struct ksz_device *dev,
 	int rc = 0;
 
 	flower->action.actions_presence_mask |= BIT(LAN937X_ACT_PRIORITY);
-	pr_info("%s",__func__);
 
 	/*TODO*/
 	rc = lan937x_get_acl_req(flower->filter.type,
@@ -399,8 +401,10 @@ static int lan937x_setup_action_priority(struct ksz_device *dev,
 	if (rc)
 		return rc;
 	rc = lan937x_assign_tcam_entries(dev, port, *n_entries, index);
-	if (rc)
+	if (rc){
+		NL_SET_ERR_MSG_MOD(extack, "TCAM entry unavailable");
 		return rc;
+	}
 
 	flower->action.skbedit_prio = priority;
 	rsrc->resrc_used_mask |= BIT(LAN937X_TCAM_ENTRIES);
@@ -541,7 +545,6 @@ int lan937x_flower_rule_init(struct ksz_device *dev,
 		return -ENOMEM;
 	}
 
-	pr_info("%x", t);	
 	*flower_rule = t;
 	return 0;
 }
@@ -869,6 +872,41 @@ static int lan937x_flower_configure_hw(struct ksz_device *dev, int port,
 	return 0;
 }
 
+/* Adjust the tcam start index of all the flower rules
+ * occupying tcam rows below the deleted entry.
+ */
+static void lan937x_flower_recfg_tcam_idx(struct ksz_device *dev, int port,
+					  struct lan937x_flower_rule *rule,
+					  u8 n_entries)
+{
+	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
+	struct lan937x_resrc_alloc *resrc;
+	struct lan937x_flower_rule *nxt_rule;
+	u8 i, row;
+
+	nxt_rule = rule;
+	while (!list_is_first(&nxt_rule->list, &blk->rules)) {
+
+		nxt_rule = list_prev_entry(nxt_rule, list);
+		resrc = nxt_rule->resrc;
+
+		if (resrc->type.tcam.n_entries) {
+			resrc->type.tcam.index = (resrc->type.tcam.index -
+						  n_entries);
+		}
+	}
+
+	/* Clear the status of freed up rows to "Available for new rule" */
+	if (-ENOSPC == lan937x_assign_tcam_entries(dev, port, 0x01, &row))
+		row = LAN937X_NUM_TCAM_ENTRIES;
+
+	for (i = 0; i < n_entries; i++) {
+		--row;
+		blk->res.tcam_entries_used[row] = false;
+		pr_info("freed %d", row);
+	}
+}
+
 static int lan937x_flower_free_resrcs(struct ksz_device *dev, int port,
 				      struct lan937x_flower_rule *rule)
 {
@@ -876,8 +914,6 @@ static int lan937x_flower_free_resrcs(struct ksz_device *dev, int port,
 	struct lan937x_resrc_alloc *resrc = rule->resrc;
 	int rc;
 	int i;
-
-	pr_info("resrc_used_mask: %x",resrc->resrc_used_mask);
 
 	if (resrc->resrc_used_mask & BIT(LAN937X_TC_POLICER)) {
 		i = resrc->type.tc_pol_used;
@@ -889,8 +925,13 @@ static int lan937x_flower_free_resrcs(struct ksz_device *dev, int port,
 	}
 
 	if (resrc->resrc_used_mask & BIT(LAN937X_TCAM_ENTRIES)) {
-		if (resrc->type.tcam.n_entries) 
+		u8 n_entries = resrc->type.tcam.n_entries;
+
+		if (resrc->type.tcam.n_entries) {
 			rc = lan937x_acl_free_entry(dev, port, rule);
+			lan937x_flower_recfg_tcam_idx(dev, port, rule,
+					  	      n_entries);
+		}	
 	}
 
 	if (resrc->resrc_used_mask & BIT(LAN937X_STREAM_FILTER)) {
@@ -928,7 +969,6 @@ int lan937x_cls_flower_add(struct dsa_switch *ds, int port,
 	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
 	int rc;
 
-	pr_info("%s",__func__);
 	if (lan937x_flower_rule_init(dev, &flower_rule))
 		return -ENOMEM;
 
@@ -967,7 +1007,6 @@ int lan937x_cls_flower_del(struct dsa_switch *ds, int port,
 	struct lan937x_flower_rule *rule;
 	int rc;
 
-	pr_info("%s",__func__);
 	rule = lan937x_rule_find(dev, port, cls->cookie);
 	if (!rule)
 		return 0; /* There is No such Rule to delete*/
@@ -982,9 +1021,6 @@ int lan937x_cls_flower_del(struct dsa_switch *ds, int port,
 		devm_kfree(dev->dev,rule->flower);
 	devm_kfree(dev->dev,rule->resrc);
 	devm_kfree(dev->dev,rule);
-
-	pr_info("Flower Deletion: %lu", cls->cookie);
-
 	return rc;
 }
 

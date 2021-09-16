@@ -297,10 +297,6 @@ static int lan937x_wait_tcam_busy(struct ksz_device *dev, int port)
 				      val & ACL_ARACR_TCAM_OP_STS,
 				      poll_us,
 				      timeout_us);
-	/*For debugging*/
-	if (rc == -ETIMEDOUT)
-		pr_info("Timeout");
-
 	return rc;
 }
 
@@ -310,7 +306,7 @@ static int lan937x_set_acl_access_ctl(struct ksz_device *dev,
 {
 	int rc = lan937x_wait_tcam_busy(dev, port);
 	u32 val;
-
+	
 	if (rc)
 		return rc;
 
@@ -485,8 +481,6 @@ static void lan937x_cpy_u16_to_entry(struct lan937x_val_mask_u16 *field,
 	u16 tdata = cpu_to_be16(field->value);
 	u16 tmask = cpu_to_be16(field->mask);
 
-	pr_info("le16 %x %x",field->value,field->mask);
-	pr_info("be16 %x %x",tdata,tmask);
 	tdata &= tmask;
 	tmask &= (~tdata);
 
@@ -867,14 +861,15 @@ int lan937x_init_acl_parsers(struct ksz_device *dev, int port)
 		return rc;
 
 	rc = lan937x_pwrite32(dev, port, REG_ACL_PORT_PCTRL,
-			      (BIT(30) | BIT(29) | BIT(17) |
-			       /*BIT(26) |*/ BIT(27) |
-			       BIT(25) | BIT(24)));
+			      (PCTRL_TWO_FORMAT_TWO_PARSER_EACH |
+			       PCTRL_KEY2_VLAN_TAG_EN 	|
+			       PCTRL_KEYTYPE0_MULTI_FMT |
+			       PCTRL_KEYTYPE2_MULTI_FMT ));
 	if (rc)
 		return rc;
 
 	rc = lan937x_pwrite8(dev, port, REG_PORT_RX_AUTH_CTL,
-			     (BIT(2) | BIT(1)));
+			     (AUTH_CTL_ACL_PASS_MODE | AUTH_CTL_ACL_ENABLE));
 	if (rc)
 		return rc;
 	/*Test Code*/
@@ -893,10 +888,9 @@ int lan937x_init_acl_parsers(struct ksz_device *dev, int port)
 int lan937x_acl_free_entry(struct ksz_device *dev, int port,
 			   struct lan937x_flower_rule *rule)
 {
-	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
 	struct lan937x_resrc_alloc *resrc = rule->resrc;
 	struct lan937x_acl_access_ctl access_ctl;
-	struct lan937x_flower_rule *nxt_rule;
+	bool last_entry;
 	u8 n_entries;
 	u8 i, row;
 	int rc;
@@ -905,12 +899,48 @@ int lan937x_acl_free_entry(struct ksz_device *dev, int port,
 
 	if (!n_entries)
 		return 0; // Nothing to delete
+		
+	/* Shift all the TCAM Entries that are below the current entry upwards 
+	 * by n_entries time to over write the current rule 
+	 */
+	clr_data(access_ctl);
+	set_row_shift(access_ctl, (n_entries + resrc->type.tcam.index));
 
-	for (i = 0; i < n_entries; i++) {
+	/* Identify the row where the Last Entry is present*/
+	if (-ENOSPC == lan937x_assign_tcam_entries(dev, port, 0x01,
+						   &access_ctl.tcam_addr)){
+		set_tcam_addr(access_ctl, LAN937X_NUM_TCAM_ENTRIES);
+		last_entry = true;
+	}
 
+	if ((access_ctl.row_shift == access_ctl.tcam_addr) ||
+	    last_entry == true) {
+		/* There are no valid entries below the current
+		 * rule under deletion. So No shifting is necessary 
+		 */
+		set_pri_low(access_ctl, true);
+		set_tcam_vben(access_ctl, true);
+		set_tcam_vbi(access_ctl, false);
+		set_tcam_row_vld(access_ctl, 0x0F);
+		set_num_shift(access_ctl, (n_entries-1));
+		set_tcam_req(access_ctl, TCAM_REQ_TYPE_SHIFT_TCAM);
+		set_tcam_acc(access_ctl, TCAM_MASK_DATA);
+
+		rc = lan937x_set_acl_access_ctl(dev, port, &access_ctl);
+		if (rc)
+			return rc;
+	}
+
+	/* After shifting upward, invalidate the very last n_entries.
+	 * If last_entry is true then shifting will not happen, but the last 
+	 * n_entries will be invalidated, which will decommision the rule 
+	 * */
+	row = access_ctl.tcam_addr;
+	for (i = (row-1); i > (row - n_entries); i--) {
+		pr_info("row_shift: %d",i);
 		clr_data(access_ctl);
 		
-		set_tcam_addr(access_ctl, resrc->type.tcam.index + i);
+		set_tcam_addr(access_ctl, i);
 		set_pri_low(access_ctl, true);
 		set_tcam_vben(access_ctl, true);
 		/*vbi - 0: makes TCAM entry invalid.*/
@@ -924,63 +954,9 @@ int lan937x_acl_free_entry(struct ksz_device *dev, int port,
 			return rc;
 	}
 
-	/* If deleted rule is occupying the last row of tcam
-	 * then shifting the rows is not necessry
-	 */
-	if ((i + resrc->type.tcam.index) >= LAN937X_NUM_TCAM_ENTRIES)
-		goto clr_sts;
-
-	/* Shift the TCAM Entries up to fillup the hole */
-	clr_data(access_ctl);
-	set_row_shift(access_ctl, i + resrc->type.tcam.index);
-
-	if (-ENOSPC == lan937x_assign_tcam_entries(dev, port, 0x01,
-						   &access_ctl.tcam_addr))
-		set_tcam_addr(access_ctl, LAN937X_NUM_TCAM_ENTRIES - 1);
-
-	set_pri_low(access_ctl, true);
-	set_tcam_vben(access_ctl, true);
-	set_tcam_vbi(access_ctl, false);
-	set_tcam_row_vld(access_ctl, 0x0F);
-	set_num_shift(access_ctl, n_entries);
-	set_tcam_req(access_ctl, TCAM_REQ_TYPE_SHIFT_TCAM);
-	set_tcam_acc(access_ctl, TCAM_MASK_DATA);
-
-	rc = lan937x_set_acl_access_ctl(dev, port, &access_ctl);
-	if (rc)
-		return rc;
-
-	pr_info("Shifting %d till %d", access_ctl.row_shift,
-		access_ctl.tcam_addr);
-	/* Deleted rule no longer has any tcam entries
-	 * The hole created due to deletion is just filled by shift operation
-	 */
+	/* Deleted rule no longer has any tcam entries */
 	resrc->type.tcam.n_entries = 0x00;
 
-	/* Adjust the start index of all the flower rules
-	 * occupying tcam rows below the deleted entry
-	 */
-	nxt_rule = rule;
-	while (!list_is_last(&nxt_rule->list, &blk->rules)) {
-		list_next_entry(nxt_rule, list);
-
-		resrc = nxt_rule->resrc;
-		if (resrc->type.tcam.n_entries) {
-			resrc->type.tcam.index = resrc->type.tcam.index -
-						 access_ctl.num_shift;
-		}
-	}
-
-clr_sts:
-	/* Clear the status of freed up rows to "Available for new rule" */
-	if (-ENOSPC == lan937x_assign_tcam_entries(dev, port, 0x01, &row))
-		row = LAN937X_NUM_TCAM_ENTRIES;
-
-	for (i = 0; i < n_entries; i++) {
-		--row;
-		blk->res.tcam_entries_used[row] = false;
-		pr_info("freed %d", row);
-	}
 	return rc;
 }
 

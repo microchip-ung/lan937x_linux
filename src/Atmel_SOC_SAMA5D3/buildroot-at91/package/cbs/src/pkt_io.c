@@ -19,8 +19,6 @@
 #include <unistd.h>
 #include <pthread.h>     /* pthread functions and data structures */
 
-
-
 #define ETHER_ADDR_LEN      6
 #define MAGIC               0xCC
 #define SOC_RECV_TO_SEC     1
@@ -47,6 +45,8 @@ static struct in6_addr	sip6saddr;
 uint8_t vlan_prio = 0;
 static uint32_t dipv4addr = 0;
 static uint32_t sipv4addr = 0;
+static uint16_t sipv6addr[8] = {0};
+static uint16_t dipv6addr[8] = {0};
 static int pkt_rcd = 0;
 static int pkt_txd = 0;
 uint16_t eth_type = ETH_P_IPV6;
@@ -117,8 +117,8 @@ static error_t parser(int key, char *arg, struct argp_state *state)
 		break;		
 	case 'j':
 		res = sscanf(arg, "%d.%d.%d.%d",
-						&ipv4addr[0], &ipv4addr[1], &ipv4addr[2],
-						&ipv4addr[3]);
+				&ipv4addr[0], &ipv4addr[1], &ipv4addr[2],
+				&ipv4addr[3]);
 		if (res != 4) {
 			printf("Invalid dest ipv4 addr\n");
 			exit(EXIT_FAILURE);
@@ -144,8 +144,8 @@ static error_t parser(int key, char *arg, struct argp_state *state)
 		sipv4addr |= (ipv4addr[2] << 16) & 0xFFFFFF;
 		sipv4addr |= (ipv4addr[3] << 24) & 0xFFFFFFFF;
 		break;
-    case 'i':
-        memset(&dip6saddr, 0, sizeof(dip6saddr));
+    	case 'i':
+        	memset(&dip6saddr, 0, sizeof(dip6saddr));
 		res = sscanf(arg, "%x:%x:%x:%x:%x:%x:%x:%x",
                     &dip6saddr.s6_addr16[0], &dip6saddr.s6_addr16[1], 
                     &dip6saddr.s6_addr16[2], &dip6saddr.s6_addr16[3],
@@ -158,7 +158,7 @@ static error_t parser(int key, char *arg, struct argp_state *state)
 		
 		break;
 	case 'I':
-        memset(&sip6saddr, 0, sizeof(sip6saddr));
+        	memset(&sip6saddr, 0, sizeof(sip6saddr));
 		res = sscanf(arg, "%x:%x:%x:%x:%x:%x:%x:%x",
                     &sip6saddr.s6_addr16[0], &sip6saddr.s6_addr16[1], 
                     &sip6saddr.s6_addr16[2], &sip6saddr.s6_addr16[3],
@@ -168,7 +168,7 @@ static error_t parser(int key, char *arg, struct argp_state *state)
 			printf("Invalid src ipv6 addr\n");
 			exit(EXIT_FAILURE);
 		}
-		break;
+		break;		
 	case 'h':
 		ip_ttl = atoi(arg);
 	break;
@@ -605,15 +605,15 @@ static int tx_packet (int fd, struct sockaddr_ll *sk_addr)
 	switch(ip_proto) {
 	
 	case 6:
-		tcph->source = sport;
-		tcph->dest = dport;
+		tcph->source = htons(sport);
+		tcph->dest = htons(dport);
 		tcph->ack_seq = 0;
 		tcph->ack = 1;
 		size += sizeof(struct tcphdr);
 		break;
 	case 17:
-		udph->source = sport;
-		udph->dest = dport;
+		udph->source = htons(sport);
+		udph->dest = htons(dport);
 		size += sizeof(struct udphdr);
 		break;
 	}
@@ -639,7 +639,7 @@ static int tx_packet (int fd, struct sockaddr_ll *sk_addr)
 
     	/* Send packets */
 	n = sendto(fd, data, size, 0, (struct sockaddr *)sk_addr,
-							sizeof(struct sockaddr_ll));
+			sizeof(struct sockaddr_ll));
 
 	return 0;
 
