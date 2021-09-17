@@ -485,6 +485,7 @@
 			};
 
 			macb1: ethernet@f802c000 {
+				compatible = "atmel,sama5d3-gem";
 				phy-mode = "rmii";
 				#address-cells = <1>;
 				#size-cells = <0>;
