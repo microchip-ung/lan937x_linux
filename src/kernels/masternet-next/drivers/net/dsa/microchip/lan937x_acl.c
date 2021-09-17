@@ -527,16 +527,16 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 				break;
 			}
 			case acl_vlan_id_dissector:{
-				u16 tdata = key->vlan_id.value;
-				u16 tmask = key->vlan_id.mask;
+				u16 tdata = cpu_to_be16(key->vlan_id.value);
+				u16 tmask = cpu_to_be16(key->vlan_id.mask);
 
 				tdata &= tmask;
 				tmask &= (~tdata);
 
-				acl_mask[ofst + 2] |= (tmask & 0x0F00) >> 8;
-				acl_mask[ofst + 3] |= (tmask & 0xFF);
-				acl_data[ofst + 2] |= (tdata & 0x0F00) >> 8;
-				acl_data[ofst + 3] |= (tdata & 0xFF);
+				acl_mask[ofst + 2] |= (tmask & 0x0F);
+				acl_mask[ofst + 3] |= (tmask & 0xFF00)>>8;
+				acl_data[ofst + 2] |= (tdata & 0x0F);
+				acl_data[ofst + 3] |= (tdata & 0xFF00)>>8;
 				break;
 			}
 			case acl_vlan_pcp_dissector:{
