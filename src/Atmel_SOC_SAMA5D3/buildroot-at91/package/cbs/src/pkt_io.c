@@ -111,6 +111,7 @@ static error_t parser(int key, char *arg, struct argp_state *state)
 		break;
 	case 'v':
 		vlanid = atoi(arg);
+		printf("vlan id %d", vlanid);
 		break;
 	case 'x':
 		vlan_prio = atoi(arg);
@@ -504,18 +505,19 @@ static int tx_packet (int fd, struct sockaddr_ll *sk_addr)
 
 	*seq_ptr = seq++;
 
-
-	if (vlanid != 0)
+	if ((vlanid != 0) || (vlan_prio != 0))
 	{
+		uint8_t t;
 		veh = (struct vlan_ethhdr *) &data[0];
 
 		sethdr = sizeof(struct vlan_ethhdr);
 
 		veh->h_vlan_proto = htons(ETH_P_8021Q);
-		veh->h_vlan_TCI  = htons(vlanid);
-		veh->h_vlan_TCI |= ((vlan_prio & 0x07) << 13);
+		veh->h_vlan_TCI  = htons((vlanid) | ((vlan_prio & 0x07) << 13));
 		/* ethertype field */
 		veh->h_vlan_encapsulated_proto = htons(eth_type);
+		
+		//printf("\n %x, %x, %x", veh->h_vlan_proto ,veh->h_vlan_TCI,veh->h_vlan_encapsulated_proto );
 	}
 	else
 	{
