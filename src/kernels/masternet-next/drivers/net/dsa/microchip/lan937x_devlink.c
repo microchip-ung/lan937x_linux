@@ -8,30 +8,37 @@
 #include "lan937x_dev.h"
 #include "lan937x_devlink.h"
 
-static int lan937x_cut_through_get(struct ksz_device *dev,
-				   bool *be_vlan)
+static int lan937x_cut_through_get(struct ksz_device *dev, u8 *value)
 {
-	*be_vlan = dev->cut_through_enable;
+	*value = dev->cut_through_enable;
 
 	return 0;
 }
 
-static int lan937x_cut_through_set(struct ksz_device *dev,
-				   bool be_vlan)
+/* Each bit in value correspond to one port.
+ * For example, if bit 0 is 1, then it enable the cut through for port 0
+ * otherwise disable.
+ */
+static int lan937x_cut_through_set(struct ksz_device *dev, u8 value)
 {
 	struct dsa_switch *ds = dev->ds;
+	bool enable;
 	int port;
 	int ret;
 
-	dev->cut_through_enable = be_vlan;
+	dev->cut_through_enable = value;
 
 	for (port = 0; port < ds->num_ports; port++) {
-
 		if (!dsa_is_user_port(ds, port))
 			continue;
 
+		if(value & (1<<port))
+			enable = 1;
+		else
+			enable = 0;
+
 		ret = lan937x_port_cfg(dev, port, REG_PORT_TAS_CTL__1,
-				       TAS_CUT_THROUGH, be_vlan);
+				       TAS_CUT_THROUGH, enable);
 		if (ret)
 			break;
 	}
@@ -52,8 +59,7 @@ int lan937x_devlink_param_get(struct dsa_switch *ds, u32 id,
 
 	switch (id) {
 	case LAN937X_DEVLINK_PARAM_ID_CUT_THROUGH:
-		ret = lan937x_cut_through_get(dev,
-					      &ctx->val.vbool);
+		ret = lan937x_cut_through_get(dev, &ctx->val.vu8);
 		break;
 	default:
 		ret = -EOPNOTSUPP;
@@ -71,8 +77,7 @@ int lan937x_devlink_param_set(struct dsa_switch *ds, u32 id,
 
 	switch (id) {
 	case LAN937X_DEVLINK_PARAM_ID_CUT_THROUGH:
-		ret = lan937x_cut_through_set(dev,
-					      ctx->val.vbool);
+		ret = lan937x_cut_through_set(dev, ctx->val.vu8);
 		break;
 	default:
 		ret = -EOPNOTSUPP;
@@ -84,8 +89,7 @@ int lan937x_devlink_param_set(struct dsa_switch *ds, u32 id,
 
 static const struct devlink_param lan937x_devlink_params[] = {
 	DSA_DEVLINK_PARAM_DRIVER(LAN937X_DEVLINK_PARAM_ID_CUT_THROUGH,
-				 "cut_through",
-				 DEVLINK_PARAM_TYPE_BOOL,
+				 "cut_through", DEVLINK_PARAM_TYPE_U8,
 				 BIT(DEVLINK_PARAM_CMODE_RUNTIME)),
 };
 
@@ -111,9 +115,8 @@ int lan937x_devlink_info_get(struct dsa_switch *ds,
 	if (ret)
 		return ret;
 
-	ret = devlink_info_version_fixed_put(req,
-					     DEVLINK_INFO_VERSION_GENERIC_ASIC_ID,
-					     "lan937x");
+	ret = devlink_info_version_fixed_put(
+		req, DEVLINK_INFO_VERSION_GENERIC_ASIC_ID, "lan937x");
 	return ret;
 }
 
