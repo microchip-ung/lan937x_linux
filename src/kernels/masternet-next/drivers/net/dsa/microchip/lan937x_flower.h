@@ -10,15 +10,26 @@
 #include "lan937x_acl.h"
 
 #define LAN937X_NUM_TCAM_ENTRIES	MAX_ACL_ENTRIES
+#define LAN937x_NUM_TCAM_COUNTERS	4
 #define LAN937X_NUM_STREAM_FILTERS	8
 #define LAN937X_NUM_GATES		8
 
+#define STATS_COUNTER_NOT_ASSIGNED	0xFF
+
 struct lan937x_p_res {
 	bool tcam_entries_used[LAN937X_NUM_TCAM_ENTRIES];
+	bool tcam_frm_counters[LAN937x_NUM_TCAM_COUNTERS];
 	bool stream_filters_used[LAN937X_NUM_STREAM_FILTERS];
 	bool gate_used[LAN937X_NUM_GATES];
 	bool tc_policers_used[LAN937X_NUM_TC];
-	bool broadcast_pol_used;
+	bool broadcast_pol_used;/* To Prevent duplicate rules*/
+
+	/* The following memebers are to maintain the Counter Value when 
+	 * there is a overflow condition
+	 */
+	volatile u64 tcam_match_cntr_bkup[LAN937x_NUM_TCAM_COUNTERS];
+	volatile u64 psfp_match_cntr_bkup[LAN937X_NUM_STREAM_FILTERS];
+	volatile u64 psfp_drop_cntr_bkup[LAN937X_NUM_STREAM_FILTERS];	
 };
 
 /*
@@ -161,6 +172,7 @@ struct lan937x_resrc_alloc {
 			u8 parser;
 			u8 n_entries;
 			u8 index;
+			u8 cntr;
 		} tcam;
 
 		struct {
@@ -183,36 +195,55 @@ struct lan937x_flower {
 	struct lan937x_flower_action action;
 };
 
+struct lan937x_stats {
+	u64 pkts;
+	u64 drops;
+};
+
 struct lan937x_flower_rule {
 	struct list_head list;
 	unsigned long cookie;
 	struct lan937x_flower *flower;
 	struct lan937x_resrc_alloc *resrc;
+	struct lan937x_stats stats;
 };
 
 int lan937x_cls_flower_add(struct dsa_switch *ds, int port,
-			  struct flow_cls_offload *cls, bool ingress);
+			   struct flow_cls_offload *cls, bool ingress);
+
 int lan937x_flower_setup(struct dsa_switch *ds);
 
 int lan937x_init_acl_parsers(struct ksz_device *dev, int port);
 
 int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 			      struct lan937x_flower_rule *rule);
+
 int lan937x_cls_flower_del(struct dsa_switch *ds, int port,
-			  struct flow_cls_offload *cls, bool ingress);
+			   struct flow_cls_offload *cls, bool ingress);
+
+int lan937x_cls_flower_stats(struct dsa_switch *ds, int port,
+			     struct flow_cls_offload *cls, bool ingress);
+
 int lan937x_get_acl_req(enum lan937x_filter_type type,
 			u8 *parser_idx, u8 *num_entries);
+
 struct lan937x_flr_blk *lan937x_get_flr_blk (struct ksz_device *dev,
 					     int port);
+
 struct lan937x_p_res *lan937x_get_flr_res (struct ksz_device *dev,
-					 int port);
+					   int port);
 
 extern int lan937x_tc_pol_rate_to_reg (u64 rate_bytes_per_sec, u8* regval);
+
 int lan937x_assign_tcam_entries(struct ksz_device *dev,
-				       int port, u8 num_entry_reqd,
-				       u8 *tcam_idx);
+				int port, u8 num_entry_reqd,
+				u8 *tcam_idx);
+
 int lan937x_acl_free_entry(struct ksz_device *dev, int port,
 			   struct lan937x_flower_rule *rule);
+
+irqreturn_t lan937x_acl_isr (struct ksz_device *dev, int port);
+irqreturn_t lan937x_qci_cntr_isr (struct ksz_device *dev, int port);
 
 #endif
 

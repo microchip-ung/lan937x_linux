@@ -735,6 +735,8 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 			goto out;
 		}
 	}
+	if (resrc->type.tcam.cntr != STATS_COUNTER_NOT_ASSIGNED)
+		set_fr_counter(acl_action,resrc->type.tcam.cntr);
 
 	/* For Multiple format Key
 	 * Bit 383:382 PARSER_NUM Programmed to the 1st parser used TCAM rule
@@ -753,6 +755,7 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 		if (rc)
 			break;
 	}
+
 out:
 	devm_kfree(dev->dev, acl_entry);
 	return rc;
@@ -973,3 +976,37 @@ static int lan937x_program_kivr(struct ksz_device *dev,
 	return 0;
 }
 
+irqreturn_t lan937x_acl_isr (struct ksz_device *dev, int port)
+{
+	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
+	u8 intsts;
+	int ret;
+
+	ret = lan937x_pread8(dev, port, REG_ACL_PORT_INT_STS,&intsts);
+	if (ret)
+		return IRQ_NONE;
+	
+	if(intsts & ACL_FR_COUNT_OVR0) {
+		res->tcam_match_cntr_bkup[0] += ACL_FR_COUNT_MAX_VALUE;
+		res->tcam_match_cntr_bkup[0] &= ~((u64)ACL_FR_COUNT_MAX_VALUE);
+	}
+	if(intsts & ACL_FR_COUNT_OVR1) {
+		res->tcam_match_cntr_bkup[1] += ACL_FR_COUNT_MAX_VALUE;
+		res->tcam_match_cntr_bkup[1] &= ~((u64)ACL_FR_COUNT_MAX_VALUE);
+	}
+	if(intsts & ACL_FR_COUNT_OVR2) {
+		res->tcam_match_cntr_bkup[2] += ACL_FR_COUNT_MAX_VALUE;
+		res->tcam_match_cntr_bkup[2] &= ~((u64)ACL_FR_COUNT_MAX_VALUE);
+
+	}
+	if(intsts & ACL_FR_COUNT_OVR3) {
+		res->tcam_match_cntr_bkup[3] += ACL_FR_COUNT_MAX_VALUE;
+		res->tcam_match_cntr_bkup[3] &= ~((u64)ACL_FR_COUNT_MAX_VALUE);
+	}
+
+	ret =  lan937x_pwrite8(dev, port, REG_ACL_PORT_INT_STS, intsts);
+	if (ret)
+		return IRQ_NONE;
+	
+	return IRQ_HANDLED;
+}

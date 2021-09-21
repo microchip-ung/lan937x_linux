@@ -1337,6 +1337,7 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.port_policer_del = lan937x_port_policer_del,
 	.cls_flower_add	= lan937x_cls_flower_add,
 	.cls_flower_del	= lan937x_cls_flower_del,
+	.cls_flower_stats = lan937x_cls_flower_stats
 };
 
 

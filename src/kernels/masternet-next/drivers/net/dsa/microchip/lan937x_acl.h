@@ -394,6 +394,9 @@ struct lan937x_acl_entry {
 
 #define set_strm_id(act, i)	act[0] |= (i & LAN937X_ACL_AAR_STREAM_ID)
 
+#define set_fr_counter(act,i)	act[0] |= ((1 << TCAM_AAR_COUNT_POS) | \
+					   (i << TCAM_AAR_COUNT_SEL_POS))
+
 
 struct lan937x_acl_rfr {
 	u32 dissectors_covered;

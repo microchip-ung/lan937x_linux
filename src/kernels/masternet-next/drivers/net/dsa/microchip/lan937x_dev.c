@@ -605,7 +605,7 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 		if (data & BIT(port)) {
                         u32 prtaddr;
 			u8 data8;
-
+			
                         prtaddr = PORT_CTRL_ADDR(port, REG_PORT_INT_STATUS);
 			
 			/* Read port interrupt status register */
@@ -613,10 +613,18 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 			if (ret)
 				return result;
 
-
-			if (data8 & PORT_PTP_INT)
-			{
+			if (data8 & PORT_PTP_INT) {
 				if(lan937x_ptp_port_interrupt(dev, port) != IRQ_NONE)
+					result = IRQ_HANDLED;
+			}
+			
+			if(data8 & PORT_ACL_INT) {
+				if(lan937x_acl_isr(dev,port) !=IRQ_NONE)
+					result = IRQ_HANDLED;
+			}
+
+			if(data8 & PORT_QCI_INT) {
+				if(lan937x_qci_cntr_isr(dev,port) !=IRQ_NONE)
 					result = IRQ_HANDLED;
 			}
 		}
