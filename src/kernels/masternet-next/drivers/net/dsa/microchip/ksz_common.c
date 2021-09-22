@@ -377,6 +377,7 @@ int ksz_switch_register(struct ksz_device *dev,
 	struct device_node *port, *ports;
 	phy_interface_t interface;
 	unsigned int port_num;
+        const char *t1_phy;
 	int ret;
 
 	if (dev->pdata)
@@ -429,6 +430,12 @@ int ksz_switch_register(struct ksz_device *dev,
 					return -EINVAL;
 				of_get_phy_mode(port,
 						&dev->ports[port_num].interface);
+
+                                ret = of_property_read_string(port, "t1_phy_mode", &t1_phy);
+                                if (!ret) {
+                                        if (!strcmp("leader", t1_phy))
+                                                dev->ports[port_num].t1_leader = 1;
+                                }
 			}
 		dev->synclko_125 = of_property_read_bool(dev->dev->of_node,
 							 "microchip,synclko-125");

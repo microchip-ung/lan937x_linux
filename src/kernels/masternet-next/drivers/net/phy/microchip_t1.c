@@ -82,6 +82,12 @@
 #define T1_MDIO_CONTROL2_REG		0x10
 #define T1_INTERRUPT_SOURCE_REG 	0x18
 #define T1_INTERRUPT2_SOURCE_REG	0x08
+#define T1_EQ_FD_STG1_FRZ_CFG		0x69
+#define T1_EQ_FD_STG2_FRZ_CFG		0x6A
+#define T1_EQ_FD_STG3_FRZ_CFG		0x6B
+#define T1_EQ_FD_STG4_FRZ_CFG		0x6C
+#define T1_EQ_WT_FD_LCK_FRZ_CFG		0x6D
+#define T1_PST_EQ_LCK_STG1_FRZ_CFG	0x6E
 
 #define LAN87XX_LINK_UP 		0x01
 #define LAN87XX_MAX_SQI 		0x07
@@ -197,15 +203,37 @@ static int access_ereg_clr_poll_timeout(struct phy_device *phydev, u8 bank,
 				     150, 30000, true);
 }
 
+static int lan87xx_phy_follower_init(struct phy_device *phydev)
+{
+	static const struct access_ereg_val init[] = {
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
+			T1_EQ_FD_STG1_FRZ_CFG,     0x0002,  0 },
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
+			T1_EQ_FD_STG2_FRZ_CFG,     0x0002,  0 },
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
+			T1_EQ_FD_STG3_FRZ_CFG,     0x0002,  0 },
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
+			T1_EQ_FD_STG4_FRZ_CFG,     0x0002,  0 },
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
+			T1_EQ_WT_FD_LCK_FRZ_CFG,     0x0002,  0 },
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
+			T1_PST_EQ_LCK_STG1_FRZ_CFG,  0x0002,  0 },
+	};
+	int i, rc;
+
+	for (i = 0; i < ARRAY_SIZE(init); i++) {
+		rc = access_ereg(phydev, init[i].mode, init[i].bank,
+				 init[i].offset, init[i].val);
+		if (rc < 0)
+			return rc;
+	}
+
+	return 0;
+}
+
 static int lan87xx_phy_init(struct phy_device *phydev)
 {
 	static const struct access_ereg_val init[] = {
-		/* TXPD/TXAMP6 Configs*/
-		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_AFE,
-		  T1_AFE_PORT_CFG1_REG,       0x002D,  0 },
-		/* HW_Init Hi and Force_ED */
-		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI,
-		  T1_POWER_DOWN_CONTROL_REG,  0x0308,  0 },
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
 		  T1_SLV_FD_MULT_CFG_REG,     0x0D53,  0 },
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
@@ -321,16 +349,35 @@ static int lan87xx_phy_init(struct phy_device *phydev)
 	};
 	int rc, i;
 
-	/* Set Master Mode */
-	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI,
-					T1_M_CTRL_REG, T1_M_CFG, T1_M_CFG);
-	if (rc < 0)
-		return rc;
-
 	/* phy Soft reset */
 	rc = genphy_soft_reset(phydev);
 	if (rc < 0)
 		return rc;
+
+	/* TXPD/TXAMP6 Configs */
+	rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_AFE,
+			 T1_AFE_PORT_CFG1_REG, 0x002D);
+	if (rc < 0)
+		return rc;
+
+	/* HW_Init Hi and Force_ED */
+	rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI,
+			 T1_POWER_DOWN_CONTROL_REG, 0x0308);
+	if (rc < 0)
+		return rc;
+
+	/* Check if T1 phy is follower, then configure the registers */
+	rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ, PHYACC_ATTR_BANK_SMI,
+			 0x0A, 0);
+	if (rc < 0)
+		return rc;
+
+	if ((rc & 0x4000) == 0x0000) {
+		rc = lan87xx_phy_follower_init(phydev);
+
+		if (rc < 0)
+			return rc;
+	}
 
 	/* PHY Initialization */
 	for (i = 0; i < ARRAY_SIZE(init); i++) {
@@ -777,7 +824,6 @@ static int lan87xx_cable_test_get_status(struct phy_device *phydev,
 
 static int lan937x_config_aneg(struct phy_device *phydev)
 {
-	int ret;
 	u16 ctl = 0;
 
 	switch (phydev->master_slave_set) {

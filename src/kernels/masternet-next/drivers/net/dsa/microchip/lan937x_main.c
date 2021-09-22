@@ -966,10 +966,12 @@ static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 	return interface;
 }
 
-static void lan937x_config_cpu_port(struct dsa_switch *ds)
+static int lan937x_config_cpu_port(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
 	struct ksz_port *p;
+	u16 value;
+	int ret;
 	int i;
 
 	ds->num_ports = dev->port_cnt;
@@ -1015,7 +1017,21 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 		p->vid_member = (1 << i);
 		p->member = dev->port_mask;
 		lan937x_port_stp_state_set(ds, i, BR_STATE_DISABLED);
+
+		if(dev->ports[i].t1_leader) {
+			ret = lan937x_internal_phy_read(dev, i, 0x0009, &value);
+			if (ret < 0)
+				return ret;
+
+			value |= 0x0800;
+
+			ret = lan937x_internal_phy_write(dev, i, 0x0009, value);
+			if (ret < 0)
+				return ret;
+		}
 	}
+
+	return 0;
 }
 
 static int lan937x_setup(struct dsa_switch *ds)
@@ -1029,7 +1045,9 @@ static int lan937x_setup(struct dsa_switch *ds)
 	ds->vlan_filtering_is_global = true;
 
 	/* Configure cpu port*/
-	lan937x_config_cpu_port(ds);
+	ret = lan937x_config_cpu_port(ds);
+	if (ret)
+		return ret;
 
 	/* Enable aggressive back off for half duplex & UNH mode*/
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_0,
