@@ -25,28 +25,28 @@ const struct lan937x_acl_rfr acl_rfrs_table[MAX_ACL_PARSER][MAX_RFR] = {
 			.layer = l2,
 			.ofst = 0,
 			.len = 6,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_1] = {
 			.dissectors_covered = SRC_MAC_DISSECTOR_PRESENT,
 			.layer = l2,
 			.ofst = 6,
 			.len = 6,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_2] = {
 			.dissectors_covered = ETHTYPE_DISSECTOR_PRESENT,
 			.layer = l2,
 			.ofst = 12,
 			.len = 2,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_3] = {
 			.dissectors_covered = IPV4_TOS_DISSECTOR_PRESENT,
 			.layer = l3,
 			.ofst = 0,
 			.len = 4,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_4] = {
 			.dissectors_covered = (IPV4_TTL_DISSECTOR_PRESENT |
@@ -54,38 +54,38 @@ const struct lan937x_acl_rfr acl_rfrs_table[MAX_ACL_PARSER][MAX_RFR] = {
 			.layer = l3,
 			.ofst = 8,
 			.len = 4,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_5] = {
 			.dissectors_covered = (IPV4_SRC_IP_DISSECTOR_PRESENT),
 			.layer = l3,
 			.ofst = 12,
 			.len = 4,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_6] = {
 			.dissectors_covered = (IPV4_DST_IP_DISSECTOR_PRESENT),
 			.layer = l3,
 			.ofst = 16,
 			.len = 4,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_7] = {
 			.dissectors_covered = (L4_SRC_PORT_DISSECTOR_PRESENT),
 			.layer = l4,
 			.ofst = 0,
 			.len = 2,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_8] = {
 			.dissectors_covered = (L4_DST_PORT_DISSECTOR_PRESENT),
 			.layer = l4,
 			.ofst = 2,
 			.len = 2,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_9] = {
-			.dissectors_covered = 0, 
+			.dissectors_covered = 0,
 		},
 	},
 	[PARSER_IDX_1] = {
@@ -94,47 +94,47 @@ const struct lan937x_acl_rfr acl_rfrs_table[MAX_ACL_PARSER][MAX_RFR] = {
 			.layer = l3,
 			.ofst = 0,
 			.len = 4,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_1] = {
 			.dissectors_covered = (IPV6_HOP_DISSECTOR_PRESENT |
-					       IPV6_NXT_HDR_DISSECTOR_PRESENT),
+					       IPV6_NXTHDR_DISSECTOR_PRESENT),
 			.layer = l3,
 			.ofst = 4,
 			.len = 4,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_2] = {
 			.dissectors_covered = (IPV6_SRC_IP_DISSECTOR_PRESENT),
 			.layer = l3,
 			.ofst = 8,
 			.len = 16,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_3] = {
 			.dissectors_covered = (IPV6_DST_IP_DISSECTOR_PRESENT),
 			.layer = l3,
 			.ofst = 24,
 			.len = 16,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_4] = {
-			.dissectors_covered = 0, 
+			.dissectors_covered = 0,
 		},
 		[RFR_IDX_5] = {
-			.dissectors_covered = 0, 
+			.dissectors_covered = 0,
 		},
 		[RFR_IDX_6] = {
-			.dissectors_covered = 0, 
+			.dissectors_covered = 0,
 		},
 		[RFR_IDX_7] = {
-			.dissectors_covered = 0, 
+			.dissectors_covered = 0,
 		},
 		[RFR_IDX_8] = {
-			.dissectors_covered = 0, 
+			.dissectors_covered = 0,
 		},
 		[RFR_IDX_9] = {
-			.dissectors_covered = 0, 
+			.dissectors_covered = 0,
 		},
 	},
 	[PARSER_IDX_2] = {
@@ -143,35 +143,35 @@ const struct lan937x_acl_rfr acl_rfrs_table[MAX_ACL_PARSER][MAX_RFR] = {
 			.layer = l2,
 			.ofst = 0,
 			.len = 6,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_1] = {
 			.dissectors_covered = SRC_MAC_DISSECTOR_PRESENT,
 			.layer = l2,
 			.ofst = 6,
 			.len = 6,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_2] = {
 			.dissectors_covered = VLAN_TAG_DISSECTORS_PRESENT,
 			.layer = l2,
 			.ofst = 12,
 			.len = 4,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_3] = {
 			.dissectors_covered = ETHTYPE_DISSECTOR_PRESENT,
 			.layer = l2,
 			.ofst = 12 + sizeof(struct vlan_tag),
 			.len = 2,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_4] = {
 			.dissectors_covered = IPV4_TOS_DISSECTOR_PRESENT,
 			.layer = l3,
 			.ofst = 0 + sizeof(struct vlan_tag),
 			.len = 4,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_5] = {
 			.dissectors_covered = (IPV4_TTL_DISSECTOR_PRESENT |
@@ -179,35 +179,35 @@ const struct lan937x_acl_rfr acl_rfrs_table[MAX_ACL_PARSER][MAX_RFR] = {
 			.layer = l3,
 			.ofst = 8 + sizeof(struct vlan_tag),
 			.len = 4,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_6] = {
 			.dissectors_covered = (IPV4_SRC_IP_DISSECTOR_PRESENT),
 			.layer = l3,
 			.ofst = 12 + sizeof(struct vlan_tag),
 			.len = 4,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_7] = {
 			.dissectors_covered = (IPV4_DST_IP_DISSECTOR_PRESENT),
 			.layer = l3,
 			.ofst = 16 + sizeof(struct vlan_tag),
 			.len = 4,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_8] = {
 			.dissectors_covered = (L4_SRC_PORT_DISSECTOR_PRESENT),
 			.layer = l4,
 			.ofst = 0 + sizeof(struct vlan_tag),
 			.len = 2,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_9] = {
 			.dissectors_covered = (L4_DST_PORT_DISSECTOR_PRESENT),
 			.layer = l4,
 			.ofst = 2 + sizeof(struct vlan_tag),
 			.len = 2,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 	},
 	[PARSER_IDX_3] = {
@@ -216,47 +216,47 @@ const struct lan937x_acl_rfr acl_rfrs_table[MAX_ACL_PARSER][MAX_RFR] = {
 			.layer = l3,
 			.ofst = 0,
 			.len = 4,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_1] = {
 			.dissectors_covered = (IPV6_HOP_DISSECTOR_PRESENT |
-					       IPV6_NXT_HDR_DISSECTOR_PRESENT),
+					       IPV6_NXTHDR_DISSECTOR_PRESENT),
 			.layer = l3,
 			.ofst = 4,
 			.len = 4,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_2] = {
 			.dissectors_covered = (IPV6_SRC_IP_DISSECTOR_PRESENT),
 			.layer = l3,
 			.ofst = 8,
 			.len = 16,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_3] = {
 			.dissectors_covered = (IPV6_DST_IP_DISSECTOR_PRESENT),
 			.layer = l3,
 			.ofst = 24,
 			.len = 16,
-			.rng_match_en = false, 
+			.rng_match_en = false,
 		},
 		[RFR_IDX_4] = {
-			.dissectors_covered = 0, 
+			.dissectors_covered = 0,
 		},
 		[RFR_IDX_5] = {
-			.dissectors_covered = 0, 
+			.dissectors_covered = 0,
 		},
 		[RFR_IDX_6] = {
-			.dissectors_covered = 0, 
+			.dissectors_covered = 0,
 		},
 		[RFR_IDX_7] = {
-			.dissectors_covered = 0, 
+			.dissectors_covered = 0,
 		},
 		[RFR_IDX_8] = {
-			.dissectors_covered = 0, 
+			.dissectors_covered = 0,
 		},
 		[RFR_IDX_9] = {
-			.dissectors_covered = 0, 
+			.dissectors_covered = 0,
 		},
 	}
 };
@@ -489,7 +489,7 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 	u8 ofst = 0;
 	int i;
 
-	if(parser_key_format[parser_idx] == PARSER_MULTI_KEY_FORMAT)
+	if (parser_key_format[parser_idx] == PARSER_MULTI_KEY_FORMAT)
 		ofst += TCAM_MULTI_KEY_ENTRY_START;
 
 	for (i = 0; i < MAX_RFR_PER_PARSER; i++) {
@@ -675,7 +675,6 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 		acl_dissector_map &= ~BIT(i);
 
 		for (j = 0; j < n_entries; j++) {
-
 			rc = lan937x_acl_fill_entry(dev, port, parser + j,
 						    i, key, &acl_entry[j]);
 			if (!rc)
@@ -687,7 +686,6 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 
 	for (i = 0; ((actions_presence_mask != 0) &&
 		     (i < LAN937X_NUM_ACTIONS_SUPPORTED)); i++) {
-
 		if (!(actions_presence_mask & BIT(i)))
 			continue;
 
@@ -699,7 +697,7 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 		switch (i) {
 		case LAN937X_ACT_REDIRECT_FLOW:
 			set_map_mode(acl_action, MM_REPLACE_FWD_LKUP_TABLE);
-			set_dst_port(acl_action,action->redirect_port_mask);
+			set_dst_port(acl_action, action->redirect_port_mask);
 			break;
 		case LAN937X_ACT_STREAM_POLICE:
 		case LAN937X_ACT_STREAM_GATE:
@@ -721,18 +719,17 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 		}
 	}
 	if (resrc->type.tcam.cntr != STATS_COUNTER_NOT_ASSIGNED)
-		set_fr_counter(acl_action,resrc->type.tcam.cntr);
+		set_fr_counter(acl_action, resrc->type.tcam.cntr);
 
 	/* For Multiple format Key
 	 * Bit 383:382 PARSER_NUM Programmed to the 1st parser used TCAM rule
 	 */
 	if (parser_key_format[parser] == PARSER_MULTI_KEY_FORMAT) {
 		acl_entry[0].acl_mask[0] |= ((~parser) << 6);
-		acl_entry[0].acl_data[0] |= (parser<< 6);
+		acl_entry[0].acl_data[0] |= (parser << 6);
 	}
 
 	for (j = 0; j < n_entries; j++) {
-
 		rc = lan937x_acl_entry_write(dev, port,
 					     resrc->type.tcam.index + j,
 					     &acl_entry[j]);
@@ -764,9 +761,9 @@ static int lan937x_set_rfr_entry(struct ksz_device *dev, int port,
 		rfr_data.u32value = 0x00000000;
 		goto pgm;
 	}
-	
-	rfr_data.u32value = (RFR_OSFT_L4_RELATV(rfr_entry->layer == l4) | 
-			     RFR_OSFT_L3_RELATV(rfr_entry->layer == l3) | 
+
+	rfr_data.u32value = (RFR_OSFT_L4_RELATV(rfr_entry->layer == l4) |
+			     RFR_OSFT_L3_RELATV(rfr_entry->layer == l3) |
 			     RFR_OSFT_L2_RELATV(rfr_entry->layer == l2));
 	rfr_data.u32value |= RFR_OFST(rfr_entry->ofst);
 	rfr_data.u32value |= RFR_LENGTH(rfr_entry->len);
@@ -838,7 +835,7 @@ int lan937x_init_acl_parsers(struct ksz_device *dev, int port)
 
 	rc = lan937x_pwrite32(dev, port, REG_ACL_PORT_PCTRL,
 			      (PCTRL_TWO_FORMAT_TWO_PARSER_EACH |
-			       PCTRL_KEY2_VLAN_TAG_EN 	|
+			       PCTRL_KEY2_VLAN_TAG_EN	|
 			       PCTRL_KEYTYPE0_MULTI_FMT |
 			       PCTRL_KEYTYPE2_MULTI_FMT));
 	if (rc)
@@ -883,13 +880,13 @@ int lan937x_acl_free_entry(struct ksz_device *dev, int port,
 	if ((access_ctl.row_shift == access_ctl.tcam_addr) ||
 	    last_entry == true) {
 		/* There are no valid entries below the current
-		 * rule under deletion. So No shifting is necessary 
+		 * rule under deletion. So No shifting is necessary
 		 */
 		set_pri_low(access_ctl, true);
 		set_tcam_vben(access_ctl, true);
 		set_tcam_vbi(access_ctl, false);
 		set_tcam_row_vld(access_ctl, 0x0F);
-		set_num_shift(access_ctl, (n_entries-1));
+		set_num_shift(access_ctl, (n_entries - 1));
 		set_tcam_req(access_ctl, TCAM_REQ_TYPE_SHIFT_TCAM);
 		set_tcam_acc(access_ctl, TCAM_MASK_DATA);
 
@@ -899,14 +896,13 @@ int lan937x_acl_free_entry(struct ksz_device *dev, int port,
 	}
 
 	/* After shifting upward, invalidate the very last n_entries.
-	 * If last_entry is true then shifting will not happen, but the last 
-	 * n_entries will be invalidated, which will decommision the rule 
+	 * If last_entry is true then shifting will not happen, but the last
+	 * n_entries will be invalidated, which will decommision the rule
 	 * */
 	row = access_ctl.tcam_addr;
-	for (i = (row-1); i > (row - n_entries); i--) {
-		pr_info("row_shift: %d",i);
+	for (i = (row - 1); i > (row - n_entries); i--) {
 		clr_data(access_ctl);
-		
+
 		set_tcam_addr(access_ctl, i);
 		set_pri_low(access_ctl, true);
 		set_tcam_vben(access_ctl, true);
@@ -935,18 +931,18 @@ static int lan937x_program_kivr(struct ksz_device *dev,
 	 *    e.g. IPV4 protocol value 0xFF is Reserved.
 	 * 2) when range matching is involved then a value that is not
 	 *    within that range is required.
-	 * 3)
+	 * To Be Implemented when required..
 	 */
 	return 0;
 }
 
-irqreturn_t lan937x_acl_isr (struct ksz_device *dev, int port)
+irqreturn_t lan937x_acl_isr(struct ksz_device *dev, int port)
 {
 	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
 	u8 intsts;
 	int ret;
 
-	ret = lan937x_pread8(dev, port, REG_ACL_PORT_INT_STS,&intsts);
+	ret = lan937x_pread8(dev, port, REG_ACL_PORT_INT_STS, &intsts);
 	if (ret)
 		return IRQ_NONE;
 	
@@ -961,7 +957,6 @@ irqreturn_t lan937x_acl_isr (struct ksz_device *dev, int port)
 	if (intsts & ACL_FR_COUNT_OVR2) {
 		res->tcam_match_cntr_bkup[2] += ACL_FR_COUNT_MAX_VALUE;
 		res->tcam_match_cntr_bkup[2] &= ~((u64)ACL_FR_COUNT_MAX_VALUE);
-
 	}
 	if (intsts & ACL_FR_COUNT_OVR3) {
 		res->tcam_match_cntr_bkup[3] += ACL_FR_COUNT_MAX_VALUE;
@@ -971,6 +966,6 @@ irqreturn_t lan937x_acl_isr (struct ksz_device *dev, int port)
 	ret =  lan937x_pwrite8(dev, port, REG_ACL_PORT_INT_STS, intsts);
 	if (ret)
 		return IRQ_NONE;
-	
+
 	return IRQ_HANDLED;
 }

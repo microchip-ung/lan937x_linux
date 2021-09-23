@@ -309,7 +309,7 @@ enum lan937x_acl_dissector_type {
 #define IPV4_DST_IP_DISSECTOR_PRESENT	BIT(acl_ipv4_dst_ip_dissector)
 #define IPV6_TC_DISSECTOR_PRESENT	BIT(acl_ipv6_tc_dissector)
 #define IPV6_HOP_DISSECTOR_PRESENT	BIT(acl_ipv6_hop_dissector)
-#define IPV6_NXT_HDR_DISSECTOR_PRESENT	BIT(acl_ipv6_nxt_hdr_dissector)
+#define IPV6_NXTHDR_DISSECTOR_PRESENT	BIT(acl_ipv6_nxt_hdr_dissector)
 #define IPV6_SRC_IP_DISSECTOR_PRESENT	BIT(acl_ipv6_src_ip_dissector)
 #define IPV6_DST_IP_DISSECTOR_PRESENT	BIT(acl_ipv6_dst_ip_dissector)
 #define L4_SRC_PORT_DISSECTOR_PRESENT	BIT(acl_l4_src_port_dissector)
