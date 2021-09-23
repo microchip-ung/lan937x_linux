@@ -379,6 +379,11 @@ struct lan937x_acl_entry {
 };
 
 /* Defines to help filling the action RAM contents */
+#define set_que_en(act)		act[2] |= (0x03 >> TCAM_AAR_QUE_EN_POS)
+
+#define set_que_sel(act, pri)	act[3] |= ((pri >> TCAM_AAR_QUE_SEL_POS)\
+				  	   & LAN937X_ACL_AAR_QUE_SEL)
+
 #define set_map_mode(act, MM)	act[3] |= ((MM >> TCAM_AAR_MM_H_POS)\
 					   & LAN937X_ACL_AAR_MM_H);\
 				act[4] |= ((MM << TCAM_AAR_MM_L_POS)\
