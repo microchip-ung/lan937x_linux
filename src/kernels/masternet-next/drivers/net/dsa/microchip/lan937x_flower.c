@@ -40,6 +40,7 @@ static int lan937x_assign_stream_filter(struct ksz_device *dev, int port,
 	for (i = 0; i < LAN937X_NUM_STREAM_FILTERS; i++) {
 		if (!(res->stream_filters_used[i])) {
 			*stream_idx = i;
+
 			return 0;
 		}
 	}
@@ -51,9 +52,8 @@ static int lan937x_check_tc_pol_availability(struct ksz_device *dev, int port,
 {
 	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
 
-	if (res->tc_policers_used[traffic_class]) {
+	if (res->tc_policers_used[traffic_class])
 		return -ENOSPC;
-	}
 
 	return 0;
 }
@@ -67,6 +67,7 @@ static int lan937x_assign_tcam_counters(struct ksz_device *dev, int port,
 	for (i = 0; i < LAN937x_NUM_TCAM_COUNTERS; i++) {
 		if (!(res->tcam_frm_counters[i])) {
 			*countr = i;
+
 			return 0;
 		}
 	}
@@ -82,11 +83,9 @@ int lan937x_assign_tcam_entries(struct ksz_device *dev, int port,
 	int i, j, count;
 
 	for (i = 0; i < LAN937X_NUM_TCAM_ENTRIES; i++) {
-
 		count = 0;
 		for (j = 0; j < num_entry_reqd; j++) {
-
-			if (i+j > LAN937X_NUM_TCAM_ENTRIES)
+			if (i + j > LAN937X_NUM_TCAM_ENTRIES)
 				goto out;
 
 			if (!(res->tcam_entries_used[i + j]))
@@ -95,6 +94,7 @@ int lan937x_assign_tcam_entries(struct ksz_device *dev, int port,
 
 		if (count == num_entry_reqd) {
 			*tcam_idx = i;
+
 			return 0;
 		}
 	}
@@ -102,19 +102,17 @@ out:
 	return -ENOSPC;
 }
 
-
 struct lan937x_flower_rule *lan937x_rule_find(struct ksz_device *dev, int port,
 					      unsigned long cookie)
 {
 	struct lan937x_flower_rule *rule;
 	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
 
-	list_for_each_entry (rule, &blk->rules, list){
-		if(rule->cookie == cookie){
-
+	list_for_each_entry(rule, &blk->rules, list) {
+		if (rule->cookie == cookie)
 			return rule;
-		}
 	}
+
 	return NULL;
 }
 
@@ -125,18 +123,18 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
 	struct flow_dissector *dissector = rule->match.dissector;
 	struct lan937x_key *key = &filter->key;
-	u16 proto = ntohs(cls->common.protocol);	
+	u16 proto = ntohs(cls->common.protocol);
 	bool is_bcast_dmac = false;
 	bool match_proto = false;
 
 	if (dissector->used_keys &
-	    ~(BIT(FLOW_DISSECTOR_KEY_BASIC) | 
-              BIT(FLOW_DISSECTOR_KEY_CONTROL) |
+	    ~(BIT(FLOW_DISSECTOR_KEY_BASIC) |
+	      BIT(FLOW_DISSECTOR_KEY_CONTROL) |
 	      BIT(FLOW_DISSECTOR_KEY_VLAN) |
 	      BIT(FLOW_DISSECTOR_KEY_ETH_ADDRS) |
 	      BIT(FLOW_DISSECTOR_KEY_IPV4_ADDRS) |
 	      BIT(FLOW_DISSECTOR_KEY_IPV6_ADDRS) |
-	      BIT(FLOW_DISSECTOR_KEY_IP) | 
+	      BIT(FLOW_DISSECTOR_KEY_IP) |
 	      BIT(FLOW_DISSECTOR_KEY_PORTS))) {
 		NL_SET_ERR_MSG_MOD(extack, "Unsupported keys used");
 		return -EOPNOTSUPP;
@@ -155,8 +153,8 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		if (proto == ETH_P_IPV6) {
 			key->ipv6.next_hdr.value = match.key->ip_proto;
 			key->ipv6.next_hdr.mask = match.mask->ip_proto;
-			key->acl_dissector_map |=IPV6_NXT_HDR_DISSECTOR_PRESENT;
-			match_proto = true;			  
+			key->acl_dissector_map |= IPV6_NXTHDR_DISSECTOR_PRESENT;
+			match_proto = true;
 		}
 	}
 
@@ -183,7 +181,6 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		struct flow_match_vlan match;
 
 		flow_rule_match_vlan(rule, &match);
-
 		if (match.mask->vlan_id) {
 			key->vlan_id.value = match.key->vlan_id;
 			key->vlan_id.mask = match.mask->vlan_id;
@@ -195,7 +192,6 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 			key->vlan_prio.mask = match.mask->vlan_priority;
 			key->acl_dissector_map |= VLAN_PCP_DISSECTOR_PRESENT;
 		}
-
 	}
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IPV4_ADDRS) &&
@@ -217,7 +213,7 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		tmp = &key->ipv4.dip.mask[0];
 		memcpy(tmp, &match.mask->dst, 4);
 
-		key->acl_dissector_map |= (IPV4_SRC_IP_DISSECTOR_PRESENT | 
+		key->acl_dissector_map |= (IPV4_SRC_IP_DISSECTOR_PRESENT |
 					   IPV4_DST_IP_DISSECTOR_PRESENT);
 	}
 
@@ -240,31 +236,30 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		tmp = &key->ipv6.dip.mask[0];
 		memcpy(tmp, &match.mask->dst.s6_addr[0], 16);
 
-		key->acl_dissector_map |= (IPV6_SRC_IP_DISSECTOR_PRESENT | 
+		key->acl_dissector_map |= (IPV6_SRC_IP_DISSECTOR_PRESENT |
 					   IPV6_DST_IP_DISSECTOR_PRESENT);
 	}
 
-	if(flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IP)) {
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IP)) {
 		struct flow_match_ip match;
 
 		flow_rule_match_ip(rule, &match);
-
-		if(proto == ETH_P_IP) {
-			key->ipv4.tos.value= match.key->tos;
+		if (proto == ETH_P_IP) {
+			key->ipv4.tos.value = match.key->tos;
 			key->ipv4.tos.mask = match.mask->tos;
 
-			key->ipv4.ttl.value= match.key->ttl;
+			key->ipv4.ttl.value = match.key->ttl;
 			key->ipv4.ttl.mask = match.mask->ttl;
 
 			key->acl_dissector_map |= (IPV4_TOS_DISSECTOR_PRESENT |
 						   IPV4_TTL_DISSECTOR_PRESENT);
 		}
 
-		if(proto == ETH_P_IPV6) {
-			key->ipv6.tc.value= match.key->tos;
+		if (proto == ETH_P_IPV6) {
+			key->ipv6.tc.value = match.key->tos;
 			key->ipv6.tc.mask = match.mask->tos;
 
-			key->ipv6.hop.value= match.key->ttl;
+			key->ipv6.hop.value = match.key->ttl;
 			key->ipv6.hop.mask = match.mask->ttl;
 
 			key->acl_dissector_map |= (IPV6_TC_DISSECTOR_PRESENT |
@@ -274,9 +269,9 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_PORTS)) {
 		struct flow_match_ports match;
-		
+
 		flow_rule_match_ports(rule, &match);
-		
+
 		key->src_port.value = ntohs(match.key->src);
 		key->src_port.mask =  ntohs(match.mask->src);
 		key->dst_port.value = ntohs(match.key->dst);
@@ -285,24 +280,22 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 					   L4_DST_PORT_DISSECTOR_PRESENT);
 	}
 
-	if ((proto != ETH_P_ALL) && match_proto) {
+	if (proto != ETH_P_ALL && match_proto) {
 		/* TODO: support SNAP, LLC etc */
 		if (proto < ETH_P_802_3_MIN)
 			return -EOPNOTSUPP;
 		key->ethtype.value = (proto);
 		key->ethtype.mask = (0xffff);
-		key->acl_dissector_map |= ETHTYPE_DISSECTOR_PRESENT;		
-	}	
-
-	if((key->acl_dissector_map == DST_MAC_DISSECTOR_PRESENT)
-	   && is_bcast_dmac) {
-			filter->type = LAN937x_BCAST_FILTER;
+		key->acl_dissector_map |= ETHTYPE_DISSECTOR_PRESENT;
 	}
-	else if(key->acl_dissector_map & (VLAN_ID_DISSECTOR_PRESENT | 
+
+	if (key->acl_dissector_map == DST_MAC_DISSECTOR_PRESENT &&
+	    is_bcast_dmac) {
+		filter->type = LAN937x_BCAST_FILTER;
+	} else if (key->acl_dissector_map & (VLAN_ID_DISSECTOR_PRESENT |
 					  VLAN_PCP_DISSECTOR_PRESENT)){
 		filter->type = LAN937x_VLAN_AWARE_FILTER;
-	}
-	else{
+	} else {
 		filter->type = LAN937x_VLAN_UNAWARE_FILTER;
 	}
 
@@ -344,20 +337,16 @@ static int lan937x_setup_action_redirect(struct ksz_device *dev,
 					 &rsrc->type.tcam.n_entries);
 		if (rc)
 			return rc;
-
 		rc = lan937x_assign_tcam_entries(dev, port,
 						 rsrc->type.tcam.n_entries,
 						 &rsrc->type.tcam.index);
-		if (rc){
+		if (rc) {
 			NL_SET_ERR_MSG_MOD(extack, "TCAM entry unavailable");
 			return rc;
 		}
-
-		lan937x_assign_tcam_counters(dev, port, &rsrc->type.tcam.cntr);		
+		lan937x_assign_tcam_counters(dev, port, &rsrc->type.tcam.cntr);
 	}
-
 	flower->action.redirect_port_mask |= destport_mask;
-
 	rsrc->resrc_used_mask |= BIT(LAN937X_TCAM_ENTRIES);
 
 	return rc;
@@ -383,22 +372,21 @@ static int lan937x_setup_action_drop(struct ksz_device *dev,
 			return rc;
 
 		rc = lan937x_assign_tcam_entries(dev, port, *n_entries, index);
-		if (rc){
+		if (rc) {
 			NL_SET_ERR_MSG_MOD(extack, "TCAM entry unavailable");
 			return rc;
 		}
 
-		lan937x_assign_tcam_counters(dev, port, &rsrc->type.tcam.cntr);		
-
+		lan937x_assign_tcam_counters(dev, port, &rsrc->type.tcam.cntr);
 	}
 	rsrc->resrc_used_mask |= BIT(LAN937X_TCAM_ENTRIES);
 	return rc;
 }
 
 static int lan937x_setup_action_priority(struct ksz_device *dev,
-				     	 struct netlink_ext_ack *extack,
+					 struct netlink_ext_ack *extack,
 					 int port, u32 priority,
-				    	 struct lan937x_flower_rule *rule)
+					 struct lan937x_flower_rule *rule)
 {
 	struct lan937x_resrc_alloc *rsrc = rule->resrc;
 	struct lan937x_flower *flower = rule->flower;
@@ -408,22 +396,18 @@ static int lan937x_setup_action_priority(struct ksz_device *dev,
 	int rc = 0;
 
 	flower->action.actions_presence_mask |= BIT(LAN937X_ACT_PRIORITY);
-
-	/*TODO*/
 	rc = lan937x_get_acl_req(flower->filter.type,
-					parser, n_entries);
+				 parser, n_entries);
 	if (rc)
 		return rc;
 
 	rc = lan937x_assign_tcam_entries(dev, port, *n_entries, index);
-	if (rc){
+
+	if (rc) {
 		NL_SET_ERR_MSG_MOD(extack, "TCAM entry unavailable");
 		return rc;
 	}
-
-	lan937x_assign_tcam_counters(dev, port, &rsrc->type.tcam.cntr);		
-
-
+	lan937x_assign_tcam_counters(dev, port, &rsrc->type.tcam.cntr);
 	flower->action.skbedit_prio = priority;
 	rsrc->resrc_used_mask |= BIT(LAN937X_TCAM_ENTRIES);
 	return rc;
@@ -444,7 +428,8 @@ static int lan937x_setup_tc_policer(struct ksz_device *dev,
 	action->actions_presence_mask |= BIT(LAN937X_ACT_TC_POLICE);
 
 	key = &flower->filter.key;
-	rc = lan937x_check_tc_pol_availability(dev, port, key->vlan_prio.value);
+	rc = lan937x_check_tc_pol_availability(dev, port,
+					       key->vlan_prio.value);
 	if (rc) {
 		NL_SET_ERR_MSG_MOD(extack, "TC Policer already exists");
 		return rc;
@@ -454,9 +439,11 @@ static int lan937x_setup_tc_policer(struct ksz_device *dev,
 						    512, 1000000);
 	action->police.burst = burst;
 	/* Burst Setting is not supported by Queue Policer Hardware*/
-	NL_SET_ERR_MSG_MOD(extack, "Burst setting is ignored");
+	NL_SET_ERR_MSG_MOD(extack,
+			   "Burst setting not supported by Queue Policer hw");
 	rsrc->type.tc_pol_used = key->vlan_prio.value;
 	rsrc->resrc_used_mask |= BIT(LAN937X_TC_POLICER);
+
 	return rc;
 }
 
@@ -478,8 +465,9 @@ static int lan937x_setup_stream_policer(struct ksz_device *dev,
 	if (!rsrc->type.strm_flt.en) {
 		rc = lan937x_assign_stream_filter(dev, port,
 						  &rsrc->type.strm_flt.index);
-		if (rc){
-			NL_SET_ERR_MSG_MOD(extack, "Stream filtr unavailable");
+		if (rc) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "Stream filter not available");
 			return rc;
 		}
 
@@ -493,7 +481,7 @@ static int lan937x_setup_stream_policer(struct ksz_device *dev,
 						 rsrc->type.tcam.n_entries,
 						 &rsrc->type.tcam.index);
 		if (rc) {
-			NL_SET_ERR_MSG_MOD(extack, "TCAM entry unavailable");
+			NL_SET_ERR_MSG_MOD(extack, "TCAM entry not available");
 			return rc;
 		}
 
@@ -501,14 +489,12 @@ static int lan937x_setup_stream_policer(struct ksz_device *dev,
 		 * counter assignment is needed
 		 */
 		rsrc->type.tcam.cntr = STATS_COUNTER_NOT_ASSIGNED;
-
 		rsrc->type.strm_flt.en = true;
 	}
 
 	action->police.rate_bytes_per_sec = rate_bytes_per_sec;
 	action->police.burst = burst;
 	action->police.mtu = mtu;
-
 	rsrc->resrc_used_mask |= (BIT(LAN937X_STREAM_FILTER) |
 				  BIT(LAN937X_TCAM_ENTRIES));
 	return rc;
@@ -526,25 +512,21 @@ static int lan937x_flower_policer(struct ksz_device *dev,
 	switch (flower->filter.type) {
 	case LAN937x_BCAST_FILTER:
 		rc = lan937x_setup_bcast_policer(dev, extack, port, rule);
-
-		if(rc)
+		if (rc)
 			return rc;
-		
+
 		/* Utilize the Stream Filter to Implement BCAST Policer*/
 		return lan937x_setup_stream_policer(dev, extack, port, rule,
 						    rate_bytes_per_sec, burst,
-						    mtu);		
-
+						    mtu);
 	case LAN937x_VLAN_AWARE_FILTER:
 		key = &flower->filter.key;
-
-		if ((flower->action.n_actions == 1) &&
-		    (key->acl_dissector_map == VLAN_PCP_DISSECTOR_PRESENT)) {
+		if (flower->action.n_actions == 1 &&
+		    key->acl_dissector_map == VLAN_PCP_DISSECTOR_PRESENT) {
 			return lan937x_setup_tc_policer(dev, extack, port, rule,
 							rate_bytes_per_sec,
 							burst);
 		}
-
 		fallthrough;
 	case LAN937x_VLAN_UNAWARE_FILTER:
 		return lan937x_setup_stream_policer(dev, extack, port, rule,
@@ -565,16 +547,16 @@ int lan937x_flower_rule_init(struct ksz_device *dev,
 	if (!t)
 		return -ENOMEM;
 
-	t->flower = devm_kzalloc(dev->dev, sizeof(*(t->flower)), GFP_KERNEL);
+	t->flower = devm_kzalloc(dev->dev, sizeof(*t->flower), GFP_KERNEL);
 	if (!t->flower) {
-		devm_kfree(dev->dev,t);
+		devm_kfree(dev->dev, t);
 		return -ENOMEM;
 	}
 
-	t->resrc = devm_kzalloc(dev->dev, sizeof(*(t->resrc)), GFP_KERNEL);
+	t->resrc = devm_kzalloc(dev->dev, sizeof(*t->resrc), GFP_KERNEL);
 	if (!t->resrc) {
-		devm_kfree(dev->dev,t->flower);
-		devm_kfree(dev->dev,t);
+		devm_kfree(dev->dev, t->flower);
+		devm_kfree(dev->dev, t);
 		return -ENOMEM;
 	}
 
@@ -595,8 +577,8 @@ static int lan937x_flower_parse_actions(struct ksz_device *dev,
 	flower = flower_rule->flower;
 	flower->action.n_actions = rule->action.num_entries;
 
-	/**For every action identify the capability & hw resrc availability*/
-	flow_action_for_each (i, act, &rule->action) {
+	/**For every action, identify the capability & hw resrc availability*/
+	flow_action_for_each(i, act, &rule->action) {
 		switch (act->id) {
 		case FLOW_ACTION_POLICE: {
 			if (act->police.rate_pkt_ps) {
@@ -616,14 +598,16 @@ static int lan937x_flower_parse_actions(struct ksz_device *dev,
 		}
 		case FLOW_ACTION_TRAP: {
 			unsigned int cpu = dsa_upstream_port(dev->ds, port);
+
 			rc = lan937x_setup_action_redirect(dev, extack,
 							   port,
 							   flower_rule,
-							   BIT(cpu));			
+							   BIT(cpu));
 			break;
 		}
 		case FLOW_ACTION_REDIRECT: {
 			struct dsa_port *to_dp;
+
 			to_dp = dsa_port_from_netdev(act->dev);
 
 			rc = lan937x_setup_action_redirect(dev, extack, port,
@@ -640,12 +624,14 @@ static int lan937x_flower_parse_actions(struct ksz_device *dev,
 			break;
 		case FLOW_ACTION_PRIORITY:
 			if (act->priority >= dev->ds->num_tx_queues) {
-				NL_SET_ERR_MSG_MOD(extack, "Only priorities 0..7 are supported");
+				NL_SET_ERR_MSG_MOD(extack,
+						   "Only priorities 0..7 are supported");
 				return -EINVAL;
 			}
 
 			rc = lan937x_setup_action_priority(dev, extack, port,
-						       				   act->priority, flower_rule);
+							   act->priority,
+							   flower_rule);
 			break;
 		default:
 			NL_SET_ERR_MSG_MOD(extack, "Action not supported");
@@ -670,8 +656,9 @@ static int lan937x_init_tc_policer_hw(struct ksz_device *dev, int port)
 				     0x00);
 		if (rc)
 			return rc;
-		/**Note that the update will not take effect until the 
-		Port Queue 7 Ingress Limit ctrl Register is written.*/
+		/* Note that the update will not take effect until the
+		 * Port Queue 7 Ingress Limit ctrl Register is written.
+		 */
 		rc = lan937x_pwrite8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL,
 				     0x00);
 		if (rc)
@@ -704,10 +691,11 @@ static int lan937x_cfg_tc_policer_hw(struct ksz_device *dev, int port,
 	rc = lan937x_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL + i, code);
 	if (rc)
 		return rc;
-	/**Note that the update will not take effect until the Port Queue 7 
-	Ingress Limit ctrl Register is written. When port-based rate limiting
-	is used a value of 0h should be written to Port Queue 7 Egress Limit
-	Control Register.*/
+	/* Note that the update will not take effect until the Port Queue 7
+	 * Ingress Limit ctrl Register is written. When port-based rate limiting
+	 * is used a value of 0h should be written to Port Queue 7 Egress Limit
+	 * Control Register.
+	 */
 	rc = lan937x_pread8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL, &code);
 	rc = lan937x_pwrite8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL, code);
 	if (rc)
@@ -738,14 +726,15 @@ static int lan937x_init_strm_filter_hw(struct ksz_device *dev, int port)
 	return rc;
 }
 
-/*The PSFP rate limiting register contains 16 bit field each for CIR and PIR
-The individual bits in CIR/PIR is assigned weightage in bits/sec unit.
-To arrive at desired frequency, set one or more registers bits, which 
-cumulatively match the desired frequency approximately.
-The below logic identifies the reg value by accumulating the weights until the 
-desired frequency is exceeded, and then looks back and removes the weights to
-bring it further near the desired value. This function returns a value that is 
-greater than or equal to the desired value*/
+/* The PSFP rate limiting register contains 16 bit field each for CIR and PIR
+ * The individual bits in CIR/PIR is assigned weightage in bits/sec unit.
+ * To arrive at desired frequency, set one or more registers bits, which
+ * cumulatively match the desired frequency approximately.
+ * The below logic identifies the reg value by accumulating the weights until
+ * the desired frequency is exceeded, and then looks back and removes the
+ * weights to bring it further near the desired value. This function returns a
+ * value that is greater than or equal to the desired value
+ */
 static u16 lan937x_psfp_rate_to_reg(u64 rate_bytes_per_sec)
 {
 	u64 rate_bps = (8 * rate_bytes_per_sec);
@@ -754,27 +743,28 @@ static u16 lan937x_psfp_rate_to_reg(u64 rate_bytes_per_sec)
 	u8 i = 0;
 	int j;
 	u32 t;
-	const u32 regbit_weightage_bps[] = {	1525, 		/*BIT 0*/
-						3051, 		/*BIT 1*/
-						6103, 		/*BIT 2*/
-						12207, 		/*BIT 3*/
-						24414, 		/*BIT 4*/
-						48828, 		/*BIT 5*/
-						97656, 		/*BIT 6*/
-						195312, 	/*BIT 7*/
-						390625, 	/*BIT 8*/
-						781250, 	/*BIT 9*/
-						1562500, 	/*BIT 10*/
-						3125000, 	/*BIT 11*/
-						6250000, 	/*BIT 12*/
-						12500000, 	/*BIT 13*/
-						25000000, 	/*BIT 14*/
-						50000000 	/*BIT 15*/
+	const u32 regbit_weightage_bps[] = {	1525,		/*BIT 0*/
+						3051,		/*BIT 1*/
+						6103,		/*BIT 2*/
+						12207,		/*BIT 3*/
+						24414,		/*BIT 4*/
+						48828,		/*BIT 5*/
+						97656,		/*BIT 6*/
+						195312,		/*BIT 7*/
+						390625,		/*BIT 8*/
+						781250,		/*BIT 9*/
+						1562500,	/*BIT 10*/
+						3125000,	/*BIT 11*/
+						6250000,	/*BIT 12*/
+						12500000,	/*BIT 13*/
+						25000000,	/*BIT 14*/
+						50000000	/*BIT 15*/
 	};
 
-	while (i < 16) { /*Reg Field Size is 16 bits*/
+	/*Reg Field Size is 16 bits*/
+	while (i < 16) {
 		if (t_rate < rate_bps) {
-			/*accumulate until desired frequency is exceeded*/
+			/*Accumulate until desired frequency is exceeded*/
 			t_rate = t_rate + regbit_weightage_bps[i];
 			regcode |= BIT(i);
 		} else {
@@ -783,18 +773,20 @@ static u16 lan937x_psfp_rate_to_reg(u64 rate_bytes_per_sec)
 		i++;
 	}
 
-	if(t_rate != rate_bps) {
-		j = i - 1; /* is the last bit index accumulated */
+	if (t_rate != rate_bps) {
+		/* j tracks the last bit index accumulated */
+		j = i - 1;
 		while (j >= 0) {
 			t = t_rate - regbit_weightage_bps[j];
 			if (t >= rate_bps) {
-				/*remove bits that are giving excessive value*/
+				/*Remove bits that are giving excessive value*/
 				t_rate = t;
 				regcode &= ~BIT(j);
 			}
 			j--;
 		}
 	}
+
 	return regcode;
 }
 
@@ -877,7 +869,6 @@ static int lan937x_flower_configure_hw(struct ksz_device *dev, int port,
 	for (i = 0; ((actions_presence_mask != 0) &&
 		     (i < LAN937X_NUM_ACTIONS_SUPPORTED));
 	     i++) {
-
 		if (!(actions_presence_mask & BIT(i)))
 			continue;
 
@@ -918,7 +909,6 @@ static void lan937x_flower_recfg_tcam_idx(struct ksz_device *dev, int port,
 
 	nxt_rule = rule;
 	while (!list_is_first(&nxt_rule->list, &blk->rules)) {
-
 		nxt_rule = list_prev_entry(nxt_rule, list);
 		resrc = nxt_rule->resrc;
 
@@ -935,7 +925,6 @@ static void lan937x_flower_recfg_tcam_idx(struct ksz_device *dev, int port,
 	for (i = 0; i < n_entries; i++) {
 		--row;
 		blk->res.tcam_entries_used[row] = false;
-		pr_info("freed %d", row);
 	}
 }
 
@@ -959,13 +948,13 @@ static int lan937x_flower_free_resrcs(struct ksz_device *dev, int port,
 	if (resrc->resrc_used_mask & BIT(LAN937X_TCAM_ENTRIES)) {
 		u8 n_entries = resrc->type.tcam.n_entries;
 
-		if (resrc->type.tcam.cntr != STATS_COUNTER_NOT_ASSIGNED) 
+		if (resrc->type.tcam.cntr != STATS_COUNTER_NOT_ASSIGNED)
 			res->tcam_frm_counters[resrc->type.tcam.cntr] = false;
 
 		if (resrc->type.tcam.n_entries) {
 			rc = lan937x_acl_free_entry(dev, port, rule);
 			lan937x_flower_recfg_tcam_idx(dev, port, rule,
-					  	      n_entries);
+						      n_entries);
 		}
 	}
 
@@ -995,7 +984,7 @@ static int lan937x_flower_free_resrcs(struct ksz_device *dev, int port,
 }
 
 int lan937x_cls_flower_add(struct dsa_switch *ds, int port,
-			  struct flow_cls_offload *cls, bool ingress)
+			   struct flow_cls_offload *cls, bool ingress)
 {
 	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
 	struct netlink_ext_ack *extack = cls->common.extack;
@@ -1024,21 +1013,21 @@ int lan937x_cls_flower_add(struct dsa_switch *ds, int port,
 	if (rc)
 		goto err;
 
-	devm_kfree(dev->dev,flower_rule->flower);
+	devm_kfree(dev->dev, flower_rule->flower);
 	list_add(&flower_rule->list, &blk->rules);
 	cls->stats.pkts = 0x00;
 	cls->stats.drops = 0x00;
 	flower_rule->flower = NULL;
 	return 0;
 err:
-	devm_kfree(dev->dev,flower_rule->flower);
-	devm_kfree(dev->dev,flower_rule->resrc);
-	devm_kfree(dev->dev,flower_rule);
+	devm_kfree(dev->dev, flower_rule->flower);
+	devm_kfree(dev->dev, flower_rule->resrc);
+	devm_kfree(dev->dev, flower_rule);
 	return rc;
 }
 
 int lan937x_cls_flower_del(struct dsa_switch *ds, int port,
-			  struct flow_cls_offload *cls, bool ingress)
+			   struct flow_cls_offload *cls, bool ingress)
 {
 	struct ksz_device *dev = ds->priv;
 	struct lan937x_flower_rule *rule;
@@ -1055,9 +1044,9 @@ int lan937x_cls_flower_del(struct dsa_switch *ds, int port,
 	/*Delete the rule*/
 	list_del(&rule->list);
 	if (rule->flower)
-		devm_kfree(dev->dev,rule->flower);
-	devm_kfree(dev->dev,rule->resrc);
-	devm_kfree(dev->dev,rule);
+		devm_kfree(dev->dev, rule->flower);
+	devm_kfree(dev->dev, rule->resrc);
+	devm_kfree(dev->dev, rule);
 	return rc;
 }
 
@@ -1065,7 +1054,7 @@ int lan937x_flower_setup(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
 	int port, rc;
-	
+
 	for (port = 0; port < dev->port_cnt; port++) {
 		struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
 		struct lan937x_p_res *res = &blk->res;
@@ -1105,54 +1094,46 @@ int lan937x_cls_flower_stats(struct dsa_switch *ds, int port,
 	struct flow_stats stats = {0};
 	struct lan937x_p_res *res;
 	u32 drops;
-	u32 pkts;		
+	u32 pkts;
 	int rc;
 	u8 i;
 
 	res = lan937x_get_flr_res(dev, port);
 	rule = lan937x_rule_find(dev, port, cls->cookie);
 	if (!rule)
-		return -EINVAL; /* There is No such Rule */
+		return -EINVAL;
 
-	resrc = rule->resrc;		
-
+	resrc = rule->resrc;
 	if (resrc->resrc_used_mask & BIT(LAN937X_TCAM_ENTRIES)) {
-
 		if (resrc->type.tcam.cntr != STATS_COUNTER_NOT_ASSIGNED) {
 			i = resrc->type.tcam.cntr;
 
 			rc = lan937x_pread32(dev, port,
 					     (REG_ACL_PORT_FR_COUNT0 + (i * 4)),
 					     &pkts);
-			/*Write any to clear the FRCounter register*/
-			// rc = lan937x_pwrite32(dev, port,
-			// 		     (REG_ACL_PORT_FR_COUNT0 + (i * 4)),
-			// 		     pkts);					     
-			// if(rc)
-			// 	return rc;
-			//res->tcam_match_cntr_bkup[i] += pkts;
 			cls->stats.pkts = 0;
-			stats.pkts = (res->tcam_match_cntr_bkup[i] + pkts - rule->stats.pkts);
+			stats.pkts = (res->tcam_match_cntr_bkup[i] +
+				      pkts - rule->stats.pkts);
 			rule->stats.pkts = res->tcam_match_cntr_bkup[i] + pkts;
-		}
-		else if (resrc->resrc_used_mask & BIT(LAN937X_STREAM_FILTER)) {
-
+		} else if (resrc->resrc_used_mask &
+			   BIT(LAN937X_STREAM_FILTER)) {
 			i = resrc->type.strm_flt.index;
 
-			rc = lan937x_pwrite32(dev, port, REG_PORT_RX_QCI_PTR, i);
-			if(rc)
-				return rc;			
-
-			rc = lan937x_pread32(dev, port, 
-					     REG_PORT_RX_QCI_FS_FM,
-					     &pkts);
-			if(rc)
+			rc = lan937x_pwrite32(dev, port, REG_PORT_RX_QCI_PTR,
+					      i);
+			if (rc)
 				return rc;
 
-			rc = lan937x_pread32(dev, port, 
+			rc = lan937x_pread32(dev, port,
+					     REG_PORT_RX_QCI_FS_FM,
+					     &pkts);
+			if (rc)
+				return rc;
+
+			rc = lan937x_pread32(dev, port,
 					     REG_PORT_RX_QCI_FS_FD,
-					     &drops);					
-			if(rc)
+					     &drops);
+			if (rc)
 				return rc;
 
 			/* Hardware Counters are 20bit counters
@@ -1161,78 +1142,72 @@ int lan937x_cls_flower_stats(struct dsa_switch *ds, int port,
 			cls->stats.pkts = 0;
 			cls->stats.drops = 0;
 
-			pr_info("%d %d",pkts,cls->stats.pkts);
-			pr_info("%d %d",drops,cls->stats.drops);				
-			stats.pkts = (res->psfp_match_cntr_bkup[i] + pkts - rule->stats.pkts);
-			stats.drops = (res->psfp_drop_cntr_bkup[i] + drops - rule->stats.drops);
+			stats.pkts = (res->psfp_match_cntr_bkup[i] +
+				      pkts - rule->stats.pkts);
+			stats.drops = (res->psfp_drop_cntr_bkup[i] +
+				       drops - rule->stats.drops);
 
 			rule->stats.pkts = res->psfp_match_cntr_bkup[i] + pkts;
 			rule->stats.drops = res->psfp_drop_cntr_bkup[i] + drops;
 		}
-	}
-	else {
+	} else {
 		return 0;
 	}
 
 	flow_stats_update(&cls->stats, 0x0, stats.pkts, stats.drops,
 			  stats.lastused, FLOW_ACTION_HW_STATS_IMMEDIATE);
-	
+
 	return 0;
 }
 
-
-irqreturn_t lan937x_qci_cntr_isr (struct ksz_device *dev, int port)
+irqreturn_t lan937x_qci_cntr_isr(struct ksz_device *dev, int port)
 {
 	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
-	u8 sf_cntr_sts;	
+	u8 sf_cntr_sts;
 	u8 sf_int_sts;
 	int rc;
 	u8 i;
 
 	/*Identify from which instance of Stream filter the Intr is raised */
-	rc = lan937x_pread8(dev, port,REG_PORT_RX_CNT_OVR_INT_STS, 
+	rc = lan937x_pread8(dev, port, REG_PORT_RX_CNT_OVR_INT_STS,
 			    &sf_int_sts);
 	if (rc)
 		return IRQ_NONE;
-	
-	for(i=0; i<LAN937X_NUM_STREAM_FILTERS;i++) {
 
-		if(sf_int_sts & BIT(i)) {
-
-			rc = lan937x_pwrite32(dev, port, 
+	for (i = 0; i < LAN937X_NUM_STREAM_FILTERS; i++) {
+		if (sf_int_sts & BIT(i)) {
+			rc = lan937x_pwrite32(dev, port,
 					      REG_PORT_RX_QCI_PTR, i);
 			if (rc)
 				return IRQ_NONE;
 			/*Identify from which counter overflowed */
-			rc = lan937x_pread8(dev, port, 
-					     REG_PORT_STREAM_CNT_STS,
+			rc = lan937x_pread8(dev, port,
+					    REG_PORT_STREAM_CNT_STS,
 					     &sf_cntr_sts);
-			if (rc)	
+			if (rc)
 				return IRQ_NONE;
 
-			if(sf_cntr_sts & FILT_STR_FR_MATCH_CNT_OVR)
-			{
-				/*Frame Match counter overflowed */
-				u64 *cnt = &res->psfp_match_cntr_bkup[i];
+			/*Check whether Frame Match counter overflowed */
+			if (sf_cntr_sts & FILT_STR_FR_MATCH_CNT_OVR) {
+				u64 *cntr = &res->psfp_match_cntr_bkup[i];
 
-				*cnt += FR_MATCH_CNTR_MAX;
-				*cnt &= ~((u64)FR_MATCH_CNTR_MAX);
+				*cntr += FR_MATCH_CNTR_MAX;
+				*cntr &= ~((u64)FR_MATCH_CNTR_MAX);
 			}
-			if(sf_cntr_sts & FILT_STR_FR_FAIL_DROP_CNT_OVR)
-			{
-				/*Flow Meter Drop counter overflowed */
-				u64 *cnt = &res->psfp_drop_cntr_bkup[i];
+			/*Check whether Flow Meter Drop counter overflowed */
+			if (sf_cntr_sts & FILT_STR_FR_FAIL_DROP_CNT_OVR) {
+				u64 *cntr = &res->psfp_drop_cntr_bkup[i];
 
-				*cnt += FR_DROP_CNTR_MAX;
-				*cnt &= ~((u64)FR_DROP_CNTR_MAX);
+				*cntr += FR_DROP_CNTR_MAX;
+				*cntr &= ~((u64)FR_DROP_CNTR_MAX);
 			}
 
 			/*Clear the interrupt */
-			rc =  lan937x_pwrite8(dev, port, 
-					       REG_PORT_STREAM_CNT_STS,
+			rc =  lan937x_pwrite8(dev, port,
+					      REG_PORT_STREAM_CNT_STS,
 					       sf_cntr_sts);
 			if (rc)
-				return IRQ_NONE;						
+				return IRQ_NONE;
 		}
 	}
 	return IRQ_HANDLED;
