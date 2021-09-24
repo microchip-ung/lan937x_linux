@@ -923,19 +923,6 @@ int lan937x_acl_free_entry(struct ksz_device *dev, int port,
 	return rc;
 }
 
-static int lan937x_program_kivr(struct ksz_device *dev,
-				int port)
-{
-	/* 1) RFRs says what value of the field it covers is invalid
-	 *    and can be safely put in the KIVR
-	 *    e.g. IPV4 protocol value 0xFF is Reserved.
-	 * 2) when range matching is involved then a value that is not
-	 *    within that range is required.
-	 * To Be Implemented when required..
-	 */
-	return 0;
-}
-
 irqreturn_t lan937x_acl_isr(struct ksz_device *dev, int port)
 {
 	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);

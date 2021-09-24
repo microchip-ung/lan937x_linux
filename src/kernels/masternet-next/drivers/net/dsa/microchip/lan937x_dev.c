@@ -619,12 +619,12 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 			}
 			
 			if(data8 & PORT_ACL_INT) {
-				if(lan937x_acl_isr(dev,port) !=IRQ_NONE)
+				if(lan937x_acl_isr(dev,port) != IRQ_NONE)
 					result = IRQ_HANDLED;
 			}
 
 			if(data8 & PORT_QCI_INT) {
-				if(lan937x_qci_cntr_isr(dev,port) !=IRQ_NONE)
+				if(lan937x_qci_cntr_isr(dev,port) != IRQ_NONE)
 					result = IRQ_HANDLED;
 			}
 		}

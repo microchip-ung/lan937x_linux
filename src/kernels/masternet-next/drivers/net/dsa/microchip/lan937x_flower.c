@@ -71,8 +71,9 @@ static int lan937x_assign_tcam_counters(struct ksz_device *dev, int port,
 			return 0;
 		}
 	}
+	/* Invalid Value */
+	*countr = STATS_COUNTER_NOT_ASSIGNED;
 
-	*countr = STATS_COUNTER_NOT_ASSIGNED; //Invalid Value
 	return -ENOSPC;
 }
 
@@ -85,7 +86,7 @@ int lan937x_assign_tcam_entries(struct ksz_device *dev, int port,
 	for (i = 0; i < LAN937X_NUM_TCAM_ENTRIES; i++) {
 		count = 0;
 		for (j = 0; j < num_entry_reqd; j++) {
-			if (i + j > LAN937X_NUM_TCAM_ENTRIES)
+			if (i + j >= LAN937X_NUM_TCAM_ENTRIES)
 				goto out;
 
 			if (!(res->tcam_entries_used[i + j]))
@@ -281,7 +282,6 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 	}
 
 	if (proto != ETH_P_ALL && match_proto) {
-		/* TODO: support SNAP, LLC etc */
 		if (proto < ETH_P_802_3_MIN)
 			return -EOPNOTSUPP;
 		key->ethtype.value = (proto);
@@ -337,6 +337,7 @@ static int lan937x_setup_action_redirect(struct ksz_device *dev,
 					 &rsrc->type.tcam.n_entries);
 		if (rc)
 			return rc;
+
 		rc = lan937x_assign_tcam_entries(dev, port,
 						 rsrc->type.tcam.n_entries,
 						 &rsrc->type.tcam.index);
@@ -344,6 +345,7 @@ static int lan937x_setup_action_redirect(struct ksz_device *dev,
 			NL_SET_ERR_MSG_MOD(extack, "TCAM entry unavailable");
 			return rc;
 		}
+
 		lan937x_assign_tcam_counters(dev, port, &rsrc->type.tcam.cntr);
 	}
 	flower->action.redirect_port_mask |= destport_mask;
@@ -402,14 +404,15 @@ static int lan937x_setup_action_priority(struct ksz_device *dev,
 		return rc;
 
 	rc = lan937x_assign_tcam_entries(dev, port, *n_entries, index);
-
 	if (rc) {
 		NL_SET_ERR_MSG_MOD(extack, "TCAM entry unavailable");
 		return rc;
 	}
+
 	lan937x_assign_tcam_counters(dev, port, &rsrc->type.tcam.cntr);
 	flower->action.skbedit_prio = priority;
 	rsrc->resrc_used_mask |= BIT(LAN937X_TCAM_ENTRIES);
+
 	return rc;
 }
 
@@ -521,12 +524,21 @@ static int lan937x_flower_policer(struct ksz_device *dev,
 						    mtu);
 	case LAN937x_VLAN_AWARE_FILTER:
 		key = &flower->filter.key;
+
+		/* if number of action is one and only if vlan pcp 
+		 * is the only classifier then use HW INGRESS_RATE_LIMIT 
+		 * register. This method is used for not to consure more
+		 * stream filter resources
+		 */ 
 		if (flower->action.n_actions == 1 &&
 		    key->acl_dissector_map == VLAN_PCP_DISSECTOR_PRESENT) {
 			return lan937x_setup_tc_policer(dev, extack, port, rule,
 							rate_bytes_per_sec,
 							burst);
 		}
+		/* if number of classifier is more than one then use 
+		 * TCAM and stream policer
+		 */
 		fallthrough;
 	case LAN937x_VLAN_UNAWARE_FILTER:
 		return lan937x_setup_stream_policer(dev, extack, port, rule,
@@ -619,9 +631,6 @@ static int lan937x_flower_parse_actions(struct ksz_device *dev,
 			rc = lan937x_setup_action_drop(dev, extack, port,
 						       flower_rule);
 			break;
-		case FLOW_ACTION_GATE:
-			rc = -EOPNOTSUPP;
-			break;
 		case FLOW_ACTION_PRIORITY:
 			if (act->priority >= dev->ds->num_tx_queues) {
 				NL_SET_ERR_MSG_MOD(extack,
@@ -650,6 +659,8 @@ static int lan937x_init_tc_policer_hw(struct ksz_device *dev, int port)
 
 	rc = lan937x_port_cfg(dev, port, REG_PORT_MAC_IN_RATE_LIMIT,
 			      PORT_RATE_LIMIT, false);
+	if (rc)
+		return rc;
 
 	for (i = 0; i < LAN937X_NUM_TC; i++) {
 		rc = lan937x_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL + i,
@@ -681,7 +692,7 @@ static int lan937x_cfg_tc_policer_hw(struct ksz_device *dev, int port,
 	if (rc)
 		return rc;
 
-	/** Clear Port Rate Limit to Priority based Rate Limit*/
+	/* Clear Port Rate Limit to Priority based Rate Limit */
 	rc = lan937x_port_cfg(dev, port, REG_PORT_MAC_IN_RATE_LIMIT,
 			      PORT_RATE_LIMIT, false);
 	if (rc)
@@ -718,11 +729,13 @@ static int lan937x_init_strm_filter_hw(struct ksz_device *dev, int port)
 		rc = lan937x_pwrite32(dev, port, REG_PORT_RX_QCI_PTR, i);
 		if (rc)
 			return rc;
-		/*Clear the Meter Enable and Gate enable*/
+
+		/* Clear the Meter Enable and Gate enable */
 		rc = lan937x_pwrite32(dev, port, REG_PORT_RX_QCI_FS_CTL, 0x00);
 		if (rc)
 			return rc;
 	}
+
 	return rc;
 }
 
@@ -743,23 +756,24 @@ static u16 lan937x_psfp_rate_to_reg(u64 rate_bytes_per_sec)
 	u8 i = 0;
 	int j;
 	u32 t;
-	const u32 regbit_weightage_bps[] = {	1525,		/*BIT 0*/
-						3051,		/*BIT 1*/
-						6103,		/*BIT 2*/
-						12207,		/*BIT 3*/
-						24414,		/*BIT 4*/
-						48828,		/*BIT 5*/
-						97656,		/*BIT 6*/
-						195312,		/*BIT 7*/
-						390625,		/*BIT 8*/
-						781250,		/*BIT 9*/
-						1562500,	/*BIT 10*/
-						3125000,	/*BIT 11*/
-						6250000,	/*BIT 12*/
-						12500000,	/*BIT 13*/
-						25000000,	/*BIT 14*/
-						50000000	/*BIT 15*/
-	};
+	const u32 regbit_weightage_bps[] = { 
+		1525,		/*BIT 0*/
+		3051,		/*BIT 1*/
+		6103,		/*BIT 2*/
+		12207,		/*BIT 3*/
+		24414,		/*BIT 4*/
+		48828,		/*BIT 5*/
+		97656,		/*BIT 6*/
+		195312,		/*BIT 7*/
+		390625,		/*BIT 8*/
+		781250,		/*BIT 9*/
+		1562500,	/*BIT 10*/
+		3125000,	/*BIT 11*/
+		6250000,	/*BIT 12*/
+		12500000,	/*BIT 13*/
+		25000000,	/*BIT 14*/
+		50000000	/*BIT 15*/
+	}; 
 
 	/*Reg Field Size is 16 bits*/
 	while (i < 16) {
@@ -770,6 +784,7 @@ static u16 lan937x_psfp_rate_to_reg(u64 rate_bytes_per_sec)
 		} else {
 			break;
 		}
+
 		i++;
 	}
 
@@ -820,20 +835,23 @@ static int lan937x_cfg_strm_policer_hw(struct ksz_device *dev, int port,
 
 	cir = lan937x_psfp_rate_to_reg(action->police.rate_bytes_per_sec);
 
-	val = METER_SR_UPDT_RATE(cir, cir);/*fill PIR with same vaue*/
+	/* fill PIR with same vaue*/
+	val = METER_SR_UPDT_RATE(cir, cir);
 
 	rc = lan937x_pwrite32(dev, port, REG_PORT_RX_QCI_METER_SR, val);
 	if (rc)
 		return rc;
 
 	burst = action->police.burst;
-	val = METER_SR_UPDT_BURST(burst, burst);/*fill Peak burst same */
+
+	/* fill Peak burst same */
+	val = METER_SR_UPDT_BURST(burst, burst);
 
 	rc = lan937x_pwrite32(dev, port, REG_PORT_RX_QCI_METER_BS, val);
 	if (rc)
 		return rc;
 
-	/**Enable flow meter of Id (same as stream ID)*/
+	/* Enable flow meter of Id (same as stream ID)*/
 	val = (FS_CTL_METER_EN |
 	       FS_UPDT_METER_IDX(index) |
 	       FS_UPDT_MTU(action->police.mtu) |
@@ -862,6 +880,7 @@ static int lan937x_flower_configure_hw(struct ksz_device *dev, int port,
 		rc = lan937x_acl_program_entry(dev, port, rule);
 		if (rc)
 			return rc;
+
 		if (resrc->type.tcam.cntr != STATS_COUNTER_NOT_ASSIGNED)
 			res->tcam_frm_counters[resrc->type.tcam.cntr] = true;
 	}
@@ -884,14 +903,14 @@ static int lan937x_flower_configure_hw(struct ksz_device *dev, int port,
 							 action);
 			break;
 
-		case LAN937X_ACT_STREAM_GATE:
-			/*To do*/
+		default:
 			break;
 		}
 
 		if (rc)
 			return rc;
 	}
+
 	return 0;
 }
 
@@ -900,7 +919,7 @@ static int lan937x_flower_configure_hw(struct ksz_device *dev, int port,
  */
 static void lan937x_flower_recfg_tcam_idx(struct ksz_device *dev, int port,
 					  struct lan937x_flower_rule *rule,
-					  u8 n_entries)
+					  u8 shift_count)
 {
 	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
 	struct lan937x_resrc_alloc *resrc;
@@ -909,20 +928,23 @@ static void lan937x_flower_recfg_tcam_idx(struct ksz_device *dev, int port,
 
 	nxt_rule = rule;
 	while (!list_is_first(&nxt_rule->list, &blk->rules)) {
+		/* get the next rule */
 		nxt_rule = list_prev_entry(nxt_rule, list);
 		resrc = nxt_rule->resrc;
 
-		if (resrc->type.tcam.n_entries) {
+		/* Identify if subsequent rules use TCAM entries
+		 * If used, shift the entries by shift_count
+		 */
+		if (resrc->type.tcam.n_entries)
 			resrc->type.tcam.index = (resrc->type.tcam.index -
-						  n_entries);
-		}
+						  shift_count);
 	}
 
 	/* Clear the status of freed up rows to "Available for new rule" */
 	if (-ENOSPC == lan937x_assign_tcam_entries(dev, port, 0x01, &row))
 		row = LAN937X_NUM_TCAM_ENTRIES;
 
-	for (i = 0; i < n_entries; i++) {
+	for (i = 0; i < shift_count; i++) {
 		--row;
 		blk->res.tcam_entries_used[row] = false;
 	}
@@ -942,6 +964,7 @@ static int lan937x_flower_free_resrcs(struct ksz_device *dev, int port,
 				     0x00);
 		if (rc)
 			return rc;
+
 		res->tc_policers_used[i] = false;
 	}
 
@@ -953,6 +976,12 @@ static int lan937x_flower_free_resrcs(struct ksz_device *dev, int port,
 
 		if (resrc->type.tcam.n_entries) {
 			rc = lan937x_acl_free_entry(dev, port, rule);
+			if (rc)
+				return rc;
+
+			/* After deletion, shift the entries to avoid holes
+			 * in the entries
+			 */
 			lan937x_flower_recfg_tcam_idx(dev, port, rule,
 						      n_entries);
 		}
@@ -964,10 +993,12 @@ static int lan937x_flower_free_resrcs(struct ksz_device *dev, int port,
 
 		i = resrc->type.strm_flt.index;
 
+		/* Write the index first */
 		rc = lan937x_pwrite32(dev, port, REG_PORT_RX_QCI_PTR, i);
 		if (rc)
 			return rc;
-		/*Clear the Meter,Gate enable, Max SDU, Oversize block etc*/
+
+		/* Clear the Meter,Gate enable, Max SDU, Oversize block etc */
 		rc = lan937x_pwrite32(dev, port, REG_PORT_RX_QCI_FS_CTL, 0x00);
 		if (rc)
 			return rc;
@@ -986,11 +1017,11 @@ static int lan937x_flower_free_resrcs(struct ksz_device *dev, int port,
 int lan937x_cls_flower_add(struct dsa_switch *ds, int port,
 			   struct flow_cls_offload *cls, bool ingress)
 {
+	struct ksz_device *dev = ds->priv;
+	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
 	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
 	struct netlink_ext_ack *extack = cls->common.extack;
 	struct lan937x_flower_rule *flower_rule;
-	struct ksz_device *dev = ds->priv;
-	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
 	int rc;
 
 	if (lan937x_flower_rule_init(dev, &flower_rule))
@@ -998,7 +1029,7 @@ int lan937x_cls_flower_add(struct dsa_switch *ds, int port,
 
 	flower_rule->cookie = cls->cookie;
 
-	/**Parse the Keys and identify the hw resources required*/
+	/* Parse the Keys and identify the hw resources required*/
 	rc = lan937x_flower_parse_key(extack, cls,
 				      &flower_rule->flower->filter);
 	if (rc)
@@ -1008,16 +1039,19 @@ int lan937x_cls_flower_add(struct dsa_switch *ds, int port,
 	if (rc)
 		goto err;
 
-	/** Configure the hardware Resources */
+	/* Configure the hardware Resources */
 	rc = lan937x_flower_configure_hw(dev, port, flower_rule);
 	if (rc)
 		goto err;
 
 	devm_kfree(dev->dev, flower_rule->flower);
+	flower_rule->flower = NULL;
+
 	list_add(&flower_rule->list, &blk->rules);
+
 	cls->stats.pkts = 0x00;
 	cls->stats.drops = 0x00;
-	flower_rule->flower = NULL;
+	
 	return 0;
 err:
 	devm_kfree(dev->dev, flower_rule->flower);
@@ -1033,20 +1067,24 @@ int lan937x_cls_flower_del(struct dsa_switch *ds, int port,
 	struct lan937x_flower_rule *rule;
 	int rc;
 
+
 	rule = lan937x_rule_find(dev, port, cls->cookie);
+	/* No Rules to delete*/
 	if (!rule)
-		return 0; /* There is No such Rule to delete*/
+		return 0; 
 
 	rc = lan937x_flower_free_resrcs(dev, port, rule);
 	if (rc)
 		return rc;
 
-	/*Delete the rule*/
+	/* Delete the rule */
 	list_del(&rule->list);
 	if (rule->flower)
 		devm_kfree(dev->dev, rule->flower);
+
 	devm_kfree(dev->dev, rule->resrc);
 	devm_kfree(dev->dev, rule);
+
 	return rc;
 }
 
@@ -1093,8 +1131,7 @@ int lan937x_cls_flower_stats(struct dsa_switch *ds, int port,
 	struct lan937x_flower_rule *rule;
 	struct flow_stats stats = {0};
 	struct lan937x_p_res *res;
-	u32 drops;
-	u32 pkts;
+	u32 drops, pkts;
 	int rc;
 	u8 i;
 
@@ -1111,6 +1148,9 @@ int lan937x_cls_flower_stats(struct dsa_switch *ds, int port,
 			rc = lan937x_pread32(dev, port,
 					     (REG_ACL_PORT_FR_COUNT0 + (i * 4)),
 					     &pkts);
+			if (rc)
+				return rc;
+
 			cls->stats.pkts = 0;
 			stats.pkts = (res->tcam_match_cntr_bkup[i] +
 				      pkts - rule->stats.pkts);
@@ -1168,7 +1208,7 @@ irqreturn_t lan937x_qci_cntr_isr(struct ksz_device *dev, int port)
 	int rc;
 	u8 i;
 
-	/*Identify from which instance of Stream filter the Intr is raised */
+	/* Identify from which instance of Stream filter the Intr is raised */
 	rc = lan937x_pread8(dev, port, REG_PORT_RX_CNT_OVR_INT_STS,
 			    &sf_int_sts);
 	if (rc)
@@ -1180,6 +1220,7 @@ irqreturn_t lan937x_qci_cntr_isr(struct ksz_device *dev, int port)
 					      REG_PORT_RX_QCI_PTR, i);
 			if (rc)
 				return IRQ_NONE;
+				
 			/*Identify from which counter overflowed */
 			rc = lan937x_pread8(dev, port,
 					    REG_PORT_STREAM_CNT_STS,

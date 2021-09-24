@@ -27,9 +27,9 @@ struct lan937x_p_res {
 	/* The following memebers are to maintain the Counter Value when
 	 * there is a overflow condition
 	 */
-	volatile u64 tcam_match_cntr_bkup[LAN937x_NUM_TCAM_COUNTERS];
-	volatile u64 psfp_match_cntr_bkup[LAN937X_NUM_STREAM_FILTERS];
-	volatile u64 psfp_drop_cntr_bkup[LAN937X_NUM_STREAM_FILTERS];
+	u64 tcam_match_cntr_bkup[LAN937x_NUM_TCAM_COUNTERS];
+	u64 psfp_match_cntr_bkup[LAN937X_NUM_STREAM_FILTERS];
+	u64 psfp_drop_cntr_bkup[LAN937X_NUM_STREAM_FILTERS];
 };
 
 /*

@@ -934,8 +934,6 @@ int lan937x_tc_pol_rate_to_reg (u64 rate_bytes_per_sec, u8* regval)
 	u32 rate_kbps = div_u64(8 * rate_bytes_per_sec,1000);
 	u16 code = 0x00;
 	
-	pr_info("rate :%llukbps",rate_kbps);
-	
 	if(rate_kbps >= 2000){
 		code = (rate_kbps/1000);
 	} else if(rate_kbps == 1000) {
@@ -974,6 +972,7 @@ int lan937x_tc_pol_rate_to_reg (u64 rate_bytes_per_sec, u8* regval)
 		return -EINVAL;	
 	
 	*regval = code;
+
 	return 0;
 }
 
@@ -983,11 +982,11 @@ static int lan937x_port_policer_add(struct dsa_switch *ds, int port,
 	struct ksz_device *dev = ds->priv;
 	struct lan937x_p_res *res = lan937x_get_flr_res (dev, port);
 	u8 code = 0;
-	int ret,i;
+	int ret, i;
 
-	/**Port Policing and Traffic class Policing is mutually exclusive
+	/* Port Policing and Traffic class Policing is mutually exclusive
 	behavior of one Ingress Rate Limiting Hw */
-	for (i=0; i<LAN937X_NUM_TC;i++) {
+	for (i = 0; i < LAN937X_NUM_TC; i++) {
 		if (res->tc_policers_used[i])
 			return -ENOSPC;
 	}
@@ -1004,15 +1003,18 @@ static int lan937x_port_policer_add(struct dsa_switch *ds, int port,
 	ret = lan937x_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL, code);
 	if (ret) 
 		return ret;	
-	/**Note that the update will not take effect until the Port Queue 7 
+
+	/* Note that the update will not take effect until the Port Queue 7 
 	Ingress Limit ctrl Register is written. When port-based rate limiting
 	is used a value of 0h should be written to Port Queue 7 Egress Limit
 	Control Register.*/
 	ret = lan937x_pwrite8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL, 0x00);
 	if (ret) 
 		return ret;	
-	for (i=0; i<LAN937X_NUM_TC;i++)
+
+	for (i = 0; i < LAN937X_NUM_TC; i++)
 		res->tc_policers_used[i] = true;
+
 	return 0;
 }
 
@@ -1027,14 +1029,17 @@ static void lan937x_port_policer_del(struct dsa_switch *ds, int port)
 	ret = lan937x_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL, 0x00);
 	if (ret)
 		return;	
+
 	/**Note that the update will not take effect until the Port Queue 7 
-	Ingress Limit ctrl Register is written. When port-based rate limiting
-	is used a value of 0h should be written to Port Queue 7 Egress Limit
-	Control Register.*/
+	 * Ingress Limit ctrl Register is written. When port-based rate limiting
+	 * is used a value of 0h should be written to Port Queue 7 Egress Limit
+	 * Control Register
+	 */
 	ret = lan937x_pwrite8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL, 0x00);
 	if (ret)
-		return ;	
-	for (i=0; i<LAN937X_NUM_TC;i++)
+		return;
+
+	for (i = 0; i < LAN937X_NUM_TC; i++)
 		res->tc_policers_used[i] = false;
 }
 
