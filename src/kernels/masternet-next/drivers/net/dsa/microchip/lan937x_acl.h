@@ -6,8 +6,6 @@
 #ifndef _NET_DSA_DRIVERS_LAN937X_ACL_H
 #define _NET_DSA_DRIVERS_LAN937X_ACL_H
 
-/*ToDo: Remove unused defines*/
-
 /* Reg Data */
 #define ACL_ARACR_ADD_SHIFT_LO_PRI  	(0x10000000)
 #define ACL_ARACR_TCAM_FLUSH  		(0x08000000)
@@ -140,9 +138,9 @@
 /* Map Mode value defines */
 /* The forwarding map from the lookup table is replaced with DPORT map.*/
 #define MM_REPLACE_FWD_LKUP_TABLE	0x03
-/**the forwarding map from the lookup table is AND'ed with DPORT map*/
+/* the forwarding map from the lookup table is AND'ed with DPORT map*/
 #define MM_AND_FWD_LKUP_TABLE		0x02
-/**the forwarding map from the lookup table is OR'ed with DPORT map*/
+/* the forwarding map from the lookup table is OR'ed with DPORT map*/
 #define MM_OR_FWD_LKUP_TABLE		0x01
 /**No remapping of Dport*/
 #define MM_NO_REMAPPING			0x00
@@ -224,7 +222,7 @@
 #define ACLTCAMPARX 			0x04
 #define ACLTCAMPARX_1  			0x05
 
-/*ACL MACRO*/
+/* ACL MACRO*/
 #define MAX_ACL_ENTRIES 		64
 #define MAX_ACL_DATA_MASK_SIZE 		48  /* Bytes */
 #define MAX_ACL_ACTION_SIZE 		8   /* Bytes */
@@ -267,7 +265,7 @@
 #define RFR_IDX_8			8
 #define RFR_IDX_9			9
 
-/**Key Format
+/* Key Format
  * Multi Key Format - First byte of Entry should match Parser index to 
  * avoid false matches
  * Univerasal Format - No Parser index matches. Only dissector classification
@@ -340,7 +338,7 @@ enum lan937x_acl_dissector_type {
 				 & ACL_ARACR_TCAM_NUM_SHIFT)
 #define acl_tcam_addr(val)	(((u32)val) & ACL_ARACR_TCAM_ADDR_MASK)
 
-/**Form the register value to program in the acl_access control register*/
+/* Form the register value to program in the acl_access control register*/
 #define acl_acc_ctl(acc)	(acl_pri_low(acc->pri_low) |\
 				 acl_tcam_flush(acc->tcam_flush) |\
 				 acl_tcam_vben(acc->tcam_vben) |\
@@ -352,9 +350,8 @@ enum lan937x_acl_dissector_type {
 				 acl_num_shift(acc->num_shift) |\
 				 acl_tcam_addr(acc->tcam_addr))
 
-/****************************
- * TCAM data structures
- * ***************************/
+
+ /* TCAM data structures */
 struct lan937x_acl_action {
 	bool frm_ts;
 	bool frm_cnt_en;
@@ -402,7 +399,6 @@ struct lan937x_acl_entry {
 #define set_fr_counter(act,i)	act[0] |= ((1 << TCAM_AAR_COUNT_POS) | \
 					   (i << TCAM_AAR_COUNT_SEL_POS))
 
-
 struct lan937x_acl_rfr {
 	u32 dissectors_covered;
 	u8 layer;
@@ -418,38 +414,22 @@ enum layer{
 	l4,
 };
 
-/**Defines to set RFR fields*/
+/* Defines to set RFR fields*/
 #define RFR_RNG_MATCH_EN(X)	((X << TCAM_RFR_RN_EN_POS) & TCAM_RFR_EN_RNGM)
 #define RFR_OSFT_L4_RELATV(X)	((((u32)X)<< TCAM_RFR_L4_POS) & TCAM_RFR_L4)
 #define RFR_OSFT_L3_RELATV(X)	((((u32)X)<< TCAM_RFR_L3_POS) & TCAM_RFR_L3)
 #define RFR_OSFT_L2_RELATV(X)	((((u32)X)<< TCAM_RFR_L2_POS) & TCAM_RFR_L2)
 
-/* Set offset address to extract field from packet, Offset address is 
- * expected interms of number of words instead of bytes, */
-/* #define OFST_CHK_VLD(X)	#if(X & BIT(0))
-				#error "RFR Offset cannot be a ODD Number"
-			#endif\
-			X */
 #define RFR_OFST(X)	(((X >> 1) << TCAM_RFR_OFST_POS) & TCAM_RFR_OFST)
-/* Set Length to extract field from packet, length is 
- * expected interms of number of words instead of bytes, */
-/* #define LEN_CHK_VLD(X)	#if(X & BIT(0))
-				#error "RFR Length cannot be a ODD Number"
-			#elif(X > 24)
-				#error "RFR Length more than 48 bytes"
-			#endif\
-			X */
 #define RFR_LENGTH(X)	(((X >> 1) << TCAM_RFR_LEN_POS) & TCAM_RFR_LEN)
-
 #define RFR_RNG_OSFT(X)	(((X) << TCAM_RFR_RNG_POS) & TCAM_RFR_RNG_OFST)
-
 
 struct lan937x_acl_rfr_table {
 	struct lan937x_acl_rfr rfr_entries[MAX_PARSER_PER_ENTRY][MAX_RFR];
 };
 
 struct lan937x_rfr_reg_type {
-	union{	/*Why union inside a structure ??*/
+	union {
 		u8 bval[MAX_RFR_SIZE];
 		u32 u32value;
 	};
@@ -525,18 +505,15 @@ struct lan937x_acl_interrupt_cfg {
 	bool tcm_op_done;
 };
 
-/************************************
- * Packet Formats supported by TCAM
- * ***********************************/
-
+/* Packet Formats supported by TCAM */
 struct packet_universal {
-	u8  dst_mac[6];        /* destination eth addr        */
-	u8  src_mac[6];        /* source ether addr        */
-	u16 ether_type;        /* packet type ID field        */
+	u8  dst_mac[6];        /* destination eth addr */
+	u8  src_mac[6];        /* source ether addr */
+	u16 ether_type;        /* packet type ID field */
 } __packed;
 
 struct packet_extentions {
-	u16 offset;	/* offset address from start of packet**/
+	u16 offset;	/* offset address from start of packet */
 	u16 size;	/* Size of the extension */
 };
 

@@ -855,7 +855,7 @@ static int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
 	int ret, p;
 	u8 data;
 
-	/*Configure ingress/egress mirroring*/
+	/* Configure ingress/egress mirroring*/
 	if (ingress)
 		ret = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX,
 				       true);
@@ -871,7 +871,7 @@ static int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
 	 * If yes, instruct the user to remove the previous entry & exit
 	 */
 	for (p = 0; p < dev->port_cnt; p++) {
-		/*Skip the current sniffing port*/
+		/* Skip the current sniffing port*/
 		if (p == mirror->to_local_port)
 			continue;
 
@@ -937,40 +937,35 @@ int lan937x_tc_pol_rate_to_reg (u64 rate_bytes_per_sec, u8* regval)
 	if(rate_kbps >= 2000){
 		code = (rate_kbps/1000);
 	} else if(rate_kbps == 1000) {
-		code = 0x01;
-	} else if(rate_kbps <= 256) {
-		code = 104;
-	} else if(rate_kbps <= 320) {
-		code = 105;
-	} else if(rate_kbps <= 384) {
-		code = 106;
-	} else if(rate_kbps <= 448) {
-		code = 107;
-	} else if(rate_kbps <= 512) {
-		code = 108;
-	} else if(rate_kbps <= 576) {
-		code = 109;
-	} else if(rate_kbps <= 640) {
-		code = 110;
-	} else if(rate_kbps <= 704) {
-		code = 111;
-	} else if(rate_kbps <= 768) {
-		code = 112;
-	} else if(rate_kbps <= 832) {
-		code = 113;
-	} else if(rate_kbps <= 896) {
-		code = 114;
-	} else if(rate_kbps <= 960) {
-		code = 115;
+		code = RLIMIT_REG_CODE_1MBPS;
 	} else if(rate_kbps <= 1280) {
-		code = 102;
+		code = RLIMIT_REG_CODE_1280KBPS;
 	} else if(rate_kbps <= 1920) {
-		code = 103;
+		code = RLIMIT_REG_CODE_1920KBPS;
+	} else {
+		/* All values in rate_boundaries are in kbps*/
+		const u16 rate_boundaries[] = {
+			/* [0]*/	256,	320,	384,	448,	512,
+			/* [5]*/	576,	640,	804,	768,	832,
+			/* [10]*/	896,	960,
+		};
+		u8 i;
+
+		for(i = 0;i < 12; i++) {
+			if (rate_kbps < rate_boundaries[i]) {
+				/* 256 kbps is the lowest limited rate. 
+				 * Incrementing reg value by one step results in
+				 * setting the rate to next subsequent boundary
+				 */
+				code = RLIMIT_REG_CODE_256KBPS + i;
+				break;
+			}
+		}
 	}
 
 	if (!code)
 		return -EINVAL;	
-	
+
 	*regval = code;
 
 	return 0;
@@ -985,7 +980,8 @@ static int lan937x_port_policer_add(struct dsa_switch *ds, int port,
 	int ret, i;
 
 	/* Port Policing and Traffic class Policing is mutually exclusive
-	behavior of one Ingress Rate Limiting Hw */
+	 * behavior of one Ingress Rate Limiting Hw 
+	 */
 	for (i = 0; i < LAN937X_NUM_TC; i++) {
 		if (res->tc_policers_used[i])
 			return -ENOSPC;
@@ -1005,9 +1001,10 @@ static int lan937x_port_policer_add(struct dsa_switch *ds, int port,
 		return ret;	
 
 	/* Note that the update will not take effect until the Port Queue 7 
-	Ingress Limit ctrl Register is written. When port-based rate limiting
-	is used a value of 0h should be written to Port Queue 7 Egress Limit
-	Control Register.*/
+	 * Ingress Limit ctrl Register is written. When port-based rate limiting
+	 * is used a value of 0h should be written to Port Queue 7 Egress Limit
+	 * Control Register.
+	 */
 	ret = lan937x_pwrite8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL, 0x00);
 	if (ret) 
 		return ret;	
@@ -1030,7 +1027,7 @@ static void lan937x_port_policer_del(struct dsa_switch *ds, int port)
 	if (ret)
 		return;	
 
-	/**Note that the update will not take effect until the Port Queue 7 
+	/* Note that the update will not take effect until the Port Queue 7 
 	 * Ingress Limit ctrl Register is written. When port-based rate limiting
 	 * is used a value of 0h should be written to Port Queue 7 Egress Limit
 	 * Control Register

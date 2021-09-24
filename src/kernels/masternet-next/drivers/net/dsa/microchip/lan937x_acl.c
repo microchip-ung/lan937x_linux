@@ -286,11 +286,12 @@ static int lan937x_wait_tcam_busy(struct ksz_device *dev, int port)
 	unsigned int val;
 
 	return regmap_read_poll_timeout(dev->regmap[2],
-				      PORT_CTRL_ADDR(port, REG_ACL_PORT_ARACR),
-				      val,
-				      val & ACL_ARACR_TCAM_OP_STS,
-				      10,
-				      10000);
+				        PORT_CTRL_ADDR(port, 
+						       REG_ACL_PORT_ARACR),
+				        val,
+				        val & ACL_ARACR_TCAM_OP_STS,
+				        10,
+				        10000);
 }
 
 static int lan937x_set_acl_access_ctl(struct ksz_device *dev,
@@ -298,20 +299,20 @@ static int lan937x_set_acl_access_ctl(struct ksz_device *dev,
 				      struct lan937x_acl_access_ctl *acc_ctl)
 {
 	u32 val;
-	int rc;
+	int ret;
 	
-	rc = lan937x_wait_tcam_busy(dev, port);
-	if (rc)
-		return rc;
+	ret = lan937x_wait_tcam_busy(dev, port);
+	if (ret)
+		return ret;
 
 	val = acl_acc_ctl(acc_ctl);
 
-	rc = lan937x_pwrite32(dev, port, REG_ACL_PORT_ARACR, val);
-	if (rc)
-		return rc;
+	ret = lan937x_pwrite32(dev, port, REG_ACL_PORT_ARACR, val);
+	if (ret)
+		return ret;
 
-	rc = lan937x_wait_tcam_busy(dev, port);
-	return rc;
+	ret = lan937x_wait_tcam_busy(dev, port);
+	return ret;
 }
 
 static int lan937x_acl_entry_write(struct ksz_device *dev,
@@ -321,53 +322,53 @@ static int lan937x_acl_entry_write(struct ksz_device *dev,
 	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
 	struct lan937x_acl_access_ctl access_ctl;
 	struct lan937x_acl_byte_en byte_en_cfg;
-	int rc;
+	int ret;
 
-	rc = lan937x_wait_tcam_busy(dev, port);
-	if (rc)
-		return rc;
+	ret = lan937x_wait_tcam_busy(dev, port);
+	if (ret)
+		return ret;
 
 	/* Write TCAM mask in ADR */
-	rc = lan937x_pwrite8_bulk(dev, port, REG_ACL_PORT_ADR,
-				  &acl_entry->acl_mask[0],
-				  MAX_ACL_DATA_MASK_SIZE);
-	if (rc)
-		return rc;
+	ret = lan937x_pwrite8_bulk(dev, port, REG_ACL_PORT_ADR,
+				   &acl_entry->acl_mask[0],
+				   MAX_ACL_DATA_MASK_SIZE);
+	if (ret)
+		return ret;
 
 	/* Write TCAM Data in ADR */
-	rc = lan937x_pwrite8_bulk(dev, port,
-				  REG_ACL_PORT_ADR + MAX_ACL_DATA_MASK_SIZE,
-				  &acl_entry->acl_data[0],
-				  MAX_ACL_DATA_MASK_SIZE);
-	if (rc)
-		return rc;
+	ret = lan937x_pwrite8_bulk(dev, port,
+				   REG_ACL_PORT_ADR + MAX_ACL_DATA_MASK_SIZE,
+				   &acl_entry->acl_data[0],
+				   MAX_ACL_DATA_MASK_SIZE);
+	if (ret)
+		return ret;
 
 	/* Write AAR */
-	rc = lan937x_pwrite8_bulk(dev, port, REG_ACL_PORT_AAR,
-				  &acl_entry->acl_action[0],
-				  MAX_ACL_ACTION_SIZE);
-	if (rc)
-		return rc;
+	ret = lan937x_pwrite8_bulk(dev, port, REG_ACL_PORT_AAR,
+				   &acl_entry->acl_action[0],
+				   MAX_ACL_ACTION_SIZE);
+	if (ret)
+		return ret;
 
 	/* Each bit of this BYTE_EN register defines which
 	 * bytes in ADR & AAR are writable
 	 */
 	memset(&byte_en_cfg, 0xFF, sizeof(byte_en_cfg));
-	rc = lan937x_pwrite8_bulk(dev, port, REG_ACL_PORT_ABER,
-				  &byte_en_cfg.acl_mask[0],
-				  sizeof(byte_en_cfg));
-	if (rc)
-		return rc;
+	ret = lan937x_pwrite8_bulk(dev, port, REG_ACL_PORT_ABER,
+				   &byte_en_cfg.acl_mask[0],
+				   sizeof(byte_en_cfg));
+	if (ret)
+		return ret;
 
 	/* HW workaround for ACL write */
-	rc = lan937x_pwrite16(dev, port, 0x66C, 0xFFFF);
-	if (rc)
-		return rc;
+	ret = lan937x_pwrite16(dev, port, 0x66C, 0xFFFF);
+	if (ret)
+		return ret;
 
 	/* HW workaround for ACL write */
-	rc = lan937x_pwrite16(dev, port, 0x672, 0xFFFF);
-	if (rc)
-		return rc;
+	ret = lan937x_pwrite16(dev, port, 0x672, 0xFFFF);
+	if (ret)
+		return ret;
 
 	/* Clear data in access_ctl */
 	clr_data(access_ctl);
@@ -382,14 +383,14 @@ static int lan937x_acl_entry_write(struct ksz_device *dev,
 	set_tcam_acc(access_ctl, TCAM_MASK_DATA);
 
 	/* Write ACL register */
-	rc = lan937x_set_acl_access_ctl(dev,
-					port, &access_ctl);
-	if (rc)
-		return rc;
+	ret = lan937x_set_acl_access_ctl(dev,
+					 port, &access_ctl);
+	if (ret)
+		return ret;
 	
 	res->tcam_entries_used[entry_idx] = true;
 
-	return rc;
+	return ret;
 }
 
 static void lan937x_cpy_array_to_entry(u8 *s_data, u8 *s_mask,
@@ -638,7 +639,7 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 		}
 		default:
 			break;
-		} /*switch ends*/
+		} /* switch ends */
 
 		return 0;
 	}
@@ -657,7 +658,7 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 	u8 n_entries = resrc->type.tcam.n_entries;
 	u8 parser = resrc->type.tcam.parser;
 	struct lan937x_acl_entry *acl_entry;
-	int rc = EINVAL;
+	int ret = EINVAL;
 	u8 *acl_action;
 	u8 i, j;
 
@@ -675,12 +676,12 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 		acl_dissector_map &= ~BIT(i);
 
 		for (j = 0; j < n_entries; j++) {
-			rc = lan937x_acl_fill_entry(dev, port, parser + j,
-						    i, key, &acl_entry[j]);
-			if (!rc)
+			ret = lan937x_acl_fill_entry(dev, port, parser + j,
+						     i, key, &acl_entry[j]);
+			if (!ret)
 				break;
 		}
-		if (rc)
+		if (ret)
 			goto out;
 	}
 
@@ -714,7 +715,7 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 			set_que_sel(acl_action, action->skbedit_prio);
 			break;
 		default:
-			rc = -EINVAL;
+			ret = -EINVAL;
 			goto out;
 		}
 	}
@@ -730,16 +731,16 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 	}
 
 	for (j = 0; j < n_entries; j++) {
-		rc = lan937x_acl_entry_write(dev, port,
-					     resrc->type.tcam.index + j,
-					     &acl_entry[j]);
-		if (rc)
+		ret = lan937x_acl_entry_write(dev, port,
+					      resrc->type.tcam.index + j,
+					      &acl_entry[j]);
+		if (ret)
 			break;
 	}
 
 out:
 	devm_kfree(dev->dev, acl_entry);
-	return rc;
+	return ret;
 }
 
 static int lan937x_set_rfr_entry(struct ksz_device *dev, int port,
@@ -749,7 +750,7 @@ static int lan937x_set_rfr_entry(struct ksz_device *dev, int port,
 	struct lan937x_rfr_reg_type rfr_data;
 	u8 tcam_addr_access;
 	u16 reg_ofst;
-	int rc;
+	int ret;
 
 	tcam_addr_access = parser_idx % 2;
 
@@ -757,7 +758,7 @@ static int lan937x_set_rfr_entry(struct ksz_device *dev, int port,
 		   (tcam_addr_access * MAX_RFR_SIZE * MAX_RFR_PER_PARSER);
 
 	if (!(rfr_entry->dissectors_covered)) {
-		/*Ensure unused RFRs arent filled with junk*/
+		/* Ensure unused RFRs arent filled with junk */
 		rfr_data.u32value = 0x00000000;
 		goto pgm;
 	}
@@ -771,9 +772,9 @@ static int lan937x_set_rfr_entry(struct ksz_device *dev, int port,
 	rfr_data.u32value |= RFR_RNG_OSFT(rfr_entry->rng_ofst);
 
 pgm:
-	rc = lan937x_pwrite32(dev, port, reg_ofst, rfr_data.u32value);
+	ret = lan937x_pwrite32(dev, port, reg_ofst, rfr_data.u32value);
 
-	return rc;
+	return ret;
 }
 
 static int lan937x_program_rfrs(struct ksz_device *dev,
@@ -783,15 +784,15 @@ static int lan937x_program_rfrs(struct ksz_device *dev,
 	const struct lan937x_acl_rfr *rfr_entry;
 	int parser_idx, rfr_idx;
 	int count = 0;
-	int rc;
+	int ret;
 
 	for (parser_idx = 0; parser_idx < MAX_ACL_PARSERS; parser_idx++) {
 		for (rfr_idx = 0; rfr_idx < MAX_RFR_PER_PARSER; rfr_idx++) {
 			rfr_entry = &acl_rfrs_table[parser_idx][rfr_idx];
-			rc = lan937x_set_rfr_entry(dev, port, parser_idx,
-						   rfr_idx, rfr_entry);
-			if (rc)
-				return rc;
+			ret = lan937x_set_rfr_entry(dev, port, parser_idx,
+						    rfr_idx, rfr_entry);
+			if (ret)
+				return ret;
 		}
 
 		/* Increament the parser count */
@@ -817,34 +818,34 @@ static int lan937x_program_rfrs(struct ksz_device *dev,
 		set_tcam_req(access_ctl, TCAM_REQ_TYPE_WRITE_RFR);
 		set_tcam_acc(access_ctl, TCAM_MASK_DATA);
 
-		rc = lan937x_set_acl_access_ctl(dev, port, &access_ctl);
-		if (rc)
-			return rc;
+		ret = lan937x_set_acl_access_ctl(dev, port, &access_ctl);
+		if (ret)
+			return ret;
 	}
 
-	return rc;
+	return ret;
 }
 
 int lan937x_init_acl_parsers(struct ksz_device *dev, int port)
 {
-	int rc;
+	int ret;
 
-	rc = lan937x_program_rfrs(dev, port);
-	if (rc)
-		return rc;
+	ret = lan937x_program_rfrs(dev, port);
+	if (ret)
+		return ret;
 
-	rc = lan937x_pwrite32(dev, port, REG_ACL_PORT_PCTRL,
-			      (PCTRL_TWO_FORMAT_TWO_PARSER_EACH |
-			       PCTRL_KEY2_VLAN_TAG_EN	|
-			       PCTRL_KEYTYPE0_MULTI_FMT |
-			       PCTRL_KEYTYPE2_MULTI_FMT));
-	if (rc)
-		return rc;
+	ret = lan937x_pwrite32(dev, port, REG_ACL_PORT_PCTRL,
+			       (PCTRL_TWO_FORMAT_TWO_PARSER_EACH |
+			        PCTRL_KEY2_VLAN_TAG_EN	|
+			        PCTRL_KEYTYPE0_MULTI_FMT |
+			        PCTRL_KEYTYPE2_MULTI_FMT));
+	if (ret)
+		return ret;
 
-	rc = lan937x_pwrite8(dev, port, REG_PORT_RX_AUTH_CTL,
-			     (AUTH_CTL_ACL_PASS_MODE | AUTH_CTL_ACL_ENABLE));
+	ret = lan937x_pwrite8(dev, port, REG_PORT_RX_AUTH_CTL,
+			      (AUTH_CTL_ACL_PASS_MODE | AUTH_CTL_ACL_ENABLE));
 
-	return rc;
+	return ret;
 }
 
 int lan937x_acl_free_entry(struct ksz_device *dev, int port,
@@ -855,7 +856,7 @@ int lan937x_acl_free_entry(struct ksz_device *dev, int port,
 	struct lan937x_acl_access_ctl access_ctl;
 	bool last_entry;
 	u8 i, row;
-	int rc;
+	int ret;
 
 	/* Nothing to delete */
 	if (!n_entries)
@@ -870,9 +871,9 @@ int lan937x_acl_free_entry(struct ksz_device *dev, int port,
 	set_row_shift(access_ctl, (n_entries + resrc->type.tcam.index));
 
 	/* Identify the row where the Last Entry is present*/
-	rc = lan937x_assign_tcam_entries(dev, port, 0x01,
-					 &access_ctl.tcam_addr);
-	if (rc == -ENOSPC){
+	ret = lan937x_assign_tcam_entries(dev, port, 0x01,
+					  &access_ctl.tcam_addr);
+	if (ret == -ENOSPC){
 		set_tcam_addr(access_ctl, LAN937X_NUM_TCAM_ENTRIES);
 		last_entry = true;
 	}
@@ -890,9 +891,9 @@ int lan937x_acl_free_entry(struct ksz_device *dev, int port,
 		set_tcam_req(access_ctl, TCAM_REQ_TYPE_SHIFT_TCAM);
 		set_tcam_acc(access_ctl, TCAM_MASK_DATA);
 
-		rc = lan937x_set_acl_access_ctl(dev, port, &access_ctl);
-		if (rc)
-			return rc;
+		ret = lan937x_set_acl_access_ctl(dev, port, &access_ctl);
+		if (ret)
+			return ret;
 	}
 
 	/* After shifting upward, invalidate the very last n_entries.
@@ -912,15 +913,15 @@ int lan937x_acl_free_entry(struct ksz_device *dev, int port,
 		set_tcam_req(access_ctl, TCAM_REQ_TYPE_WRITE_TCAM);
 		set_tcam_acc(access_ctl, TCAM_MASK_DATA);
 
-		rc = lan937x_set_acl_access_ctl(dev, port, &access_ctl);
-		if (rc)
-			return rc;
+		ret = lan937x_set_acl_access_ctl(dev, port, &access_ctl);
+		if (ret)
+			return ret;
 	}
 
 	/* Deleted rule no longer has any tcam entries */
 	resrc->type.tcam.n_entries = 0x00;
 
-	return rc;
+	return ret;
 }
 
 irqreturn_t lan937x_acl_isr(struct ksz_device *dev, int port)
