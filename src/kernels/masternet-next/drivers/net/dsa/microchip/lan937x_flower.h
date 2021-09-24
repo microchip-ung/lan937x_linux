@@ -33,11 +33,11 @@ struct lan937x_p_res {
 };
 
 /* struct lan937x_flr_blk :
- * Flower Rule and Hw Resource Management data structure. 
- * 	rules- List for holding already implemented TC Flower Rules. Each Node
- * 		is of type lan937x_flower_rule.
- * 	res - Data Structure for tracking allocated and available hardware
- * 	      resources.
+ * Flower Rule and Hw Resource Management data structure.
+ *	rules- List for holding already implemented TC Flower Rules. Each Node
+ *		is of type lan937x_flower_rule.
+ *	res - Data Structure for tracking allocated and available hardware
+ *	      resources.
  * Memory for this data structure is allocated through dev->port->priv member.
  */
 struct lan937x_flr_blk {
@@ -228,7 +228,7 @@ int lan937x_tc_pol_rate_to_reg(u64 rate_bytes_per_sec, u8 *regval);
 int lan937x_cls_flower_del(struct dsa_switch *ds, int port,
 			   struct flow_cls_offload *cls, bool ingress);
 int lan937x_acl_free_entry(struct ksz_device *dev, int port,
-			   struct lan937x_flower_rule *rule);			     
+			   struct lan937x_flower_rule *rule);
 
 /* APIs to support TC Flower statistics */
 int lan937x_cls_flower_stats(struct dsa_switch *ds, int port,

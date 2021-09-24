@@ -271,7 +271,7 @@ int lan937x_get_acl_req(enum lan937x_filter_type type,
 		break;
 	case LAN937x_VLAN_AWARE_FILTER:
 		*parser_idx = 2;
-		*n_entries = 2; 
+		*n_entries = 2;
 		break;
 	case LAN937x_BCAST_FILTER:
 	default:
@@ -286,12 +286,12 @@ static int lan937x_wait_tcam_busy(struct ksz_device *dev, int port)
 	unsigned int val;
 
 	return regmap_read_poll_timeout(dev->regmap[2],
-				        PORT_CTRL_ADDR(port, 
+					PORT_CTRL_ADDR(port,
 						       REG_ACL_PORT_ARACR),
-				        val,
-				        val & ACL_ARACR_TCAM_OP_STS,
-				        10,
-				        10000);
+					val,
+					val & ACL_ARACR_TCAM_OP_STS,
+					10,
+					10000);
 }
 
 static int lan937x_set_acl_access_ctl(struct ksz_device *dev,
@@ -300,7 +300,7 @@ static int lan937x_set_acl_access_ctl(struct ksz_device *dev,
 {
 	u32 val;
 	int ret;
-	
+
 	ret = lan937x_wait_tcam_busy(dev, port);
 	if (ret)
 		return ret;
@@ -387,7 +387,7 @@ static int lan937x_acl_entry_write(struct ksz_device *dev,
 					 port, &access_ctl);
 	if (ret)
 		return ret;
-	
+
 	res->tcam_entries_used[entry_idx] = true;
 
 	return ret;
@@ -496,10 +496,10 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 	for (i = 0; i < MAX_RFR_PER_PARSER; i++) {
 		/* No more valid RFRs in Parser */
 		if (!rfr_ptr[i].dissectors_covered)
-			break; 
+			break;
 
 		if (!(rfr_ptr[i].dissectors_covered & BIT(disctr))) {
-			/* Accumulate the length of all previous RFRs till 
+			/* Accumulate the length of all previous RFRs till
 			 * the intended RFR which carries the intended
 			 * dissector. Accumulated offset is finally used as the
 			 * offset in TCAM entry to fill TCAM data
@@ -511,12 +511,12 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 		switch (disctr) {
 		case acl_dst_mac_dissector:
 			lan937x_cpy_ethaddr_to_entry(&key->dst_mac,
-							acl_entry,
+						     acl_entry,
 							ofst);
 			break;
 		case acl_src_mac_dissector:
 			lan937x_cpy_ethaddr_to_entry(&key->src_mac,
-							acl_entry,
+						     acl_entry,
 							ofst);
 			break;
 		case acl_vlan_id_dissector: {
@@ -552,32 +552,32 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 			/* IPV4 TOS starts at offset 1 byte from RFR start */
 			lan937x_cpy_u8_to_entry(&key->ipv4.tos,
 						acl_entry,
-						ofst + 1);				
+						ofst + 1);
 			break;
 		}
 		case acl_ipv4_ttl_dissector: {
 			lan937x_cpy_u8_to_entry(&key->ipv4.ttl,
 						acl_entry,
-						ofst);				
+						ofst);
 			break;
 		}
 		case acl_ipv4_protocol_dissector: {
 			/* IPV4 proto starts at offset 1 byte from RFR start */
 			lan937x_cpy_u8_to_entry(&key->ipv4.proto,
 						acl_entry,
-						ofst + 1);					
+						ofst + 1);
 			break;
 		}
 		case acl_ipv4_src_ip_dissector: {
 			lan937x_cpy_array_to_entry(key->ipv4.sip.value,
-						   key->ipv4.sip.mask, 
+						   key->ipv4.sip.mask,
 						   acl_entry,
 						   ofst, 0x04);
 			break;
 		}
 		case acl_ipv4_dst_ip_dissector: {
 			lan937x_cpy_array_to_entry(key->ipv4.dip.value,
-						   key->ipv4.dip.mask, 
+						   key->ipv4.dip.mask,
 						   acl_entry,
 						   ofst, 0x04);
 			break;
@@ -601,14 +601,14 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 			 */
 			lan937x_cpy_u8_to_entry(&key->ipv6.next_hdr,
 						acl_entry,
-						ofst + 2);				
+						ofst + 2);
 			break;
 		}
 		case acl_ipv6_hop_dissector: {
 			/* IPV6 hop starts at offset 3 byte from RFR start */
 			lan937x_cpy_u8_to_entry(&key->ipv6.hop,
 						acl_entry,
-						ofst + 3);				
+						ofst + 3);
 			break;
 		}
 		case acl_ipv6_src_ip_dissector: {
@@ -620,7 +620,7 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 		}
 		case acl_ipv6_dst_ip_dissector: {
 			lan937x_cpy_array_to_entry(key->ipv6.dip.value,
-						   key->ipv6.dip.mask, 
+						   key->ipv6.dip.mask,
 						   acl_entry,
 						   ofst, 16);
 			break;
@@ -628,7 +628,7 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 		case acl_l4_src_port_dissector: {
 			lan937x_cpy_u16_to_entry(&key->src_port,
 						 acl_entry,
-						 ofst);				
+						 ofst);
 			break;
 		}
 		case acl_l4_dst_port_dissector: {
@@ -703,7 +703,7 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 		case LAN937X_ACT_STREAM_POLICE:
 		case LAN937X_ACT_STREAM_GATE:
 			set_strm_en(acl_action, resrc->type.strm_flt.en);
-			set_strm_id(acl_action,resrc->type.strm_flt.index);
+			set_strm_id(acl_action, resrc->type.strm_flt.index);
 			break;
 		case LAN937X_ACT_DROP:
 			set_map_mode(acl_action, MM_REPLACE_FWD_LKUP_TABLE);
@@ -836,9 +836,9 @@ int lan937x_init_acl_parsers(struct ksz_device *dev, int port)
 
 	ret = lan937x_pwrite32(dev, port, REG_ACL_PORT_PCTRL,
 			       (PCTRL_TWO_FORMAT_TWO_PARSER_EACH |
-			        PCTRL_KEY2_VLAN_TAG_EN	|
-			        PCTRL_KEYTYPE0_MULTI_FMT |
-			        PCTRL_KEYTYPE2_MULTI_FMT));
+				PCTRL_KEY2_VLAN_TAG_EN	|
+				PCTRL_KEYTYPE0_MULTI_FMT |
+				PCTRL_KEYTYPE2_MULTI_FMT));
 	if (ret)
 		return ret;
 
@@ -854,16 +854,16 @@ int lan937x_acl_free_entry(struct ksz_device *dev, int port,
 	struct lan937x_resrc_alloc *resrc = rule->resrc;
 	u8 n_entries = resrc->type.tcam.n_entries;
 	struct lan937x_acl_access_ctl access_ctl;
-	bool last_entry;
+	bool last_entry = false;
 	u8 i, row;
 	int ret;
 
 	/* Nothing to delete */
 	if (!n_entries)
-		return 0; 
-		
-	/* Shift all the TCAM Entries that are below the current entry upwards 
-	 * by n_entries time to over write the current rule 
+		return 0;
+
+	/* Shift all the TCAM Entries that are below the current entry upwards
+	 * by n_entries time to over write the current rule
 	 */
 	clr_data(access_ctl);
 
@@ -873,13 +873,13 @@ int lan937x_acl_free_entry(struct ksz_device *dev, int port,
 	/* Identify the row where the Last Entry is present*/
 	ret = lan937x_assign_tcam_entries(dev, port, 0x01,
 					  &access_ctl.tcam_addr);
-	if (ret == -ENOSPC){
+	if (ret == -ENOSPC) {
 		set_tcam_addr(access_ctl, LAN937X_NUM_TCAM_ENTRIES);
 		last_entry = true;
 	}
 
-	if ((access_ctl.row_shift == access_ctl.tcam_addr) ||
-	    last_entry == true) {
+	if (access_ctl.row_shift == access_ctl.tcam_addr ||
+	    last_entry) {
 		/* There are no valid entries below the current
 		 * rule under deletion. So No shifting is necessary
 		 */
@@ -899,7 +899,7 @@ int lan937x_acl_free_entry(struct ksz_device *dev, int port,
 	/* After shifting upward, invalidate the very last n_entries.
 	 * If last_entry is true then shifting will not happen, but the last
 	 * n_entries will be invalidated, which will decommision the rule
-	 * */
+	 */
 	row = access_ctl.tcam_addr;
 	for (i = (row - 1); i > (row - n_entries); i--) {
 		clr_data(access_ctl);
@@ -933,7 +933,7 @@ irqreturn_t lan937x_acl_isr(struct ksz_device *dev, int port)
 	ret = lan937x_pread8(dev, port, REG_ACL_PORT_INT_STS, &intsts);
 	if (ret)
 		return IRQ_NONE;
-	
+
 	if (intsts & ACL_FR_COUNT_OVR0) {
 		res->tcam_match_cntr_bkup[0] += ACL_FR_COUNT_MAX_VALUE;
 		res->tcam_match_cntr_bkup[0] &= ~((u64)ACL_FR_COUNT_MAX_VALUE);

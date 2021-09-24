@@ -17,7 +17,6 @@
 #include "lan937x_tc.h"
 #include "lan937x_flower.h"
 
-
 static int lan937x_wait_vlan_ctrl_ready(struct ksz_device *dev)
 {
 	unsigned int val;
@@ -929,18 +928,18 @@ static void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
 				 PORT_MIRROR_SNIFFER, false);
 }
 
-int lan937x_tc_pol_rate_to_reg (u64 rate_bytes_per_sec, u8* regval)
+int lan937x_tc_pol_rate_to_reg(u64 rate_bytes_per_sec, u8 *regval)
 {
-	u32 rate_kbps = div_u64(8 * rate_bytes_per_sec,1000);
+	u32 rate_kbps = div_u64(8 * rate_bytes_per_sec, 1000);
 	u16 code = 0x00;
-	
-	if(rate_kbps >= 2000){
-		code = (rate_kbps/1000);
-	} else if(rate_kbps == 1000) {
+
+	if (rate_kbps >= 2000) {
+		code = (rate_kbps / 1000);
+	} else if (rate_kbps == 1000) {
 		code = RLIMIT_REG_CODE_1MBPS;
-	} else if(rate_kbps <= 1280) {
+	} else if (rate_kbps <= 1280) {
 		code = RLIMIT_REG_CODE_1280KBPS;
-	} else if(rate_kbps <= 1920) {
+	} else if (rate_kbps <= 1920) {
 		code = RLIMIT_REG_CODE_1920KBPS;
 	} else {
 		/* All values in rate_boundaries are in kbps*/
@@ -951,9 +950,9 @@ int lan937x_tc_pol_rate_to_reg (u64 rate_bytes_per_sec, u8* regval)
 		};
 		u8 i;
 
-		for(i = 0;i < 12; i++) {
+		for (i = 0; i < 12; i++) {
 			if (rate_kbps < rate_boundaries[i]) {
-				/* 256 kbps is the lowest limited rate. 
+				/* 256 kbps is the lowest limited rate.
 				 * Incrementing reg value by one step results in
 				 * setting the rate to next subsequent boundary
 				 */
@@ -964,7 +963,7 @@ int lan937x_tc_pol_rate_to_reg (u64 rate_bytes_per_sec, u8* regval)
 	}
 
 	if (!code)
-		return -EINVAL;	
+		return -EINVAL;
 
 	*regval = code;
 
@@ -975,12 +974,12 @@ static int lan937x_port_policer_add(struct dsa_switch *ds, int port,
 				    struct dsa_mall_policer_tc_entry *policer)
 {
 	struct ksz_device *dev = ds->priv;
-	struct lan937x_p_res *res = lan937x_get_flr_res (dev, port);
+	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
 	u8 code = 0;
 	int ret, i;
 
 	/* Port Policing and Traffic class Policing is mutually exclusive
-	 * behavior of one Ingress Rate Limiting Hw 
+	 * behavior of one Ingress Rate Limiting Hw
 	 */
 	for (i = 0; i < LAN937X_NUM_TC; i++) {
 		if (res->tc_policers_used[i])
@@ -991,23 +990,23 @@ static int lan937x_port_policer_add(struct dsa_switch *ds, int port,
 	if (ret)
 		return ret;
 
-	ret = lan937x_port_cfg(dev, port, REG_PORT_MAC_IN_RATE_LIMIT, PORT_RATE_LIMIT,
-			 true);	
+	ret = lan937x_port_cfg(dev, port, REG_PORT_MAC_IN_RATE_LIMIT,
+			       PORT_RATE_LIMIT, true);
 	if (ret)
 		return ret;
 
 	ret = lan937x_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL, code);
-	if (ret) 
-		return ret;	
+	if (ret)
+		return ret;
 
-	/* Note that the update will not take effect until the Port Queue 7 
+	/* Note that the update will not take effect until the Port Queue 7
 	 * Ingress Limit ctrl Register is written. When port-based rate limiting
 	 * is used a value of 0h should be written to Port Queue 7 Egress Limit
 	 * Control Register.
 	 */
 	ret = lan937x_pwrite8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL, 0x00);
-	if (ret) 
-		return ret;	
+	if (ret)
+		return ret;
 
 	for (i = 0; i < LAN937X_NUM_TC; i++)
 		res->tc_policers_used[i] = true;
@@ -1018,16 +1017,16 @@ static int lan937x_port_policer_add(struct dsa_switch *ds, int port,
 static void lan937x_port_policer_del(struct dsa_switch *ds, int port)
 {
 	struct ksz_device *dev = ds->priv;
-	struct lan937x_p_res *res = lan937x_get_flr_res (dev, port);
+	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
 	int ret;
 	u8 i;
 
 	/*Update Default Value to Rate Limit : 00*/
 	ret = lan937x_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL, 0x00);
 	if (ret)
-		return;	
+		return;
 
-	/* Note that the update will not take effect until the Port Queue 7 
+	/* Note that the update will not take effect until the Port Queue 7
 	 * Ingress Limit ctrl Register is written. When port-based rate limiting
 	 * is used a value of 0h should be written to Port Queue 7 Egress Limit
 	 * Control Register
@@ -1097,7 +1096,7 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 
 			/* Check if the device tree have specific interface
 			 * setting otherwise read & assign from XMII register
-			 * for host port interface 
+			 * for host port interface
 			 */
 			interface = lan937x_get_interface(dev, i);
 			if (!p->interface)
@@ -1166,11 +1165,11 @@ static int lan937x_setup(struct dsa_switch *ds)
 	lan937x_enable_spi_indirect_access(dev);
 
 	ret = lan937x_ptp_init(dev);
-	if (ret) 
-        	goto error_ptp_deinit;
-        
+	if (ret)
+		goto error_ptp_deinit;
+
 	lan937x_tc_queue_init(ds);
-	
+
 	ret = lan937x_flower_setup(ds);
 	if (ret)
 		return ret;
@@ -1183,8 +1182,8 @@ static int lan937x_setup(struct dsa_switch *ds)
 	return 0;
 
 error_ptp_deinit:
-        lan937x_ptp_deinit(dev);
-        return ret;
+	lan937x_ptp_deinit(dev);
+	return ret;
 }
 
 static int lan937x_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
@@ -1341,7 +1340,6 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.cls_flower_del	= lan937x_cls_flower_del,
 	.cls_flower_stats = lan937x_cls_flower_stats
 };
-
 
 int lan937x_switch_register(struct ksz_device *dev)
 {

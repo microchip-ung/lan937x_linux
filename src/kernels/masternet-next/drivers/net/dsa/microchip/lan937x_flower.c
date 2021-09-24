@@ -432,7 +432,7 @@ static int lan937x_setup_tc_policer(struct ksz_device *dev,
 
 	key = &flower->filter.key;
 	ret = lan937x_check_tc_pol_availability(dev, port,
-					        key->vlan_prio.value);
+						key->vlan_prio.value);
 	if (ret) {
 		NL_SET_ERR_MSG_MOD(extack, "TC Policer already exists");
 		return ret;
@@ -525,18 +525,18 @@ static int lan937x_flower_policer(struct ksz_device *dev,
 	case LAN937x_VLAN_AWARE_FILTER:
 		key = &flower->filter.key;
 
-		/* if number of action is one and only if vlan pcp 
-		 * is the only classifier then use HW INGRESS_RATE_LIMIT 
+		/* if number of action is one and only if vlan pcp
+		 * is the only classifier then use HW INGRESS_RATE_LIMIT
 		 * register. This method is used for not to consure more
 		 * stream filter resources
-		 */ 
+		 */
 		if (flower->action.n_actions == 1 &&
 		    key->acl_dissector_map == VLAN_PCP_DISSECTOR_PRESENT) {
 			return lan937x_setup_tc_policer(dev, extack, port, rule,
 							rate_bytes_per_sec,
 							burst);
 		}
-		/* if number of classifier is more than one then use 
+		/* if number of classifier is more than one then use
 		 * TCAM and stream policer
 		 */
 		fallthrough;
@@ -629,7 +629,7 @@ static int lan937x_flower_parse_actions(struct ksz_device *dev,
 		}
 		case FLOW_ACTION_DROP:
 			ret = lan937x_setup_action_drop(dev, extack, port,
-						        flower_rule);
+							flower_rule);
 			break;
 		case FLOW_ACTION_PRIORITY:
 			if (act->priority >= dev->ds->num_tx_queues) {
@@ -663,7 +663,8 @@ static int lan937x_init_tc_policer_hw(struct ksz_device *dev, int port)
 		return ret;
 
 	for (i = 0; i < LAN937X_NUM_TC; i++) {
-		ret = lan937x_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL + i,
+		ret = lan937x_pwrite8(dev, port,
+				      REG_PORT_PRI0_IN_RLIMIT_CTL + i,
 				      0x00);
 		if (ret)
 			return ret;
@@ -756,7 +757,7 @@ static u16 lan937x_psfp_rate_to_reg(u64 rate_bytes_per_sec)
 	u8 i = 0;
 	int j;
 	u32 t;
-	const u32 regbit_weightage_bps[] = { 
+	const u32 regbit_weightage_bps[] = {
 		1525,		/* BIT 0*/
 		3051,		/* BIT 1*/
 		6103,		/* BIT 2*/
@@ -773,7 +774,7 @@ static u16 lan937x_psfp_rate_to_reg(u64 rate_bytes_per_sec)
 		12500000,	/* BIT 13*/
 		25000000,	/* BIT 14*/
 		50000000	/* BIT 15*/
-	}; 
+	};
 
 	/* Reg Field Size is 16 bits*/
 	while (i < 16) {
@@ -900,7 +901,7 @@ static int lan937x_flower_configure_hw(struct ksz_device *dev, int port,
 
 		case LAN937X_ACT_STREAM_POLICE:
 			ret = lan937x_cfg_strm_policer_hw(dev, port, resrc,
-							 action);
+							  action);
 			break;
 
 		default:
@@ -960,7 +961,8 @@ static int lan937x_flower_free_resrcs(struct ksz_device *dev, int port,
 
 	if (resrc->resrc_used_mask & BIT(LAN937X_TC_POLICER)) {
 		i = resrc->type.tc_pol_used;
-		ret = lan937x_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL + i,
+		ret = lan937x_pwrite8(dev, port,
+				      REG_PORT_PRI0_IN_RLIMIT_CTL + i,
 				      0x00);
 		if (ret)
 			return ret;
@@ -1035,7 +1037,8 @@ int lan937x_cls_flower_add(struct dsa_switch *ds, int port,
 	if (ret)
 		goto err;
 
-	ret = lan937x_flower_parse_actions(dev, extack, port, rule, flower_rule);
+	ret = lan937x_flower_parse_actions(dev, extack, port,
+					   rule, flower_rule);
 	if (ret)
 		goto err;
 
@@ -1051,7 +1054,7 @@ int lan937x_cls_flower_add(struct dsa_switch *ds, int port,
 
 	cls->stats.pkts = 0x00;
 	cls->stats.drops = 0x00;
-	
+
 	return 0;
 err:
 	devm_kfree(dev->dev, flower_rule->flower);
@@ -1067,11 +1070,10 @@ int lan937x_cls_flower_del(struct dsa_switch *ds, int port,
 	struct lan937x_flower_rule *rule;
 	int ret;
 
-
 	rule = lan937x_rule_find(dev, port, cls->cookie);
 	/* No Rules to delete*/
 	if (!rule)
-		return 0; 
+		return 0;
 
 	ret = lan937x_flower_free_resrcs(dev, port, rule);
 	if (ret)
@@ -1146,7 +1148,7 @@ int lan937x_cls_flower_stats(struct dsa_switch *ds, int port,
 			i = resrc->type.tcam.cntr;
 
 			ret = lan937x_pread32(dev, port,
-					      (REG_ACL_PORT_FR_COUNT0 + (i * 4)),
+					      REG_ACL_PORT_FR_COUNT0 + (i * 4),
 					      &pkts);
 			if (ret)
 				return ret;
@@ -1210,7 +1212,7 @@ irqreturn_t lan937x_qci_cntr_isr(struct ksz_device *dev, int port)
 
 	/* Identify from which instance of Stream filter the Intr is raised */
 	ret = lan937x_pread8(dev, port, REG_PORT_RX_CNT_OVR_INT_STS,
-			    &sf_int_sts);
+			     &sf_int_sts);
 	if (ret)
 		return IRQ_NONE;
 
@@ -1220,10 +1222,10 @@ irqreturn_t lan937x_qci_cntr_isr(struct ksz_device *dev, int port)
 					       REG_PORT_RX_QCI_PTR, i);
 			if (ret)
 				return IRQ_NONE;
-				
+
 			/* Identify from which counter overflowed */
 			ret = lan937x_pread8(dev, port,
-					    REG_PORT_STREAM_CNT_STS,
+					     REG_PORT_STREAM_CNT_STS,
 					     &sf_cntr_sts);
 			if (ret)
 				return IRQ_NONE;

@@ -491,8 +491,6 @@
 #define PORT_100BT_EEE_DISABLE		BIT(7)
 #define PORT_1000BT_EEE_DISABLE		BIT(6)
 
-
-
 #define REG_PORT_MAC_IN_RATE_LIMIT	0x0403
 #define PORT_RATE_LIMIT			BIT(6)
 
@@ -967,7 +965,7 @@
 
 #define REG_PTP_PORT_LINK_DELAY__4	0x0C18
 
-/*Port Switch Ingress Control Memory Map*/
+/* Port Switch Ingress Control Memory Map*/
 #define REG_PORT_RX_MIRROR_CTL			0x0800
 #define REG_PORT_RX_PRI_CTL			0x0801
 #define REG_PORT_RX_MAC_CTL1			0x0802
@@ -991,13 +989,13 @@
 #define REG_PORT_RX_CNT_OVR_INT_STS		0x08C1
 
 /* RX_AUTH_CTRL register defines*/
-
-/*10b: Pass Mode. Authentication is disabled. When ACL is enabled, all traffic
-that misses the ACL rules is forwarded; otherwise ACL actions apply.*/
+/* 10b: Pass Mode. Authentication is disabled. When ACL is enabled, all traffic
+ * that misses the ACL rules is forwarded; otherwise ACL actions apply.
+ */
 #define AUTH_CTL_ACL_PASS_MODE				BIT(1)
 #define AUTH_CTL_ACL_ENABLE				BIT(2)
 
-/**PSFP register field defines*/
+/* PSFP register field defines*/
 #define FS_CTL_OVR_SIZE_FRAME_BLOCK_EN		BIT(1)
 #define FS_CTL_METER_EN				BIT(11)
 #define FS_CTL_GATE_EN				BIT(7)
@@ -1013,34 +1011,34 @@ that misses the ACL rules is forwarded; otherwise ACL actions apply.*/
 #define METER_BS_CBS_POS			16
 #define PORT_METER_RED_INT_MSK_ALL		0xFF
 
-/** REG_PORT_STREAM_CNT_STS access defines*/
+/* REG_PORT_STREAM_CNT_STS access defines*/
 #define FILT_STR_FR_MATCH_CNT_OVR		BIT(5)
-#define FR_MATCH_CNTR_MAX		((1<<20)-1)
+#define FR_MATCH_CNTR_MAX		((1 << 20) - 1)
 
 #define FILT_STR_FR_FAIL_DROP_CNT_OVR		BIT(0)
-#define FR_DROP_CNTR_MAX		((1<<20)-1)
+#define FR_DROP_CNTR_MAX		((1 << 20) - 1)
 
-/*defines to update Stream Policer Burst and Rate*/
-#define METER_SR_UPDT_RATE(C,P) (((C & METER_SR_MASK) << METER_SR_CIR_POS) | \
-	       		         (P & METER_SR_MASK))
+/* defines to update Stream Policer Burst and Rate*/
+#define METER_SR_UPDT_RATE(C, P) ((((C) & METER_SR_MASK) << METER_SR_CIR_POS) |\
+				  ((P) & METER_SR_MASK))
 
-#define METER_SR_UPDT_BURST(C,P) (((C & METER_BS_MASK) << METER_BS_CBS_POS) | \
-	       		          (P & METER_BS_MASK))
+#define METER_SR_UPDT_BURST(C, P) ((((C) & METER_BS_MASK) << METER_BS_CBS_POS) \
+				   | ((P) & METER_BS_MASK))
 
-/*defines to update Stream filter paramters*/
-#define FS_UPDT_METER_IDX(IDX)	((IDX & FS_CTL_METER_IDX_MSK)\
+/* defines to update Stream filter parameters*/
+#define FS_UPDT_METER_IDX(IDX)	(((IDX) & FS_CTL_METER_IDX_MSK)\
 				 << FS_CTL_METER_IDX_POS)
 
-#define FS_UPDT_MTU(MTU)	((MTU & FS_CTL_MAX_SDU_MASK)\
+#define FS_UPDT_MTU(MTU)	(((MTU) & FS_CTL_MAX_SDU_MASK)\
 				 << FS_CTL_MAX_SDU_POS)
 
-/**TCAM/ACL Register space*/
+/* TCAM/ACL Register space*/
 /* ACL Registers START */
 #define ACL_CTRL_BASE_ADDR  (0x600)
 #define ACL_CTRL_PORT_BASE_ADDR(port) ((port) * 0x1000)
 /* Reg Base address */						     /*size */
-#define REG_ACL_PORT_ADR 		(ACL_CTRL_BASE_ADDR + 0x00)  /* 96b */
-#define REG_ACL_PORT_AAR 		(ACL_CTRL_BASE_ADDR + 0x60)  /* 08b */
+#define REG_ACL_PORT_ADR		(ACL_CTRL_BASE_ADDR + 0x00)  /* 96b */
+#define REG_ACL_PORT_AAR		(ACL_CTRL_BASE_ADDR + 0x60)  /* 08b */
 #define REG_ACL_PORT_ABER		(ACL_CTRL_BASE_ADDR + 0x68)  /* 14b */
 #define REG_ACL_PORT_ARACR		(ACL_CTRL_BASE_ADDR + 0x78)  /* 04b */
 #define REG_ACL_PORT_PCTRL		(ACL_CTRL_BASE_ADDR + 0x7C)  /* 04b */
@@ -1050,7 +1048,7 @@ that misses the ACL rules is forwarded; otherwise ACL actions apply.*/
 #define REG_ACL_PORT_FR_COUNT3		(ACL_CTRL_BASE_ADDR + 0x8C)  /* 04b */
 #define REG_ACL_PORT_NMATCH		(ACL_CTRL_BASE_ADDR + 0x94)  /* 08b */
 #define REG_ACL_PORT_INT_STS		(ACL_CTRL_BASE_ADDR + 0xA0)  /* 01b */
-#define REG_ACL_PORT_INT_MASK 		(ACL_CTRL_BASE_ADDR + 0xA2)  /* 01b */
+#define REG_ACL_PORT_INT_MASK		(ACL_CTRL_BASE_ADDR + 0xA2)  /* 01b */
 #define REG_ACL_PORT_SPARE		(ACL_CTRL_BASE_ADDR + 0xC0)  /* 04b */
 #define REG_ACL_PORT_TCAM_BIST0		(ACL_CTRL_BASE_ADDR + 0xD0)  /* 02b */
 #define REG_ACL_PORT_TCAM_BIST1		(ACL_CTRL_BASE_ADDR + 0xD2)  /* 01b */
@@ -1065,7 +1063,7 @@ that misses the ACL rules is forwarded; otherwise ACL actions apply.*/
 #define ACL_FR_COUNT_OVR2			BIT(3)
 #define ACL_FR_COUNT_OVR3			BIT(4)
 
-/************Parser control register defines***********/
+/* Parser control register defines */
 #define PCTRL_TWO_FORMAT_TWO_PARSER_EACH	(BIT(29) | BIT(30))
 #define PCTRL_KEYTYPE0_MULTI_FMT		BIT(27)
 #define PCTRL_KEYTYPE1_MULTI_FMT		BIT(26)
@@ -1076,7 +1074,7 @@ that misses the ACL rules is forwarded; otherwise ACL actions apply.*/
 #define PCTRL_KEYTYPE2_UNIV_FMT			0
 #define PCTRL_KEYTYPE3_UNIV_FMT			0
 #define PCTRL_KEY2_VLAN_TAG_EN			BIT(17)
-#define PCTRL_KEY3_VLAN_TAG_EN			BIT(16) 
+#define PCTRL_KEY3_VLAN_TAG_EN			BIT(16)
 #define PCTRL_KEY1_VLAN_TAG_EN			BIT(18)
 #define PCTRL_KEY0_VLAN_TAG_EN			BIT(19)
 
