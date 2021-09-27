@@ -13,7 +13,11 @@ lan937x-objs += lan937x_main.o
 lan937x-objs += lan937x_spi.o
 lan937x-objs += lan937x_tc.o
 lan937x-objs += lan937x_devlink.o
+
 ifdef CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP
 lan937x-objs += lan937x_ptp.o
 endif
 
+ifdef CONFIG_NET_DSA_MICROCHIP_LAN937X_TAS
+lan937x-objs += lan937x_tas.o
+endif
