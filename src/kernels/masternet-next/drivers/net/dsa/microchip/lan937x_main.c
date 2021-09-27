@@ -1107,6 +1107,14 @@ error_ptp_deinit:
         return ret;
 }
 
+static void lan937x_teardown(struct dsa_switch *ds)
+{
+	struct ksz_device *dev = ds->priv;
+
+	lan937x_devlink_exit(ds);
+        lan937x_ptp_deinit(dev);
+}
+
 static int lan937x_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
 {
 	struct ksz_device *dev = ds->priv;
@@ -1224,6 +1232,7 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 const struct dsa_switch_ops lan937x_switch_ops = {
 	.get_tag_protocol = lan937x_get_tag_protocol,
 	.setup = lan937x_setup,
+	.teardown = lan937x_teardown,
 	.phy_read = lan937x_phy_read16,
 	.phy_write = lan937x_phy_write16,
 	.port_enable = ksz_enable_port,
