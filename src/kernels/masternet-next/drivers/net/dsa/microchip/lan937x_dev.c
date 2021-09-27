@@ -110,7 +110,7 @@ int lan937x_pwrite32(struct ksz_device *dev, int port, int offset, u32 data)
 	return ksz_write32(dev, PORT_CTRL_ADDR(port, offset), data);
 }
 
-int lan937x_pwrite8_bulk(struct ksz_device *dev, int port, int offset, 
+int lan937x_pwrite8_bulk(struct ksz_device *dev, int port, int offset,
 			 u8 *data, u8 n)
 {
 	return ksz_write8_bulk(dev, PORT_CTRL_ADDR(port, offset), data, n);
@@ -173,7 +173,8 @@ static void lan937x_r_mib_cnt(struct ksz_device *dev, int port, u16 addr,
 	lan937x_pwrite32(dev, port, REG_PORT_MIB_CTRL_STAT, data);
 
 	ret = regmap_read_poll_timeout(dev->regmap[2],
-				       PORT_CTRL_ADDR(port, REG_PORT_MIB_CTRL_STAT),
+				       PORT_CTRL_ADDR(port,
+						      REG_PORT_MIB_CTRL_STAT),
 				       val, !(val & MIB_COUNTER_READ),
 				       10, 1000);
 	if (ret) {
@@ -582,15 +583,13 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 	u32 data;
 	int port;
 	int ret;
-	
 
 	/* Read global interrupt status register */
 	ret = ksz_read32(dev, REG_SW_INT_STATUS__4, &data);
 	if (ret)
 		return result;
 
-	if(data & POR_READY_INT)
-	{
+	if (data & POR_READY_INT) {
 		ret = ksz_write32(dev, REG_SW_INT_STATUS__4, POR_READY_INT);
 		if (ret)
 			return result;
@@ -603,28 +602,29 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 
 	for (port = 0; port < dev->port_cnt; port++) {
 		if (data & BIT(port)) {
-                        u32 prtaddr;
+			u32 prtaddr;
 			u8 data8;
-			
-                        prtaddr = PORT_CTRL_ADDR(port, REG_PORT_INT_STATUS);
-			
+
+			prtaddr = PORT_CTRL_ADDR(port, REG_PORT_INT_STATUS);
+
 			/* Read port interrupt status register */
 			ret = ksz_read8(dev, prtaddr, &data8);
 			if (ret)
 				return result;
 
 			if (data8 & PORT_PTP_INT) {
-				if(lan937x_ptp_port_interrupt(dev, port) != IRQ_NONE)
-					result = IRQ_HANDLED;
-			}
-			
-			if(data8 & PORT_ACL_INT) {
-				if(lan937x_acl_isr(dev,port) != IRQ_NONE)
+				if (lan937x_ptp_port_interrupt(dev, port)
+				    != IRQ_NONE)
 					result = IRQ_HANDLED;
 			}
 
-			if(data8 & PORT_QCI_INT) {
-				if(lan937x_qci_cntr_isr(dev,port) != IRQ_NONE)
+			if (data8 & PORT_ACL_INT) {
+				if (lan937x_acl_isr(dev, port) != IRQ_NONE)
+					result = IRQ_HANDLED;
+			}
+
+			if (data8 & PORT_QCI_INT) {
+				if (lan937x_qci_cntr_isr(dev, port) != IRQ_NONE)
 					result = IRQ_HANDLED;
 			}
 		}
@@ -645,7 +645,7 @@ static int lan937x_enable_port_interrupts(struct ksz_device *dev, bool enable)
 	/* 0 means enabling the interrupts */
 	mask = ((1 << dev->port_cnt) - 1);
 
-	if(enable)
+	if (enable)
 		data &= ~mask;
 	else
 		data |= mask;
@@ -740,12 +740,12 @@ static int lan937x_switch_init(struct ksz_device *dev)
 
 		if (!dev->ports[i].mib.counters)
 			return -ENOMEM;
-	
+
 		dev->ports[i].priv =
 			devm_kzalloc(dev->dev,
 				     sizeof(struct lan937x_flr_blk),
 				     GFP_KERNEL);
-		
+
 		if (!dev->ports[i].priv)
 			return -ENOMEM;
 	}
@@ -754,8 +754,9 @@ static int lan937x_switch_init(struct ksz_device *dev)
 	dev->ds->num_ports = dev->port_cnt;
 
 	if (dev->irq > 0) {
-		unsigned long irqflags = irqd_get_trigger_type(irq_get_irq_data(dev->irq));
+		unsigned long irqflags;
 
+		irqflags = irqd_get_trigger_type(irq_get_irq_data(dev->irq));
 		irqflags |= IRQF_ONESHOT;
 		ret = devm_request_threaded_irq(dev->dev, dev->irq, NULL,
 						lan937x_switch_irq_thread,
@@ -779,10 +780,9 @@ static void lan937x_switch_exit(struct ksz_device *dev)
 {
 	lan937x_reset_switch(dev);
 	if (dev->mdio_np) {
-               mdiobus_unregister(dev->ds->slave_mii_bus);
-               of_node_put(dev->mdio_np);
-       }
-
+		mdiobus_unregister(dev->ds->slave_mii_bus);
+		of_node_put(dev->mdio_np);
+	}
 }
 
 static int lan937x_init(struct ksz_device *dev)
