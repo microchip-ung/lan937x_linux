@@ -103,8 +103,9 @@ out:
 	return -ENOSPC;
 }
 
-struct lan937x_flower_rule *lan937x_rule_find(struct ksz_device *dev, int port,
-					      unsigned long cookie)
+static struct lan937x_flower_rule *lan937x_rule_find(struct ksz_device *dev, 
+						     int port,
+						     unsigned long cookie)
 {
 	struct lan937x_flower_rule *rule;
 	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
@@ -550,8 +551,8 @@ static int lan937x_flower_policer(struct ksz_device *dev,
 	}
 }
 
-int lan937x_flower_rule_init(struct ksz_device *dev,
-			     struct lan937x_flower_rule **flower_rule)
+static int lan937x_flower_rule_init(struct ksz_device *dev,
+				    struct lan937x_flower_rule **flower_rule)
 {
 	struct lan937x_flower_rule *t;
 

@@ -11,14 +11,14 @@
 #include "lan937x_flower.h"
 #include "lan937x_acl.h"
 
-const u8 parser_key_format[MAX_ACL_PARSER] = {
+static const u8 parser_key_format[MAX_ACL_PARSER] = {
 	[PARSER_IDX_0] = PARSER_MULTI_KEY_FORMAT,
 	[PARSER_IDX_1] = PARSER_UNIVERSAL_FORMAT,
 	[PARSER_IDX_2] = PARSER_MULTI_KEY_FORMAT,
 	[PARSER_IDX_3] = PARSER_UNIVERSAL_FORMAT
 };
 
-const struct lan937x_acl_rfr acl_rfrs_table[MAX_ACL_PARSER][MAX_RFR] = {
+static const struct lan937x_acl_rfr acl_rfrs_table[MAX_ACL_PARSER][MAX_RFR] = {
 	[PARSER_IDX_0] = {
 		[RFR_IDX_0] = {
 			.dissectors_covered = DST_MAC_DISSECTOR_PRESENT,
@@ -461,8 +461,11 @@ static void lan937x_cpy_u16_to_entry(struct lan937x_val_mask_u16 *field,
 				     struct lan937x_acl_entry *acl_entry,
 				     u8 offset)
 {
-	u16 tdata = cpu_to_be16(field->value);
-	u16 tmask = cpu_to_be16(field->mask);
+	u16 tdata;
+	u16 tmask;
+
+	*((__be16*)&tdata) = cpu_to_be16(field->value);
+	*((__be16*)&tmask) = cpu_to_be16(field->mask);
 
 	/* Apply mask to data given from the rule */
 	tdata &= tmask;
@@ -520,8 +523,11 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 							ofst);
 			break;
 		case acl_vlan_id_dissector: {
-			u16 tdata = cpu_to_be16(key->vlan_id.value);
-			u16 tmask = cpu_to_be16(key->vlan_id.mask);
+			u16 tdata;
+			u16 tmask;
+
+			*((__be16*)&tdata) = cpu_to_be16(key->vlan_id.value);
+			*((__be16*)&tmask) = cpu_to_be16(key->vlan_id.mask);
 
 			tdata &= tmask;
 			tmask &= (~tdata);
