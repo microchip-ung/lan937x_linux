@@ -1,6 +1,0 @@
-config BR2_PACKAGE_CBS
-    bool "cbs"
-    help
-        Hello world package.
-
-        http://example.com
