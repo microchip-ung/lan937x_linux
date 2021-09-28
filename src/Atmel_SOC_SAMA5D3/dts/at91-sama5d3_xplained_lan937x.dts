@@ -72,7 +72,7 @@
 				pmic: act8865@5b {
 					compatible = "active-semi,act8865";
 					reg = <0x5b>;
-					status = "okay";
+					status = "disabled";
 
 					regulators {
 						vcc_1v8_reg: DCDC_REG1 {
@@ -171,6 +171,7 @@
 					spi-max-frequency = <44000000>;
 					interrupt-parent = <&pioB>;
 					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;					
+					led-t1-sel = <0731777704>; // this value is octal.  hex is <0x0767ffc4>
 					status = "okay";
 					ports {
 						#address-cells = <1>;

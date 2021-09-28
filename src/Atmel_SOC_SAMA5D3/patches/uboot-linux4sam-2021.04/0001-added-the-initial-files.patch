@@ -1,0 +1,52 @@
+From aba7cea762567f681e0d1518f717182722e8b3ae Mon Sep 17 00:00:00 2001
+From: arun <arun.ramadoss@microchip.com>
+Date: Thu, 26 Aug 2021 15:16:01 +0530
+Subject: [RFC PATCH net-next 1/3] added the initial files
+
+Signed-off-by: arun <arun.ramadoss@microchip.com>
+---
+ cmd/Kconfig  | 15 +++++++++++++++
+ cmd/Makefile |  1 +
+ 2 files changed, 16 insertions(+)
+
+diff --git uboot-linux4sam-2021.04/cmd/Kconfig uboot-linuxrsam-2021.04/cmd/Kconfig
+index 863b7f9fda..1f7eaee640 100644
+--- uboot-linux4sam-2021.04/cmd/Kconfig
++++ uboot-linuxrsam-2021.04/cmd/Kconfig
+@@ -1288,6 +1288,21 @@ config DEFAULT_SPI_MODE
+ 	depends on CMD_SPI
+ 	default 0
+ 
++config CMD_SPI_KSZ
++	bool "sspi_ksz"
++	help
++	  KSZ SPI utility command.
++
++config DEFAULT_KSZ_SPI_BUS
++	int "default spi bus used by ksz spi command"
++	depends on CMD_SPI_KSZ
++	default 1
++
++config DEFAULT_KSZ_SPI_MODE
++	hex "default spi mode used by ksz spi command (see include/spi.h)"
++	depends on CMD_SPI_KSZ
++	default 3
++
+ config CMD_TSI148
+ 	bool "tsi148 - Command to access tsi148 device"
+ 	help
+diff --git uboot-linux4sam-2021.04/cmd/Makefile uboot-linuxrsam-2021.04/cmd/Makefile
+index 567e2b79d2..bce620f5c3 100644
+--- uboot-linux4sam-2021.04/cmd/Makefile
++++ uboot-linuxrsam-2021.04/cmd/Makefile
+@@ -141,6 +141,7 @@ obj-$(CONFIG_CMD_SCSI) += scsi.o disk.o
+ obj-$(CONFIG_CMD_SHA1SUM) += sha1sum.o
+ obj-$(CONFIG_CMD_SETEXPR) += setexpr.o
+ obj-$(CONFIG_CMD_SPI) += spi.o
++obj-$(CONFIG_CMD_SPI_KSZ) += spi_ksz.o
+ obj-$(CONFIG_CMD_STRINGS) += strings.o
+ obj-$(CONFIG_CMD_SMC) += smccc.o
+ obj-$(CONFIG_CMD_SYSBOOT) += sysboot.o pxe_utils.o
+-- 
+2.32.0
+

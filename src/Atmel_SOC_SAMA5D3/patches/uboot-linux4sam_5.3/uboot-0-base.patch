@@ -21,7 +21,7 @@ diff -purN uboot-linux4sam_5.3.orig/board/atmel/sama5d3_xplained/sama5d3_xplaine
 +void spi_cs_activate(struct spi_slave *slave)
 +{
 +#ifdef CONFIG_ATMEL_SPI1
-+	at91_set_pio_output(AT91_PIO_PORTC, 25, 0);
++	at91_set_pio_output(AT91_PIO_PORTC, 28, 0);
 +#endif
 +	at91_set_pio_output(AT91_PIO_PORTD, 13, 0);
 +}
@@ -29,7 +29,7 @@ diff -purN uboot-linux4sam_5.3.orig/board/atmel/sama5d3_xplained/sama5d3_xplaine
 +void spi_cs_deactivate(struct spi_slave *slave)
 +{
 +#ifdef CONFIG_ATMEL_SPI1
-+	at91_set_pio_output(AT91_PIO_PORTC, 25, 1);
++	at91_set_pio_output(AT91_PIO_PORTC, 28, 1);
 +#endif
 +	at91_set_pio_output(AT91_PIO_PORTD, 13, 1);
 +}
@@ -57,7 +57,7 @@ diff -purN uboot-linux4sam_5.3.orig/board/atmel/sama5d3_xplained/sama5d3_xplaine
 +	at91_set_a_periph(AT91_PIO_PORTC, 23, 0);	/* SPI1_MOSI */
 +	at91_set_a_periph(AT91_PIO_PORTC, 24, 0);	/* SPI1_SPCK */
 +
-+	at91_set_pio_output(AT91_PIO_PORTC, 25, 1);	/* SPI1_CS0 */
++	at91_set_pio_output(AT91_PIO_PORTC, 28, 1);	/* SPI1_CS0 */
 +
 +	/* Enable clock */
 +	at91_periph_clk_enable(ATMEL_ID_SPI1);
@@ -249,7 +249,7 @@ diff -purN uboot-linux4sam_5.3.orig/include/configs/sama5d3_xplained.h uboot-lin
 +
 +#define CONFIG_ATMEL_SPI
 +#define CONFIG_ATMEL_SPI1
-+#define CONFIG_DEFAULT_SPI_BUS		0
++#define CONFIG_DEFAULT_SPI_BUS		1
 +#define CONFIG_DEFAULT_SPI_CS		0
 +#define CONFIG_DEFAULT_SPI_SPEED	19000000
 +#define CONFIG_DEFAULT_SPI_MODE		SPI_MODE_3
