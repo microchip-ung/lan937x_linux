@@ -7,12 +7,19 @@
 #ifndef __KSZ_COMMON_H
 #define __KSZ_COMMON_H
 
+#include <linux/dsa/ksz_common.h>
+#include <linux/ptp_clock_kernel.h>
 #include <linux/etherdevice.h>
 #include <linux/kernel.h>
 #include <linux/mutex.h>
 #include <linux/phy.h>
 #include <linux/regmap.h>
 #include <net/dsa.h>
+
+enum ksz_ptp_tou_mode {
+	KSZ_PTP_TOU_IDLE,
+	KSZ_PTP_TOU_PPS
+};
 
 struct vlan_table {
 	u32 table[3];
@@ -38,11 +45,22 @@ struct ksz_port {
 	u32 force:1;
 	u32 read:1;			/* read MIB counters in background */
 	u32 freeze:1;			/* MIB counter freeze is enabled */
+	u32 t1_leader:1;		/* T1 Phy leader/follower */
 
 	struct ksz_port_mib mib;
 	phy_interface_t interface;
 	u8 rgmii_tx_val;
 	u8 rgmii_rx_val;
+#if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
+	bool hwts_tx_en;
+        struct lan937x_port_ptp_shared ptp_shared;
+        ktime_t tstamp_sync;
+	struct completion tstamp_sync_comp;	
+        ktime_t tstamp_pdelayreq;
+	struct completion tstamp_pdelayreq_comp;	
+        ktime_t tstamp_pdelayrsp;
+	struct completion tstamp_pdelayrsp_comp;	
+#endif
 };
 
 struct ksz_device {
@@ -58,6 +76,7 @@ struct ksz_device {
 
 	struct device *dev;
 	struct regmap *regmap[3];
+	int irq;
 
 	void *priv;
 
@@ -93,6 +112,17 @@ struct ksz_device {
 	u32 overrides;			/* chip functions set by user */
 	u16 host_mask;
 	u16 port_mask;
+
+	u8 tas_port;
+	u8 cut_through_enable;
+#if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
+	struct ptp_clock_info ptp_caps;
+	struct ptp_clock *ptp_clock;
+	struct mutex ptp_mutex;  //to serialize the activity in the phc
+	
+	struct ksz_device_ptp_shared ptp_shared;
+	enum ksz_ptp_tou_mode ptp_tou_mode;
+#endif
 };
 
 struct alu_struct {

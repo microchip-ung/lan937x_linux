@@ -4,8 +4,10 @@
  * Copyright (c) 2017 Microchip Technology
  */
 
+#include <linux/dsa/ksz_common.h>
 #include <linux/etherdevice.h>
 #include <linux/list.h>
+#include <linux/ptp_classify.h>
 #include <linux/slab.h>
 #include <net/dsa.h>
 #include "dsa_priv.h"
@@ -209,16 +211,111 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
  *	  (eg, 0x00=port1, 0x02=port3, 0x07=port8)
  */
 #define LAN937X_EGRESS_TAG_LEN		2
+#define LAN937X_PTP_TAG_LEN		4
+
+#define LAN937X_PTP_TAG_INDICATION	BIT(7)
 
 #define LAN937X_TAIL_TAG_BLOCKING_OVERRIDE	BIT(11)
 #define LAN937X_TAIL_TAG_LOOKUP			BIT(12)
 #define LAN937X_TAIL_TAG_VALID			BIT(13)
 #define LAN937X_TAIL_TAG_PORT_MASK		7
 
+ktime_t ksz_tstamp_reconstruct(struct ksz_device_ptp_shared *ksz, ktime_t tstamp)
+{
+	struct timespec64 ts = ktime_to_timespec64(tstamp);
+	struct timespec64 ptp_clock_time;
+	struct timespec64 diff;
+
+	spin_lock_bh(&ksz->ptp_clock_lock);
+	ptp_clock_time = ksz->ptp_clock_time;
+	spin_unlock_bh(&ksz->ptp_clock_lock);
+
+	/* calculate full time from partial time stamp */
+	ts.tv_sec = (ptp_clock_time.tv_sec & ~3) | ts.tv_sec;
+
+	/* find nearest possible point in time */
+	diff = timespec64_sub(ts, ptp_clock_time);
+	if (diff.tv_sec > 2)
+		ts.tv_sec -= 4;
+	else if (diff.tv_sec < -2)
+		ts.tv_sec += 4;
+
+	return timespec64_to_ktime(ts);
+}
+EXPORT_SYMBOL(ksz_tstamp_reconstruct);
+
+static void lan937x_xmit_timestamp(struct sk_buff *skb)
+{
+	u32 tstamp_raw = 0;
+
+	put_unaligned_be32(tstamp_raw, skb_put(skb, LAN937X_PTP_TAG_LEN));
+}
+
+static struct sk_buff *lan937x_defer_xmit(struct dsa_port *dp,
+					  struct sk_buff *skb)
+{
+	struct lan937x_port_ptp_shared *ptp_shared = dp->priv;
+	struct sk_buff *clone = KSZ_SKB_CB(skb)->clone;
+	u8 ptp_msg_type;
+
+	if (!clone)
+		return skb;  /* no deferred xmit for this packet */
+
+	/* Use cached PTP msg type from ksz9477_ptp_port_txtstamp().  */
+	ptp_msg_type = KSZ_SKB_CB(clone)->ptp_msg_type;
+	switch(ptp_msg_type)
+	{
+	case PTP_MSGTYPE_SYNC:
+		skb_queue_tail(&ptp_shared->sync_queue, skb_get(skb));
+		kthread_queue_work(ptp_shared->sync_worker, &ptp_shared->sync_work);
+		break;
+
+	case PTP_MSGTYPE_PDELAY_REQ:
+		skb_queue_tail(&ptp_shared->pdelayreq_queue, skb_get(skb));
+		kthread_queue_work(ptp_shared->pdelayreq_worker, &ptp_shared->pdelayreq_work);
+		break;
+
+	case PTP_MSGTYPE_PDELAY_RESP:
+		skb_queue_tail(&ptp_shared->pdelayrsp_queue, skb_get(skb));
+		kthread_queue_work(ptp_shared->pdelayrsp_worker, &ptp_shared->pdelayrsp_work);
+		break;
+
+	default:
+		kfree_skb(clone);
+		KSZ_SKB_CB(skb)->clone = NULL;
+		return skb;
+	}
+
+	return NULL;
+}
+
+static void lan937x_rcv_timestamp(struct sk_buff *skb, u8 *tag,
+                                  struct net_device *dev, unsigned int port)
+{
+	struct skb_shared_hwtstamps *hwtstamps = skb_hwtstamps(skb);
+	struct dsa_switch *ds = dev->dsa_ptr->ds;
+	struct lan937x_port_ptp_shared *port_ptp_shared;
+	u8 *tstamp_raw = tag - KSZ9477_PTP_TAG_LEN;
+	ktime_t tstamp;
+
+	port_ptp_shared = dsa_to_port(ds, port)->priv;
+	if (!port_ptp_shared)
+		return;
+
+	/* convert time stamp and write to skb */
+	tstamp = ksz_decode_tstamp(get_unaligned_be32(tstamp_raw));
+	memset(hwtstamps, 0, sizeof(*hwtstamps));
+	hwtstamps->hwtstamp = ksz_tstamp_reconstruct(port_ptp_shared->dev, tstamp);
+}
+
 static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 				    struct net_device *dev)
 {
 	struct dsa_port *dp = dsa_slave_to_port(dev);
+	struct lan937x_port_ptp_shared *port_ptp_shared = dp->priv;
+	struct ksz_device_ptp_shared *ptp_shared = port_ptp_shared->dev;
+	u16 queue_mapping = skb_get_queue_mapping(skb);
+	u8 prio = netdev_txq_to_tc(dev, queue_mapping);
 	const struct ethhdr *hdr = eth_hdr(skb);
 	__be16 *tag;
 	u16 val;
@@ -226,9 +323,16 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	if (skb->ip_summed == CHECKSUM_PARTIAL && skb_checksum_help(skb))
 		return NULL;
 
+	/* Tag encoding */
+	if (test_bit(LAN937X_HWTS_EN, &ptp_shared->state))
+		lan937x_xmit_timestamp(skb);
+
 	tag = skb_put(skb, LAN937X_EGRESS_TAG_LEN);
 
 	val = BIT(dp->index);
+
+	/* priority */
+	val |= (prio<<8);
 
 	if (is_link_local_ether_addr(hdr->h_dest))
 		val |= LAN937X_TAIL_TAG_BLOCKING_OVERRIDE;
@@ -238,15 +342,31 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 
 	put_unaligned_be16(val,tag);
 
-	return skb;
+	return lan937x_defer_xmit(dp, skb);
+}
+
+static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev)
+{
+	/* Tag decoding */
+	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
+	unsigned int port = tag[0] & LAN937X_TAIL_TAG_PORT_MASK;
+	unsigned int len = KSZ_EGRESS_TAG_LEN;
+
+	/* Extra 4-bytes PTP timestamp */
+	if (tag[0] & LAN937X_PTP_TAG_INDICATION) {
+		lan937x_rcv_timestamp(skb, tag, dev, port);
+		len += KSZ9477_PTP_TAG_LEN;
+	}
+
+	return ksz_common_rcv(skb, dev, port, len);
 }
 
 static const struct dsa_device_ops lan937x_netdev_ops = {
 	.name	= "lan937x",
 	.proto	= DSA_TAG_PROTO_LAN937X,
 	.xmit	= lan937x_xmit,
-	.rcv	= ksz9477_rcv,
-	.needed_tailroom = LAN937X_EGRESS_TAG_LEN,
+	.rcv	= lan937x_rcv,
+	.needed_tailroom = LAN937X_EGRESS_TAG_LEN + LAN937X_PTP_TAG_LEN,
 };
 
 DSA_TAG_DRIVER(lan937x_netdev_ops);

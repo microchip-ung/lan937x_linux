@@ -114,6 +114,8 @@ static int lan937x_spi_probe(struct spi_device *spi)
 	if (spi->dev.platform_data)
 		dev->pdata = spi->dev.platform_data;
 
+	dev->irq = spi->irq;
+
 	ret = lan937x_switch_register(dev);
 	/* Main DSA driver may not be started yet. */
 	if (ret)

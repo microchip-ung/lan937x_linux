@@ -9,6 +9,7 @@
 int lan937x_cfg(struct ksz_device *dev, u32 addr, u8 bits, bool set);
 int lan937x_port_cfg(struct ksz_device *dev, int port, int offset,
 		     u8 bits, bool set);
+int lan937x_cfg32(struct ksz_device *dev, u32 addr, u32 bits, bool set);
 int lan937x_pread8(struct ksz_device *dev, int port, int offset,
 		   u8 *data);
 int lan937x_pread16(struct ksz_device *dev, int port, int offset,

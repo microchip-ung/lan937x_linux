@@ -12,10 +12,12 @@
 #include <linux/math.h>
 #include <net/dsa.h>
 #include <net/switchdev.h>
-
 #include "lan937x_reg.h"
+#include "lan937x_ptp.h"
 #include "ksz_common.h"
 #include "lan937x_dev.h"
+#include "lan937x_tc.h"
+#include "lan937x_devlink.h"
 
 static int lan937x_wait_vlan_ctrl_ready(struct ksz_device *dev)
 {
@@ -951,10 +953,12 @@ static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 	return interface;
 }
 
-static void lan937x_config_cpu_port(struct dsa_switch *ds)
+static int lan937x_config_cpu_port(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
 	struct ksz_port *p;
+	u16 value;
+	int ret;
 	int i;
 
 	ds->num_ports = dev->port_cnt;
@@ -1000,7 +1004,21 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 		p->vid_member = (1 << i);
 		p->member = dev->port_mask;
 		lan937x_port_stp_state_set(ds, i, BR_STATE_DISABLED);
+
+		if (dev->ports[i].t1_leader) {
+			ret = lan937x_internal_phy_read(dev, i, 0x0009, &value);
+			if (ret < 0)
+				return ret;
+
+			value |= 0x0800;
+
+			ret = lan937x_internal_phy_write(dev, i, 0x0009, value);
+			if (ret < 0)
+				return ret;
+		}
 	}
+
+	return 0;
 }
 
 static u8 lan937x_rgmii_dly_reg_val(int port, u32 val)
@@ -1088,12 +1106,6 @@ static int lan937x_setup(struct dsa_switch *ds)
 	struct ksz_device *dev = ds->priv;
 	int ret;
 
-	ret = lan937x_reset_switch(dev);
-	if (ret < 0) {
-		dev_err(ds->dev, "failed to reset switch\n");
-		return ret;
-	}
-
 	/* Apply rgmii internal delay for the mac based on device tree */
 	ret = lan937x_parse_dt_rgmii_delay(dev);
 	if (ret < 0)
@@ -1129,12 +1141,48 @@ static int lan937x_setup(struct dsa_switch *ds)
 
 	lan937x_enable_spi_indirect_access(dev);
 
+	/* Look into the device tree for some configuration values. */
+	/* If we have valid pointers to get into the device tree, ... */
+	if (dev->dev && dev->dev->of_node) {
+		const int *val;
+
+		val = of_get_property(dev->dev->of_node, "led-t1-sel", NULL);
+		/* if an entry was found for led-t1-sel, use it. */
+		if (val) {
+			pr_info("led-t1-sel: 0x%x", be32_to_cpu(*val));
+			ksz_write32(dev, REG32_SW_GLOBAL_LED_T1_SEL,
+				    be32_to_cpu(*val));
+		}
+	}
+
+	ret = lan937x_ptp_init(dev);
+	if (ret)
+		return ret;
+
+	lan937x_tc_queue_init(ds);
+
+	ret = lan937x_devlink_init(ds);
+	if (ret)
+		goto error_ptp_deinit;
+
 	/* start switch */
 	lan937x_cfg(dev, REG_SW_OPERATION, SW_START, true);
 
 	ksz_init_mib_timer(dev);
 
 	return 0;
+
+error_ptp_deinit:
+	lan937x_ptp_deinit(dev);
+	return ret;
+}
+
+static void lan937x_teardown(struct dsa_switch *ds)
+{
+	struct ksz_device *dev = ds->priv;
+
+	lan937x_devlink_exit(ds);
+	lan937x_ptp_deinit(dev);
 }
 
 static int lan937x_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
@@ -1274,6 +1322,7 @@ static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
 const struct dsa_switch_ops lan937x_switch_ops = {
 	.get_tag_protocol = lan937x_get_tag_protocol,
 	.setup = lan937x_setup,
+	.teardown = lan937x_teardown,
 	.phy_read = lan937x_phy_read16,
 	.phy_write = lan937x_phy_write16,
 	.port_enable = ksz_enable_port,
@@ -1300,6 +1349,14 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.phylink_mac_link_down = ksz_mac_link_down,
 	.phylink_mac_config = lan937x_phylink_mac_config,
 	.phylink_mac_link_up = lan937x_phylink_mac_link_up,
+	.port_hwtstamp_get      = lan937x_hwtstamp_get,
+	.port_hwtstamp_set      = lan937x_hwtstamp_set,
+	.port_txtstamp		= lan937x_port_txtstamp,
+	.get_ts_info            = lan937x_get_ts_info,
+	.port_setup_tc          = lan937x_setup_tc,
+	.devlink_param_get	= lan937x_devlink_param_get,
+	.devlink_param_set	= lan937x_devlink_param_set,
+	.devlink_info_get	= lan937x_devlink_info_get,
 };
 
 int lan937x_switch_register(struct ksz_device *dev)
