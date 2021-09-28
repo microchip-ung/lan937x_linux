@@ -168,12 +168,10 @@
 					compatible = "microchip,lan9374";
 					reg = <0>;
 					spi-max-frequency = <44000000>;
-					spi-cpha;
-					spi-cpol;
 					interrupt-parent = <&pioB>;
 					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
 					resetb-gpios = <&pioD 18 GPIO_ACTIVE_LOW>;
-					pinctrl-0 = <&pinctrl_spi_ksz_rst>;	
+					pinctrl-0 = <&pinctrl_spi_ksz_rst>;
 					led-t1-sel = <07754321077>;    // this value is octal.  hex is <0x3fb1a23f>
 					status = "okay";
 					ports {
@@ -182,26 +180,32 @@
 						port@0 {
 							reg = <0>;
 							phy-handle=<&t1phy0>;
+							phy-mode = "internal";
 							label = "lan1";
 						};
 						port@1 {
 							reg = <1>;
 							phy-handle=<&t1phy1>;
+							phy-mode = "internal";
 							label = "lan2";
 						};
 						port@2 {
 							reg = <2>;
 							phy-handle=<&t1phy2>;
+							phy-mode = "internal";
 							label = "lan4";
 						};
 						port@3 {
 							reg = <3>;
 							phy-handle=<&t1phy3>;
+							phy-mode = "internal";
 							label = "lan6";
 						};
 						port@5 {
 							reg = <5>;
 							phy-mode = "rgmii-id";
+							rx-internal-delay-ps = <2000>;
+							tx-internal-delay-ps = <2000>;
 							ethernet = <&macb0>;
 							fixed-link {
 								speed = <1000>;
@@ -211,6 +215,8 @@
 						port@4 {
 							reg = <4>;
 							phy-mode = "rgmii-id";
+							rx-internal-delay-ps = <2000>;
+							tx-internal-delay-ps = <2000>;
 							label = "lan7";
 							fixed-link {
 								speed = <1000>;
@@ -220,11 +226,13 @@
 						port@6 {
 							reg = <6>;
 							phy-handle=<&t1phy4>;
+							phy-mode = "internal";
 							label = "lan5";
 						};
 						port@7 {
 							reg = <7>;
 							phy-handle=<&t1phy5>;
+							phy-mode = "internal";
 							label = "lan3";
 						};
 					};

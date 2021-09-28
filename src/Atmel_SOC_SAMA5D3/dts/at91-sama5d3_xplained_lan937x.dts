@@ -169,8 +169,6 @@
 					compatible = "microchip,lan9370";
 					reg = <3>;
 					spi-max-frequency = <44000000>;
-					spi-cpha;
-					spi-cpol;
 					interrupt-parent = <&pioB>;
 					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;					
 					led-t1-sel = <0731777704>; // this value is octal.  hex is <0x0767ffc4>
@@ -181,21 +179,25 @@
 						port@0 {
 							reg = <0x0>;
 							phy-handle = <&t1phy0>;
+							phy-mode = "internal";
 							label = "lan1";
 						};
 						port@1 {
 							reg = <0x1>;
 							phy-handle = <&t1phy1>;
+							phy-mode = "internal";
 							label = "lan2";
 						};
 						port@2 {
 							reg = <0x2>;
 							phy-handle = <&t1phy2>;
+							phy-mode = "internal";
 							label = "lan3";
 						};
 						port@3 {
 							reg = <0x3>;
 							phy-handle = <&t1phy3>;
+							phy-mode = "internal";
 							label = "lan4";
 						};
 						port@4 {
