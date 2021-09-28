@@ -262,10 +262,6 @@ static inline bool dsa_tree_offloads_bridge_port(struct dsa_switch_tree *dst,
 		if (dsa_port_offloads_bridge_port(dp, dev))
 			return true;
 
-        if (dp->lag_dev == dev)
-                /* DSA ports connected to a bridge via a LAG */
-                return true;
-
         return false;
 }
 
