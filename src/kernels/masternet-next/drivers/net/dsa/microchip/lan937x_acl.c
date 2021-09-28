@@ -464,8 +464,8 @@ static void lan937x_cpy_u16_to_entry(struct lan937x_val_mask_u16 *field,
 	u16 tdata;
 	u16 tmask;
 
-	*((__be16*)&tdata) = cpu_to_be16(field->value);
-	*((__be16*)&tmask) = cpu_to_be16(field->mask);
+	*((__be16 *)&tdata) = cpu_to_be16(field->value);
+	*((__be16 *)&tmask) = cpu_to_be16(field->mask);
 
 	/* Apply mask to data given from the rule */
 	tdata &= tmask;
@@ -526,8 +526,8 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
 			u16 tdata;
 			u16 tmask;
 
-			*((__be16*)&tdata) = cpu_to_be16(key->vlan_id.value);
-			*((__be16*)&tmask) = cpu_to_be16(key->vlan_id.mask);
+			*((__be16 *)&tdata) = cpu_to_be16(key->vlan_id.value);
+			*((__be16 *)&tmask) = cpu_to_be16(key->vlan_id.mask);
 
 			tdata &= tmask;
 			tmask &= (~tdata);

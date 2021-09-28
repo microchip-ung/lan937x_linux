@@ -103,7 +103,7 @@ out:
 	return -ENOSPC;
 }
 
-static struct lan937x_flower_rule *lan937x_rule_find(struct ksz_device *dev, 
+static struct lan937x_flower_rule *lan937x_rule_find(struct ksz_device *dev,
 						     int port,
 						     unsigned long cookie)
 {
