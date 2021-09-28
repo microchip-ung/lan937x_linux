@@ -58,7 +58,7 @@ static int lan937x_setup_tc_cbs(struct dsa_switch *ds, int port,
 	/* Queue Selection */
 	ret = lan937x_pwrite32(dev, port, REG_PORT_MTI_QUEUE_INDEX__4,
 			       qopt->queue);
-	if(ret)
+	if (ret)
 		return ret;
 
 	if (!qopt->enable) {
@@ -69,20 +69,19 @@ static int lan937x_setup_tc_cbs(struct dsa_switch *ds, int port,
 
 	ret = lan937x_pwrite8(dev, port, REG_PORT_MTI_QUEUE_CTRL_0,
 			      LAN937X_CBS_ENABLE);
-	if(ret)
+	if (ret)
 		return ret;
 
 	/* High Credit */
 	ret = lan937x_pwrite16(dev, port, REG_PORT_MTI_HI_WATER_MARK,
 			       qopt->hicredit);
-	if(ret)
+	if (ret)
 		return ret;
-
 
 	/* Low Credit */
 	ret = lan937x_pwrite16(dev, port, REG_PORT_MTI_LO_WATER_MARK,
 			       qopt->locredit);
-	if(ret)
+	if (ret)
 		return ret;
 
 	/* Credit Increment Register */

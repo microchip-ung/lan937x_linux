@@ -9,6 +9,7 @@
 #include "lan937x_dev.h"
 #include "lan937x_tc.h"
 #include "lan937x_ptp.h"
+#include "lan937x_tas.h"
 
 static bool lan937x_tas_validate_gcl(struct tc_taprio_qopt_offload *qopt)
 {

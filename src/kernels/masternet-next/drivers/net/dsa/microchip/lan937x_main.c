@@ -987,7 +987,7 @@ static int lan937x_config_cpu_port(struct dsa_switch *ds)
 
 			/* Check if the device tree have specific interface
 			 * setting otherwise read & assign from XMII register
-			 * for host port interface 
+			 * for host port interface
 			 */
 			interface = lan937x_get_interface(dev, i);
 			if (!p->interface)
@@ -1018,7 +1018,7 @@ static int lan937x_config_cpu_port(struct dsa_switch *ds)
 		p->member = dev->port_mask;
 		lan937x_port_stp_state_set(ds, i, BR_STATE_DISABLED);
 
-		if(dev->ports[i].t1_leader) {
+		if (dev->ports[i].t1_leader) {
 			ret = lan937x_internal_phy_read(dev, i, 0x0009, &value);
 			if (ret < 0)
 				return ret;
@@ -1073,23 +1073,23 @@ static int lan937x_setup(struct dsa_switch *ds)
 
 	/* Look into the device tree for some configuration values. */
 	/* If we have valid pointers to get into the device tree, ... */
-	if ((dev->dev) && (dev->dev->of_node)) {
-		const int* pVal;
+	if (dev->dev && dev->dev->of_node) {
+		const int *val;
 
-		pVal = of_get_property(dev->dev->of_node, "led-t1-sel", NULL);
+		val = of_get_property(dev->dev->of_node, "led-t1-sel", NULL);
 		/* if an entry was found for led-t1-sel, use it. */
-		if (pVal) {
-			pr_info("led-t1-sel: 0x%x", be32_to_cpu(*pVal));
+		if (val) {
+			pr_info("led-t1-sel: 0x%x", be32_to_cpu(*val));
 			ksz_write32(dev, REG32_SW_GLOBAL_LED_T1_SEL,
-				    be32_to_cpu(*pVal));
+				    be32_to_cpu(*val));
 		}
 	}
 
 	ret = lan937x_ptp_init(dev);
-	if (ret) 
-                return ret;
+	if (ret)
+		return ret;
 
-        lan937x_tc_queue_init(ds);
+	lan937x_tc_queue_init(ds);
 
 	ret = lan937x_devlink_init(ds);
 	if (ret)
@@ -1103,8 +1103,8 @@ static int lan937x_setup(struct dsa_switch *ds)
 	return 0;
 
 error_ptp_deinit:
-        lan937x_ptp_deinit(dev);
-        return ret;
+	lan937x_ptp_deinit(dev);
+	return ret;
 }
 
 static void lan937x_teardown(struct dsa_switch *ds)
@@ -1112,7 +1112,7 @@ static void lan937x_teardown(struct dsa_switch *ds)
 	struct ksz_device *dev = ds->priv;
 
 	lan937x_devlink_exit(ds);
-        lan937x_ptp_deinit(dev);
+	lan937x_ptp_deinit(dev);
 }
 
 static int lan937x_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
@@ -1263,12 +1263,11 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.port_hwtstamp_set      = lan937x_hwtstamp_set,
 	.port_txtstamp		= lan937x_port_txtstamp,
 	.get_ts_info            = lan937x_get_ts_info,
-        .port_setup_tc          = lan937x_setup_tc,
+	.port_setup_tc          = lan937x_setup_tc,
 	.devlink_param_get	= lan937x_devlink_param_get,
 	.devlink_param_set	= lan937x_devlink_param_set,
 	.devlink_info_get	= lan937x_devlink_info_get,
 };
-
 
 int lan937x_switch_register(struct ksz_device *dev)
 {

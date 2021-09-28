@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0
-/* Microchip lan937x dev ops functions
+/* SPDX-License-Identifier: GPL-2.0 */
+/* Microchip lan937x Time aware schedular functions
  * Copyright (C) 2021 Microchip Technology Inc.
  */
 #ifndef _LAN937x_TAS_H

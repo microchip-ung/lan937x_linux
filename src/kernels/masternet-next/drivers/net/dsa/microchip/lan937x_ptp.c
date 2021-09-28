@@ -7,6 +7,7 @@
 #include "ksz_common.h"
 #include "lan937x_reg.h"
 #include "lan937x_dev.h"
+#include "lan937x_ptp.h"
 #include "ksz_common.h"
 #include <linux/ptp_classify.h>
 #include <linux/ptp_clock_kernel.h>
@@ -44,7 +45,8 @@ static int lan937x_ptp_tou_index(struct ksz_device *dev, u8 index,
 	u32 data;
 	int ret;
 
-	data = ((index << PTP_TOU_INDEX_S) | (pps_led_index << PTP_GPIO_INDEX_S));
+	data = ((index << PTP_TOU_INDEX_S) |
+		(pps_led_index << PTP_GPIO_INDEX_S));
 
 	ret = lan937x_cfg32(dev, REG_PTP_UNIT_INDEX__4, data, true);
 
@@ -62,7 +64,7 @@ static int lan937x_ptp_tou_reset(struct ksz_device *dev)
 
 	/* Clear reset */
 	ret = lan937x_cfg32(dev, REG_PTP_CTRL_STAT__4,
-		            (TRIG_RESET | TRIG_ENABLE), false);
+			    (TRIG_RESET | TRIG_ENABLE), false);
 	if (ret)
 		return ret;
 
@@ -160,13 +162,13 @@ static int lan937x_ptp_enable_pps(struct ksz_device *dev, int on)
 	u32 data;
 	int ret;
 
-	if (dev->ptp_tou_mode != KSZ_PTP_TOU_PPS && 
+	if (dev->ptp_tou_mode != KSZ_PTP_TOU_PPS &&
 	    dev->ptp_tou_mode != KSZ_PTP_TOU_IDLE)
 		return -EBUSY;
 
 	//get the pps led no, numbering is -1 from dts tree
 	if (!(of_property_read_u32(dev->dev->of_node, "pps_led_index",
-	    &pps_led_index))) {
+				   &pps_led_index))) {
 		if (pps_led_index == 1 || pps_led_index == 2)
 			pps_led_index -= 1;
 		else
@@ -185,11 +187,12 @@ static int lan937x_ptp_enable_pps(struct ksz_device *dev, int on)
 
 	if (!on) {
 		dev->ptp_tou_mode = KSZ_PTP_TOU_IDLE;
-		return 0;  /* success */
+		return 0; /* success */
 	}
 
 	/* set periodic pulse pattern */
-	data = (TRIG_POS_PERIOD << TRIG_PATTERN_S) | (pps_led_index << TRIG_GPO_S);
+	data = (TRIG_POS_PERIOD << TRIG_PATTERN_S) |
+	       (pps_led_index << TRIG_GPO_S);
 	ret = ksz_write32(dev, REG_TRIG_CTRL__4, data);
 	if (ret)
 		return ret;
@@ -221,8 +224,8 @@ static int lan937x_ptp_enable_pps(struct ksz_device *dev, int on)
 		return ret;
 
 	/* Activate trigger unit */
-	ret = lan937x_cfg32(dev, REG_PTP_CTRL_STAT__4,
-		            (GPIO_OUT | TRIG_ENABLE), true);
+	ret = lan937x_cfg32(dev, REG_PTP_CTRL_STAT__4, (GPIO_OUT | TRIG_ENABLE),
+			    true);
 	if (ret)
 		return ret;
 
@@ -272,17 +275,16 @@ error_disable_mode:
 int lan937x_get_ts_info(struct dsa_switch *ds, int port,
 			struct ethtool_ts_info *ts)
 {
-	struct ksz_device *dev	= ds->priv;
+	struct ksz_device *dev = ds->priv;
 
 	ts->so_timestamping = SOF_TIMESTAMPING_TX_HARDWARE |
 			      SOF_TIMESTAMPING_RX_HARDWARE |
 			      SOF_TIMESTAMPING_RAW_HARDWARE;
 
-	ts->tx_types = (1 << HWTSTAMP_TX_OFF) |
-		       (1 << HWTSTAMP_TX_ON);
+	ts->tx_types = (1 << HWTSTAMP_TX_OFF) | (1 << HWTSTAMP_TX_ON);
 
-	ts->rx_filters = (1 << HWTSTAMP_FILTER_NONE)  |
-			 (1 << HWTSTAMP_FILTER_ALL);
+	ts->rx_filters =
+		(1 << HWTSTAMP_FILTER_NONE) | (1 << HWTSTAMP_FILTER_ALL);
 
 	ts->phc_index = ptp_clock_index(dev->ptp_clock);
 
@@ -291,7 +293,7 @@ int lan937x_get_ts_info(struct dsa_switch *ds, int port,
 
 int lan937x_hwtstamp_get(struct dsa_switch *ds, int port, struct ifreq *ifr)
 {
-	struct ksz_device *dev	= ds->priv;
+	struct ksz_device *dev = ds->priv;
 	struct hwtstamp_config config;
 
 	config.flags = 0;
@@ -307,7 +309,9 @@ int lan937x_hwtstamp_get(struct dsa_switch *ds, int port, struct ifreq *ifr)
 		config.rx_filter = HWTSTAMP_FILTER_NONE;
 
 	return copy_to_user(ifr->ifr_data, &config,
-			sizeof(struct hwtstamp_config)) ? -EFAULT : 0;
+			    sizeof(struct hwtstamp_config)) ?
+		       -EFAULT :
+		       0;
 }
 
 static int lan937x_set_hwtstamp_config(struct ksz_device *dev, int port,
@@ -359,7 +363,7 @@ static int lan937x_set_hwtstamp_config(struct ksz_device *dev, int port,
 
 int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct ifreq *ifr)
 {
-	struct ksz_device *dev	= ds->priv;
+	struct ksz_device *dev = ds->priv;
 	struct hwtstamp_config config;
 	int ret;
 
@@ -376,15 +380,14 @@ int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct ifreq *ifr)
 	/* Save the chosen configuration to be returned later. */
 	ret = copy_to_user(ifr->ifr_data, &config, sizeof(config));
 
- error_return:
+error_return:
 	mutex_unlock(&dev->ptp_mutex);
 	return ret;
 }
 
-void lan937x_port_txtstamp(struct dsa_switch *ds, int port,
-			   struct sk_buff *skb)
+void lan937x_port_txtstamp(struct dsa_switch *ds, int port, struct sk_buff *skb)
 {
-	struct ksz_device *dev	= ds->priv;
+	struct ksz_device *dev = ds->priv;
 	struct ksz_port *prt = &dev->ports[port];
 	struct ptp_header *hdr;
 	struct sk_buff *clone;
@@ -645,9 +648,9 @@ static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 
 	data16 |= PTP_STEP_ADJ;
 	if (delta < 0)
-		data16 &= ~PTP_STEP_DIR;  /* 0: subtract */
+		data16 &= ~PTP_STEP_DIR; /* 0: subtract */
 	else
-		data16 |= PTP_STEP_DIR;   /* 1: add */
+		data16 |= PTP_STEP_DIR; /* 1: add */
 
 	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
 	if (ret)
@@ -666,7 +669,7 @@ static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 
 	spin_lock_bh(&ptp_shared->ptp_clock_lock);
 	ptp_shared->ptp_clock_time = timespec64_add(ptp_shared->ptp_clock_time,
-		        			    delta64);
+						    delta64);
 	spin_unlock_bh(&ptp_shared->ptp_clock_lock);
 
 error_return:
@@ -689,7 +692,7 @@ static long lan937x_ptp_do_aux_work(struct ptp_clock_info *ptp)
 	ptp_shared->ptp_clock_time = ts;
 	spin_unlock_bh(&ptp_shared->ptp_clock_lock);
 
-	return HZ;  /* reschedule in 1 second */
+	return HZ; /* reschedule in 1 second */
 }
 
 static int lan937x_ptp_start_clock(struct ksz_device *dev)
@@ -734,8 +737,7 @@ static int lan937x_ptp_stop_clock(struct ksz_device *dev)
 	return 0;
 }
 
-static int lan937x_ptp_8021as(struct ksz_device *dev,
-			      bool enable)
+static int lan937x_ptp_8021as(struct ksz_device *dev, bool enable)
 {
 	u16 data;
 	int ret;
@@ -753,8 +755,8 @@ static int lan937x_ptp_8021as(struct ksz_device *dev,
 }
 
 /* Function to enable/disable Port PTP interrupt */
-static int lan937x_ptp_enable_ptp_int(struct ksz_device *dev,
-				      int port, bool enable)
+static int lan937x_ptp_enable_ptp_int(struct ksz_device *dev, int port,
+				      bool enable)
 {
 	u32 addr = PORT_CTRL_ADDR(port, REG_PORT_INT_MASK);
 	u8 data;
@@ -774,8 +776,8 @@ static int lan937x_ptp_enable_ptp_int(struct ksz_device *dev,
 }
 
 /* Function to enable/disable Individual message interrupt */
-static int lan937x_ptp_enable_msg_int(struct ksz_device *dev,
-				      int port, u16 mask, bool enable)
+static int lan937x_ptp_enable_msg_int(struct ksz_device *dev, int port,
+				      u16 mask, bool enable)
 {
 	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
 	u16 data;
@@ -882,7 +884,8 @@ static void lan937x_sync_deferred_xmit(struct kthread_work *work)
 
 static void lan937x_pdelayreq_deferred_xmit(struct kthread_work *work)
 {
-	struct lan937x_port_ptp_shared *prt_ptp_shared = pdelayreq_to_port(work);
+	struct lan937x_port_ptp_shared *prt_ptp_shared =
+		pdelayreq_to_port(work);
 	struct ksz_port *prt = ptp_shared_to_ksz_port(prt_ptp_shared);
 	struct ksz_device_ptp_shared *ptp_shared = prt_ptp_shared->dev;
 	struct ksz_device *dev = ptp_shared_to_ksz_device(ptp_shared);
@@ -903,7 +906,8 @@ static void lan937x_pdelayreq_deferred_xmit(struct kthread_work *work)
 
 static void lan937x_pdelayrsp_deferred_xmit(struct kthread_work *work)
 {
-	struct lan937x_port_ptp_shared *prt_ptp_shared = pdelayrsp_to_port(work);
+	struct lan937x_port_ptp_shared *prt_ptp_shared =
+		pdelayrsp_to_port(work);
 	struct ksz_port *prt = ptp_shared_to_ksz_port(prt_ptp_shared);
 	struct ksz_device_ptp_shared *ptp_shared = prt_ptp_shared->dev;
 	struct ksz_device *dev = ptp_shared_to_ksz_device(ptp_shared);
@@ -932,16 +936,15 @@ static int lan937x_ptp_sync_msg_en(struct ksz_device *dev, int port)
 	struct dsa_port *dp = dsa_to_port(dev->ds, port);
 	int ret;
 
-	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_SYNC_INT,	true);
+	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_SYNC_INT, true);
 	if (ret)
 		return ret;
 
 	init_completion(&prt->tstamp_sync_comp);
 	skb_queue_head_init(&ptp_shared->sync_queue);
-	kthread_init_work(&ptp_shared->sync_work,
-			  lan937x_sync_deferred_xmit);
-	ptp_shared->sync_worker = kthread_create_worker(0, "%s_sync",
-							dp->slave->name);
+	kthread_init_work(&ptp_shared->sync_work, lan937x_sync_deferred_xmit);
+	ptp_shared->sync_worker =
+		kthread_create_worker(0, "%s_sync", dp->slave->name);
 
 	if (IS_ERR(ptp_shared->sync_worker)) {
 		ret = PTR_ERR(ptp_shared->sync_worker);
@@ -962,7 +965,8 @@ static int lan937x_ptp_xdelayreq_msg_en(struct ksz_device *dev, int port)
 	struct dsa_port *dp = dsa_to_port(dev->ds, port);
 	int ret;
 
-	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_XDELAY_REQ_INT, true);
+	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_XDELAY_REQ_INT,
+					 true);
 	if (ret)
 		return ret;
 
@@ -971,8 +975,8 @@ static int lan937x_ptp_xdelayreq_msg_en(struct ksz_device *dev, int port)
 	kthread_init_work(&ptp_shared->pdelayreq_work,
 			  lan937x_pdelayreq_deferred_xmit);
 
-	ptp_shared->pdelayreq_worker = kthread_create_worker(0, "%s_req_xmit",
-							     dp->slave->name);
+	ptp_shared->pdelayreq_worker =
+		kthread_create_worker(0, "%s_req_xmit", dp->slave->name);
 
 	if (IS_ERR(ptp_shared->pdelayreq_worker)) {
 		ret = PTR_ERR(ptp_shared->pdelayreq_worker);
@@ -993,7 +997,8 @@ static int lan937x_ptp_pdelayresp_msg_en(struct ksz_device *dev, int port)
 	struct dsa_port *dp = dsa_to_port(dev->ds, port);
 	int ret;
 
-	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_PDELAY_RESP_INT, true);
+	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_PDELAY_RESP_INT,
+					 true);
 	if (ret)
 		return ret;
 
@@ -1002,8 +1007,8 @@ static int lan937x_ptp_pdelayresp_msg_en(struct ksz_device *dev, int port)
 	kthread_init_work(&ptp_shared->pdelayrsp_work,
 			  lan937x_pdelayrsp_deferred_xmit);
 
-	ptp_shared->pdelayrsp_worker = kthread_create_worker(0, "%s_rsp_xmit",
-							     dp->slave->name);
+	ptp_shared->pdelayrsp_worker =
+		kthread_create_worker(0, "%s_rsp_xmit", dp->slave->name);
 
 	if (IS_ERR(ptp_shared->pdelayrsp_worker)) {
 		ret = PTR_ERR(ptp_shared->pdelayrsp_worker);
@@ -1069,7 +1074,8 @@ error_disable_ptp_int:
 
 static void lan937x_ptp_port_deinit(struct ksz_device *dev, int port)
 {
-	struct lan937x_port_ptp_shared *ptp_shared = &dev->ports[port].ptp_shared;
+	struct lan937x_port_ptp_shared *ptp_shared =
+		&dev->ports[port].ptp_shared;
 
 	if (port == dev->cpu_port)
 		return;
@@ -1202,7 +1208,8 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 
 		tstamp = ksz_decode_tstamp(tstamp_raw);
 
-		prt->tstamp_pdelayreq = ksz_tstamp_reconstruct(&dev->ptp_shared, tstamp);
+		prt->tstamp_pdelayreq =
+			ksz_tstamp_reconstruct(&dev->ptp_shared, tstamp);
 		complete(&prt->tstamp_pdelayreq_comp);
 	}
 
@@ -1215,7 +1222,8 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 
 		tstamp = ksz_decode_tstamp(tstamp_raw);
 
-		prt->tstamp_pdelayrsp = ksz_tstamp_reconstruct(&dev->ptp_shared, tstamp);
+		prt->tstamp_pdelayrsp =
+			ksz_tstamp_reconstruct(&dev->ptp_shared, tstamp);
 		complete(&prt->tstamp_pdelayrsp_comp);
 	}
 
@@ -1228,7 +1236,8 @@ irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
 
 		tstamp = ksz_decode_tstamp(tstamp_raw);
 
-		prt->tstamp_sync = ksz_tstamp_reconstruct(&dev->ptp_shared, tstamp);
+		prt->tstamp_sync =
+			ksz_tstamp_reconstruct(&dev->ptp_shared, tstamp);
 		complete(&prt->tstamp_sync_comp);
 	}
 
