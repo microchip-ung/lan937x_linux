@@ -412,6 +412,34 @@ static void lan937x_config_gbit(struct ksz_device *dev, bool gbit, u8 *data)
 		*data |= PORT_MII_NOT_1GBIT;
 }
 
+static void lan937x_update_rgmii_delay (struct ksz_device *dev, int port, bool is_tx)
+{
+	struct ksz_port *p = &dev->ports[port];
+	u16 data16;
+	int reg;
+
+	/* choose register based on tx/rx */
+	if (is_tx)
+		reg = REG_PORT_XMII_CTRL_5;
+	else
+		reg = REG_PORT_XMII_CTRL_4;
+
+	lan937x_pread16(dev, port, reg, &data16);
+
+	/* clear tune Adjust */
+	data16 &=~ (PORT_RX_TUNE_ADJ);
+
+	data16 |= (p->rgmii_tx_val << 7);
+
+	/* write tune Adjust */
+	lan937x_pwrite16(dev, port, reg, data16);
+
+	data16 |= PORT_TX_RX_DLL_RESET;
+
+	/* write DLL reset to take effect */
+	lan937x_pwrite16(dev, port, reg, data16);
+}
+
 static void lan937x_apply_rgmii_delay(struct ksz_device *dev, int port)
 {
 	struct ksz_port *p = &dev->ports[port];
@@ -421,20 +449,20 @@ static void lan937x_apply_rgmii_delay(struct ksz_device *dev, int port)
 	lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
 	data8 &= ~(PORT_RGMII_ID_EG_ENABLE | PORT_RGMII_ID_IG_ENABLE);
 
-	if (p->rgmii_tx_val)
+	if (p->rgmii_tx_val) {
+		lan937x_update_rgmii_delay (dev, port, true);
 		data8 |= PORT_RGMII_ID_EG_ENABLE;
+	}
 	
-	if (p->rgmii_rx_val)
+	if (p->rgmii_rx_val) {
+		lan937x_update_rgmii_delay (dev, port, false);
 		data8 |= PORT_RGMII_ID_IG_ENABLE;
+	}
 
-	/* Write the updated value */
+	/* Enable RGMII internal delays */
 	lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, data8);
 
-	/* Applied standard delay(2ns) for any value of *-internal-delay-ps,
-	 * hence throwing an error might not be useful, so pass the information
-	 * to the user
-	 */
-	dev_info(dev->dev, "Applied rgmii standard delay (2ns) for"
+	dev_info(dev->dev, "Applied rgmii delay for"
 		 " port %d\n",port);
 }
 

@@ -203,6 +203,8 @@
 						port@5 {
 							reg = <5>;
 							phy-mode = "rgmii-id";
+							rx-internal-delay-ps = <2000>;
+							tx-internal-delay-ps = <2000>;
 							ethernet = <&macb0>;
 							fixed-link {
 								speed = <1000>;
@@ -212,6 +214,8 @@
 						port@4 {
 							reg = <4>;
 							phy-mode = "rgmii-id";
+							rx-internal-delay-ps = <2000>;
+							tx-internal-delay-ps = <2000>;
 							label = "lan7";
 							fixed-link {
 								speed = <1000>;

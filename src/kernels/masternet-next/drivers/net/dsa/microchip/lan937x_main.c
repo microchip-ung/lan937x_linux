@@ -9,6 +9,7 @@
 #include <linux/of_net.h>
 #include <linux/if_bridge.h>
 #include <linux/if_vlan.h>
+#include <linux/math.h>
 #include <net/dsa.h>
 #include <net/switchdev.h>
 
@@ -1002,18 +1003,43 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 	}
 }
 
+static u8 lan937x_rgmii_dly_reg_val(int port, u32 val)
+{
+	u8 reg_val;
+
+	/* force minimum delay if delay is less than min delay */
+	if (val && (val < 2170))
+		val = 2170;
+
+	/* maximum delay is 4ns */
+	if (val > 4000)
+		val = 4000;
+
+	/* different calculations to be applied based on the ports 
+	 * as per characterization results
+	 */	
+	if (port == LAN937X_RGMII_2_PORT)
+		reg_val =  DIV_ROUND_CLOSEST((val - 2170), 34);
+		
+	if (port == LAN937X_RGMII_1_PORT) 
+		reg_val =  DIV_ROUND_CLOSEST((val - 1450), 36);
+
+	return reg_val;
+}
+
 static void lan937x_set_rgmii_delay(struct ksz_device *dev, int port,
-									u32 val, bool is_tx)
+				    u32 val, bool is_tx)
 {
 	struct ksz_port *p = &dev->ports[port];
 
 	if (is_tx)
-		p->rgmii_tx_val = val;
+		p->rgmii_tx_val = lan937x_rgmii_dly_reg_val(port, val);
 	else
-		p->rgmii_rx_val = val;
+		p->rgmii_rx_val = lan937x_rgmii_dly_reg_val(port, val);
+
 }
 
-static int lan937x_parse_dt_rgmii_delay (struct ksz_device *dev)
+static int lan937x_parse_dt_rgmii_delay(struct ksz_device *dev)
 {
 	struct device_node *ports, *port;
 	int err, p;
@@ -1023,7 +1049,6 @@ static int lan937x_parse_dt_rgmii_delay (struct ksz_device *dev)
 	if (!ports)
 		ports = of_get_child_by_name(dev->dev->of_node, 
 					     "ethernet-ports");
-
 	if (!ports) {
 		dev_err(dev->dev, "no ports child node found\n");
 		return -EINVAL;
@@ -1038,26 +1063,19 @@ static int lan937x_parse_dt_rgmii_delay (struct ksz_device *dev)
 			of_node_put(port);
 			return err;
 		}
-		pr_info("reg:%d\n", p);
+
 		/* skip for internal ports */
 		if (lan937x_is_internal_phy_port(dev, p))
 			continue;
 
-		pr_info("am here\n");
-		if (of_property_read_u32(port, "rx-internal-delay-ps", &val)) {
-			/* TODO: default delay */
+		if (of_property_read_u32(port, "rx-internal-delay-ps", &val)) 
 			val = 0;
-			pr_info("am here2\n");
-		}
-		/* TODO MAX DELAY VALIDATION */
+
 		lan937x_set_rgmii_delay(dev, p, val, false);
 
-		if (!of_property_read_u32(port, "tx-internal-delay-ps", &val)) {
-			/* TODO: default delay */
+		if (of_property_read_u32(port, "tx-internal-delay-ps", &val))
 			val = 0;
-			pr_info("am here3\n");
-		}
-		/* TODO MAX DELAY VALIDATION */
+				
 		lan937x_set_rgmii_delay(dev, p, val, true);
 	}
 
@@ -1165,8 +1183,6 @@ static void lan937x_phylink_mac_config(struct dsa_switch *ds, int port,
 {
 	struct ksz_device *dev = ds->priv;
 
-	pr_info("called for mac config: %d", port);
-
 	/* Internal PHYs */
 	if (lan937x_is_internal_phy_port(dev, port))
 		return;
@@ -1175,6 +1191,7 @@ static void lan937x_phylink_mac_config(struct dsa_switch *ds, int port,
 		dev_err(ds->dev, "In-band AN not supported!\n");
 		return;
 	}
+	
 	lan937x_mac_config(dev, port, state->interface);
 }
 

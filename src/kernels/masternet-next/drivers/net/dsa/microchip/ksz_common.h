@@ -41,8 +41,8 @@ struct ksz_port {
 
 	struct ksz_port_mib mib;
 	phy_interface_t interface;
-	u32 rgmii_tx_val;
-	u32 rgmii_rx_val;
+	u8 rgmii_tx_val;
+	u8 rgmii_rx_val;
 };
 
 struct ksz_device {
