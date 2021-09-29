@@ -51,6 +51,9 @@ struct ksz_port {
 	phy_interface_t interface;
 	u8 rgmii_tx_val;
 	u8 rgmii_rx_val;
+
+	void *priv;
+
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
 	bool hwts_tx_en;
         struct lan937x_port_ptp_shared ptp_shared;
@@ -272,6 +275,12 @@ static inline int ksz_write64(struct ksz_device *dev, u32 reg, u64 value)
 	val[1] = swab32(value >> 32ULL);
 
 	return regmap_bulk_write(dev->regmap[2], reg, val, 2);
+}
+
+static inline int ksz_write8_bulk(struct ksz_device *dev, u32 reg, u8 *value,
+				  u8 n)
+{
+	return regmap_bulk_write(dev->regmap[0], reg, value, n);
 }
 
 static inline void ksz_pread8(struct ksz_device *dev, int port, int offset,

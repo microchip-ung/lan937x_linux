@@ -15,6 +15,7 @@ endef
 define LAN937X_TC_INSTALL_TARGET_CMDS
     $(INSTALL) -D -m 0755 $(@D)/tsn_talker $(TARGET_DIR)/root
     $(INSTALL) -D -m 0755 $(@D)/tsn_listener $(TARGET_DIR)/root
+    $(INSTALL) -D -m 0755 $(@D)/pkt_io $(TARGET_DIR)/usr/bin
     $(INSTALL) -D -m 0755 $(@D)/dsa_ver $(TARGET_DIR)/root
 endef
 

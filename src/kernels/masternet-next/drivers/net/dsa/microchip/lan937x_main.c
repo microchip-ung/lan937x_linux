@@ -18,6 +18,7 @@
 #include "lan937x_dev.h"
 #include "lan937x_tc.h"
 #include "lan937x_devlink.h"
+#include "lan937x_flower.h"
 
 static int lan937x_wait_vlan_ctrl_ready(struct ksz_device *dev)
 {
@@ -915,6 +916,117 @@ static void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
 				 PORT_MIRROR_SNIFFER, false);
 }
 
+int lan937x_tc_pol_rate_to_reg(u64 rate_bytes_per_sec, u8 *regval)
+{
+	u32 rate_kbps = div_u64(8 * rate_bytes_per_sec, 1000);
+	u16 code = 0x00;
+
+	if (rate_kbps >= 2000) {
+		code = (rate_kbps / 1000);
+	} else if (rate_kbps == 1000) {
+		code = RLIMIT_REG_CODE_1MBPS;
+	} else if (rate_kbps <= 1280) {
+		code = RLIMIT_REG_CODE_1280KBPS;
+	} else if (rate_kbps <= 1920) {
+		code = RLIMIT_REG_CODE_1920KBPS;
+	} else {
+		/* All values in rate_boundaries are in kbps*/
+		const u16 rate_boundaries[] = {
+			/* [0]*/	256,	320,	384,	448,	512,
+			/* [5]*/	576,	640,	804,	768,	832,
+			/* [10]*/	896,	960,
+		};
+		u8 i;
+
+		for (i = 0; i < 12; i++) {
+			if (rate_kbps < rate_boundaries[i]) {
+				/* 256 kbps is the lowest limited rate.
+				 * Incrementing reg value by one step results in
+				 * setting the rate to next subsequent boundary
+				 */
+				code = RLIMIT_REG_CODE_256KBPS + i;
+				break;
+			}
+		}
+	}
+
+	if (!code)
+		return -EINVAL;
+
+	*regval = code;
+
+	return 0;
+}
+
+static int lan937x_port_policer_add(struct dsa_switch *ds, int port,
+				    struct dsa_mall_policer_tc_entry *policer)
+{
+	struct ksz_device *dev = ds->priv;
+	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
+	u8 code = 0;
+	int ret, i;
+
+	/* Port Policing and Traffic class Policing is mutually exclusive
+	 * behavior of one Ingress Rate Limiting Hw
+	 */
+	for (i = 0; i < LAN937X_NUM_TC; i++) {
+		if (res->tc_policers_used[i])
+			return -ENOSPC;
+	}
+
+	ret = lan937x_tc_pol_rate_to_reg(policer->rate_bytes_per_sec, &code);
+	if (ret)
+		return ret;
+
+	ret = lan937x_port_cfg(dev, port, REG_PORT_MAC_IN_RATE_LIMIT,
+			       PORT_RATE_LIMIT, true);
+	if (ret)
+		return ret;
+
+	ret = lan937x_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL, code);
+	if (ret)
+		return ret;
+
+	/* Note that the update will not take effect until the Port Queue 7
+	 * Ingress Limit ctrl Register is written. When port-based rate limiting
+	 * is used a value of 0h should be written to Port Queue 7 Egress Limit
+	 * Control Register.
+	 */
+	ret = lan937x_pwrite8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL, 0x00);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < LAN937X_NUM_TC; i++)
+		res->tc_policers_used[i] = true;
+
+	return 0;
+}
+
+static void lan937x_port_policer_del(struct dsa_switch *ds, int port)
+{
+	struct ksz_device *dev = ds->priv;
+	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
+	int ret;
+	u8 i;
+
+	/*Update Default Value to Rate Limit : 00*/
+	ret = lan937x_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL, 0x00);
+	if (ret)
+		return;
+
+	/* Note that the update will not take effect until the Port Queue 7
+	 * Ingress Limit ctrl Register is written. When port-based rate limiting
+	 * is used a value of 0h should be written to Port Queue 7 Egress Limit
+	 * Control Register
+	 */
+	ret = lan937x_pwrite8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL, 0x00);
+	if (ret)
+		return;
+
+	for (i = 0; i < LAN937X_NUM_TC; i++)
+		res->tc_policers_used[i] = false;
+}
+
 static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 {
 	phy_interface_t interface;
@@ -1165,6 +1277,9 @@ static int lan937x_setup(struct dsa_switch *ds)
 	if (ret)
 		goto error_ptp_deinit;
 
+	ret = lan937x_flower_setup(ds);
+	if (ret)
+		return ret;
 	/* start switch */
 	lan937x_cfg(dev, REG_SW_OPERATION, SW_START, true);
 
@@ -1357,6 +1472,11 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.devlink_param_get	= lan937x_devlink_param_get,
 	.devlink_param_set	= lan937x_devlink_param_set,
 	.devlink_info_get	= lan937x_devlink_info_get,
+	.port_policer_add = lan937x_port_policer_add,
+	.port_policer_del = lan937x_port_policer_del,
+	.cls_flower_add	= lan937x_cls_flower_add,
+	.cls_flower_del	= lan937x_cls_flower_del,
+	.cls_flower_stats = lan937x_cls_flower_stats
 };
 
 int lan937x_switch_register(struct ksz_device *dev)

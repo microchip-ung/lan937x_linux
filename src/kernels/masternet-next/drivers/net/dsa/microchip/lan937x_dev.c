@@ -16,6 +16,7 @@
 #include "ksz_common.h"
 #include "lan937x_dev.h"
 #include "lan937x_ptp.h"
+#include "lan937x_flower.h"
 
 const struct mib_names lan937x_mib_names[] = {
 	{ 0x00, "rx_hi" },
@@ -107,6 +108,12 @@ int lan937x_pwrite16(struct ksz_device *dev, int port, int offset, u16 data)
 int lan937x_pwrite32(struct ksz_device *dev, int port, int offset, u32 data)
 {
 	return ksz_write32(dev, PORT_CTRL_ADDR(port, offset), data);
+}
+
+int lan937x_pwrite8_bulk(struct ksz_device *dev, int port, int offset,
+			 u8 *data, u8 n)
+{
+	return ksz_write8_bulk(dev, PORT_CTRL_ADDR(port, offset), data, n);
 }
 
 void lan937x_cfg_port_member(struct ksz_device *dev, int port, u8 member)
@@ -646,6 +653,16 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 				    IRQ_NONE)
 					result = IRQ_HANDLED;
 			}
+
+			if (data8 & PORT_ACL_INT) {
+				if (lan937x_acl_isr(dev, port) != IRQ_NONE)
+					result = IRQ_HANDLED;
+			}
+
+			if (data8 & PORT_QCI_INT) {
+				if (lan937x_qci_cntr_isr(dev, port) != IRQ_NONE)
+					result = IRQ_HANDLED;
+			}
 		}
 	}
 
@@ -754,6 +771,14 @@ static int lan937x_switch_init(struct ksz_device *dev)
 				     GFP_KERNEL);
 
 		if (!dev->ports[i].mib.counters)
+			return -ENOMEM;
+
+		dev->ports[i].priv =
+			devm_kzalloc(dev->dev,
+				     sizeof(struct lan937x_flr_blk),
+				     GFP_KERNEL);
+
+		if (!dev->ports[i].priv)
 			return -ENOMEM;
 	}
 

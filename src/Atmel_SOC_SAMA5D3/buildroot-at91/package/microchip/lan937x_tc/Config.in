@@ -1,4 +1,5 @@
 config BR2_PACKAGE_LAN937x_TC
     bool "lan937x_tc"
+    default "y"
     help
         It contains the tsn talker and listener source file

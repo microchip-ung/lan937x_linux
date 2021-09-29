@@ -21,3 +21,5 @@ endif
 ifdef CONFIG_NET_DSA_MICROCHIP_LAN937X_TAS
 lan937x-objs += lan937x_tas.o
 endif
+lan937x-objs += lan937x_flower.o
+lan937x-objs += lan937x_acl.o

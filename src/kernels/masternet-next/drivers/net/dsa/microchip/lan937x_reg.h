@@ -374,6 +374,7 @@
 #define REG_PORT_INT_MASK		0x001F
 
 #define PORT_TAS_INT			BIT(5)
+#define PORT_QCI_INT			BIT(4)
 #define PORT_SGMII_INT			BIT(3)
 #define PORT_PTP_INT			BIT(2)
 #define PORT_PHY_INT			BIT(1)
@@ -496,9 +497,18 @@
 #define PORT_1000BT_EEE_DISABLE		BIT(6)
 
 #define REG_PORT_MAC_IN_RATE_LIMIT	0x0403
+#define PORT_RATE_LIMIT			BIT(6)
 
 #define REG_PORT_MTU__2			0x0404
 #define PORT_RATE_LIMIT_M		(BIT(7) - 1)
+
+#define REG_PORT_PRI0_IN_RLIMIT_CTL	0x0410
+#define REG_PORT_PRI7_IN_RLIMIT_CTL	0x0417
+
+#define RLIMIT_REG_CODE_256KBPS		104
+#define RLIMIT_REG_CODE_1MBPS		1
+#define RLIMIT_REG_CODE_1280KBPS	102
+#define RLIMIT_REG_CODE_1920KBPS	103
 
 /* 5 - MIB Counters */
 #define REG_PORT_MIB_CTRL_STAT		0x0500
@@ -962,4 +972,122 @@
 #define PTP_PORT_PDELAY_RESP_INT	BIT(13)
 
 #define REG_PTP_PORT_LINK_DELAY__4	0x0C18
+
+/* Port Switch Ingress Control Memory Map*/
+#define REG_PORT_RX_MIRROR_CTL			0x0800
+#define REG_PORT_RX_PRI_CTL			0x0801
+#define REG_PORT_RX_MAC_CTL1			0x0802
+#define REG_PORT_RX_AUTH_CTL			0x0803
+#define REG_PORT_RX_MAC_CTL2			0x0804
+#define REG_PORT_RX_TC_MAP			0x0808
+#define REG_PORT_RX_QCI_PTR			0x0850
+#define REG_PORT_RX_PSFP			0x0854
+#define REG_PORT_RX_QCI_METER_CTL		0x0860
+#define REG_PORT_RX_QCI_METER_SR		0x0864
+#define REG_PORT_RX_QCI_METER_BS		0x0868
+#define REG_PORT_RX_QCI_FS_CTL			0x0870
+#define REG_PORT_RX_QCI_FS_FM			0x0874
+#define REG_PORT_RX_QCI_FS_FPG			0x0878
+#define REG_PORT_RX_QCI_FS_FNPG			0x087C
+#define REG_PORT_RX_QCI_FS_FPMAX		0x0880
+#define REG_PORT_RX_QCI_FS_FNPMAX		0x0884
+#define REG_PORT_RX_QCI_FS_FD			0x0888
+#define REG_PORT_STREAM_CNT_STS			0x088C
+#define REG_PORT_METER_RED_INT_MSK		0x08C7
+#define REG_PORT_RX_CNT_OVR_INT_STS		0x08C1
+#define REG_PORT_RX_CNT_OVR_INT_MSK		0x08C2
+
+#define EN_ALL_STREAM_CNTR_INTR			0x00
+/* RX_AUTH_CTRL register defines*/
+/* 10b: Pass Mode. Authentication is disabled. When ACL is enabled, all traffic
+ * that misses the ACL rules is forwarded; otherwise ACL actions apply.
+ */
+#define AUTH_CTL_ACL_PASS_MODE				BIT(1)
+#define AUTH_CTL_ACL_ENABLE				BIT(2)
+
+/* PSFP register field defines*/
+#define FS_CTL_OVR_SIZE_FRAME_BLOCK_EN		BIT(1)
+#define FS_CTL_METER_EN				BIT(11)
+#define FS_CTL_GATE_EN				BIT(7)
+#define FS_CTL_MAX_SDU_EN			BIT(3)
+#define FS_CTL_METER_IDX_MSK			0x07
+#define FS_CTL_METER_IDX_POS			8
+#define FS_CTL_MAX_SDU_MASK			0xFFFF
+#define FS_CTL_MAX_SDU_POS			16
+#define PSFP_ENABLE				BIT(0)
+#define METER_SR_MASK				0xFFFF
+#define METER_SR_CIR_POS			16
+#define METER_BS_MASK				0xFFFF
+#define METER_BS_CBS_POS			16
+#define PORT_METER_RED_INT_MSK_ALL		0xFF
+
+/* REG_PORT_STREAM_CNT_STS access defines*/
+#define FILT_STR_FR_MATCH_CNT_OVR		BIT(5)
+#define FR_MATCH_CNTR_MAX		((1 << 20) - 1)
+
+#define FILT_STR_FR_FAIL_DROP_CNT_OVR		BIT(0)
+#define FR_DROP_CNTR_MAX		((1 << 20) - 1)
+
+/* defines to update Stream Policer Burst and Rate*/
+#define METER_SR_UPDT_RATE(C, P) ((((C) & METER_SR_MASK) << METER_SR_CIR_POS) |\
+				  ((P) & METER_SR_MASK))
+
+#define METER_SR_UPDT_BURST(C, P) ((((C) & METER_BS_MASK) << METER_BS_CBS_POS) \
+				   | ((P) & METER_BS_MASK))
+
+/* defines to update Stream filter parameters*/
+#define FS_UPDT_METER_IDX(IDX)	(((IDX) & FS_CTL_METER_IDX_MSK)\
+				 << FS_CTL_METER_IDX_POS)
+
+#define FS_UPDT_MTU(MTU)	(((MTU) & FS_CTL_MAX_SDU_MASK)\
+				 << FS_CTL_MAX_SDU_POS)
+
+/* TCAM/ACL Register space*/
+/* ACL Registers START */
+#define ACL_CTRL_BASE_ADDR  (0x600)
+#define ACL_CTRL_PORT_BASE_ADDR(port) ((port) * 0x1000)
+/* Reg Base address */						     /*size */
+#define REG_ACL_PORT_ADR		(ACL_CTRL_BASE_ADDR + 0x00)  /* 96b */
+#define REG_ACL_PORT_AAR		(ACL_CTRL_BASE_ADDR + 0x60)  /* 08b */
+#define REG_ACL_PORT_ABER		(ACL_CTRL_BASE_ADDR + 0x68)  /* 14b */
+#define REG_ACL_PORT_ARACR		(ACL_CTRL_BASE_ADDR + 0x78)  /* 04b */
+#define REG_ACL_PORT_PCTRL		(ACL_CTRL_BASE_ADDR + 0x7C)  /* 04b */
+#define REG_ACL_PORT_FR_COUNT0		(ACL_CTRL_BASE_ADDR + 0x80)  /* 04b */
+#define REG_ACL_PORT_FR_COUNT1		(ACL_CTRL_BASE_ADDR + 0x84)  /* 04b */
+#define REG_ACL_PORT_FR_COUNT2		(ACL_CTRL_BASE_ADDR + 0x88)  /* 04b */
+#define REG_ACL_PORT_FR_COUNT3		(ACL_CTRL_BASE_ADDR + 0x8C)  /* 04b */
+#define REG_ACL_PORT_NMATCH		(ACL_CTRL_BASE_ADDR + 0x94)  /* 08b */
+#define REG_ACL_PORT_INT_STS		(ACL_CTRL_BASE_ADDR + 0xA0)  /* 01b */
+#define REG_ACL_PORT_INT_MASK		(ACL_CTRL_BASE_ADDR + 0xA2)  /* 01b */
+#define REG_ACL_PORT_SPARE		(ACL_CTRL_BASE_ADDR + 0xC0)  /* 04b */
+#define REG_ACL_PORT_TCAM_BIST0		(ACL_CTRL_BASE_ADDR + 0xD0)  /* 02b */
+#define REG_ACL_PORT_TCAM_BIST1		(ACL_CTRL_BASE_ADDR + 0xD2)  /* 01b */
+#define REG_ACL_PORT_TCAM_BIST2		(ACL_CTRL_BASE_ADDR + 0xD3)  /* 01b */
+#define REG_ACL_PORT_TCAM_BIST3		(ACL_CTRL_BASE_ADDR + 0xD4)  /* 01b */
+#define REG_ACL_PORT_TCAM_BITMAP	(ACL_CTRL_BASE_ADDR + 0xE0)  /* 16b */
+
+/** REG_ACL_PORT_INT_STS register defines**/
+#define ACL_FR_COUNT_MAX_VALUE			0xFFFFFFFF
+#define ACL_FR_COUNT_OVR0			BIT(1)
+#define ACL_FR_COUNT_OVR1			BIT(2)
+#define ACL_FR_COUNT_OVR2			BIT(3)
+#define ACL_FR_COUNT_OVR3			BIT(4)
+
+#define ACL_FR_CNTR_INTR_EN			0x10
+
+/* Parser control register defines */
+#define PCTRL_TWO_FORMAT_TWO_PARSER_EACH	(BIT(29) | BIT(30))
+#define PCTRL_KEYTYPE0_MULTI_FMT		BIT(27)
+#define PCTRL_KEYTYPE1_MULTI_FMT		BIT(26)
+#define PCTRL_KEYTYPE2_MULTI_FMT		BIT(25)
+#define PCTRL_KEYTYPE3_MULTI_FMT		BIT(24)
+#define PCTRL_KEYTYPE0_UNIV_FMT			0
+#define PCTRL_KEYTYPE1_UNIV_FMT			0
+#define PCTRL_KEYTYPE2_UNIV_FMT			0
+#define PCTRL_KEYTYPE3_UNIV_FMT			0
+#define PCTRL_KEY2_VLAN_TAG_EN			BIT(17)
+#define PCTRL_KEY3_VLAN_TAG_EN			BIT(16)
+#define PCTRL_KEY1_VLAN_TAG_EN			BIT(18)
+#define PCTRL_KEY0_VLAN_TAG_EN			BIT(19)
+
 #endif
