@@ -1116,18 +1116,6 @@ static int lan937x_config_cpu_port(struct dsa_switch *ds)
 		p->vid_member = (1 << i);
 		p->member = dev->port_mask;
 		lan937x_port_stp_state_set(ds, i, BR_STATE_DISABLED);
-
-		if (dev->ports[i].t1_leader) {
-			ret = lan937x_internal_phy_read(dev, i, 0x0009, &value);
-			if (ret < 0)
-				return ret;
-
-			value |= 0x0800;
-
-			ret = lan937x_internal_phy_write(dev, i, 0x0009, value);
-			if (ret < 0)
-				return ret;
-		}
 	}
 
 	return 0;

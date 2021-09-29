@@ -45,7 +45,6 @@ struct ksz_port {
 	u32 force:1;
 	u32 read:1;			/* read MIB counters in background */
 	u32 freeze:1;			/* MIB counter freeze is enabled */
-	u32 t1_leader:1;		/* T1 Phy leader/follower */
 
 	struct ksz_port_mib mib;
 	phy_interface_t interface;
