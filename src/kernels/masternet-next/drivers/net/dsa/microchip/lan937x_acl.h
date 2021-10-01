@@ -339,22 +339,6 @@ enum lan937x_acl_dissector_type {
 #define acl_tcam_addr(val)	(((u32)val) & ACL_ARACR_TCAM_ADDR_MASK)
 
  /* TCAM data structures */
-struct lan937x_acl_action {
-	bool frm_ts;
-	bool frm_cnt_en;
-	u8 cnt_sel;
-	bool str_en;
-	u8 str_idx;
-	bool rep_vlan_en;
-	u16 vlan_id;
-	u8 pri_mode;
-	u8 que_sel;
-	bool remark_pri_en;
-	u8 pri;
-	u8 map_mode;
-	u8 dst_port;
-};
-
 struct lan937x_acl_entry {
 	u8 acl_entry_index;
 	u8 acl_mask[MAX_ACL_DATA_MASK_SIZE];
@@ -497,42 +481,6 @@ struct lan937x_acl_byte_en {
 	u8 acl_data[6];
 	u8 acl_action[1];
 } __packed;
-
-struct lan937x_acl_parser_ctl_reg {
-	u8 key_fmt;
-	bool key_type[MAX_ACL_PARSER];
-	bool ip_opts[MAX_ACL_PARSER];
-	bool vlan_tag[MAX_ACL_PARSER];
-	bool abs_off[MAX_ACL_PARSER];
-	bool hsr_tag[MAX_ACL_PARSER];
-	bool snap_tag[MAX_ACL_PARSER];
-};
-
-struct lan937x_acl_frame_cnt {
-	bool clear_cnt[MAX_ACL_FRAME_COUNT];
-	u32 frm_cnt[MAX_ACL_FRAME_COUNT];
-};
-
-struct lan937x_acl_neg_match {
-	bool nmatch[MAX_ACL_ENTRIES];
-};
-
-struct lan937x_acl_interrupt_cfg {
-	bool frm_cnt_int[MAX_ACL_FRAME_COUNT];
-	bool tcm_op_done;
-};
-
-/* Packet Formats supported by TCAM */
-struct packet_universal {
-	u8  dst_mac[6];        /* destination eth addr */
-	u8  src_mac[6];        /* source ether addr */
-	u16 ether_type;        /* packet type ID field */
-} __packed;
-
-struct packet_extentions {
-	u16 offset;	/* offset address from start of packet */
-	u16 size;	/* Size of the extension */
-};
 
 struct vlan_tag {
 	u16 vlan_tpid;
