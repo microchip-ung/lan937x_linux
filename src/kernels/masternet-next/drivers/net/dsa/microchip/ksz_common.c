@@ -94,7 +94,8 @@ static void ksz_mib_read_work(struct work_struct *work)
 		mutex_unlock(&mib->cnt_mutex);
 	}
 
-	schedule_delayed_work(&dev->mib_read, dev->mib_read_interval);
+        if(dev->mib_read_interval)
+                schedule_delayed_work(&dev->mib_read, dev->mib_read_interval);
 }
 
 void ksz_init_mib_timer(struct ksz_device *dev)
@@ -455,8 +456,10 @@ EXPORT_SYMBOL(ksz_switch_register);
 void ksz_switch_remove(struct ksz_device *dev)
 {
 	/* timer started */
-	if (dev->mib_read_interval)
+	if (dev->mib_read_interval) {
+                dev->mib_read_interval = 0;
 		cancel_delayed_work_sync(&dev->mib_read);
+        }
 
 	dev->dev_ops->exit(dev);
 	dsa_unregister_switch(dev->ds);
