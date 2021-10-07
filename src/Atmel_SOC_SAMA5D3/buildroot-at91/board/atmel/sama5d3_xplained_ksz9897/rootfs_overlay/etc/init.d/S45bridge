@@ -66,12 +66,6 @@ create_br_dev() {
     done
 
     brctl addbr br0
-    if [ $VLAN -eq 2 ]; then
-        ifconfig eth$ETH 0.0.0.0
-        if [ -e /sys/class/net/br0/bridge/vlan_filtering ]; then
-            echo "write 1 to vlan_filtering to enable VLAN filtering"
-        fi
-    fi
 
     p=$START
     while [ $p -lt $PORTS ]; do
