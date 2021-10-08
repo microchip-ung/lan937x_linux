@@ -451,46 +451,32 @@ static int lan87xx_config_init(struct phy_device *phydev)
 	return rc < 0 ? rc : 0;
 }
 
-static int lan937x_read_master_slave(struct phy_device *phydev)
+static int lan937x_read_status(struct phy_device *phydev)
 {
-	int val;
+	int ret;
 
 	phydev->master_slave_get = MASTER_SLAVE_CFG_UNKNOWN;
 	phydev->master_slave_state = MASTER_SLAVE_STATE_UNKNOWN;
 
-	val = access_ereg(phydev, PHYACC_ATTR_MODE_READ, PHYACC_ATTR_BANK_SMI,
-			  0x0A, 0);
-	if (val < 0)
-		return val;
+	ret = genphy_update_link(phydev);
+	if (ret)
+		return ret;
 
-	if ((val & 0x4000) != 0x4000) {
-		phydev->master_slave_get = MASTER_SLAVE_CFG_SLAVE_FORCE;
-		phydev->master_slave_state = MASTER_SLAVE_STATE_SLAVE;
-	} else {
+	ret = phy_read(phydev, MII_CTRL1000);
+	if (ret < 0)
+		return ret;
+	if (ret & CTL1000_AS_MASTER)
 		phydev->master_slave_get = MASTER_SLAVE_CFG_MASTER_FORCE;
-		phydev->master_slave_state = MASTER_SLAVE_STATE_MASTER;
-	}
-
-	return 0;
-}
-
-static int lan937x_read_status(struct phy_device *phydev)
-{
-	int val;
-
-	val = phy_read(phydev, T1_MODE_STAT_REG);
-
-	if (val < 0)
-		return val;
-
-	if (val & T1_LINK_UP_MSK)
-		phydev->link = 1;
 	else
-		phydev->link = 0;
+		phydev->master_slave_get = MASTER_SLAVE_CFG_SLAVE_FORCE;
 
-	val = lan937x_read_master_slave(phydev);
-	if (val < 0)
-		return val;
+	ret = phy_read(phydev, MII_STAT1000);
+	if (ret < 0)
+		return ret;
+	if (ret & LPA_1000MSRES)
+		phydev->master_slave_state = MASTER_SLAVE_STATE_MASTER;
+	else
+		phydev->master_slave_state = MASTER_SLAVE_STATE_SLAVE;
 
 	phydev->duplex = DUPLEX_FULL;
 	phydev->speed = SPEED_100;
@@ -824,11 +810,12 @@ static int lan87xx_cable_test_get_status(struct phy_device *phydev,
 
 static int lan937x_config_aneg(struct phy_device *phydev)
 {
+	int ret;
 	u16 ctl = 0;
 
 	switch (phydev->master_slave_set) {
 	case MASTER_SLAVE_CFG_MASTER_FORCE:
-		ctl |= T1_M_CFG;
+		ctl |= CTL1000_AS_MASTER;
 		break;
 	case MASTER_SLAVE_CFG_SLAVE_FORCE:
 		break;
@@ -840,8 +827,11 @@ static int lan937x_config_aneg(struct phy_device *phydev)
 		return -EOPNOTSUPP;
 	}
 
-	return access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_SMI,
-					T1_M_CTRL_REG, ctl, T1_M_CFG);
+	ret = phy_modify_changed(phydev, MII_CTRL1000, CTL1000_AS_MASTER, ctl);
+	if (ret == 1)
+		ret = genphy_soft_reset(phydev);
+
+	return ret;
 }
 
 static int lan937x_config_init(struct phy_device *phydev)
