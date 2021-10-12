@@ -93,6 +93,22 @@
 #define LAN87XX_MAX_SQI 		0x07
 #define LAN87XX_SQI_ENTRY		200
 
+struct lan87xx_sqi_range {
+	u16 start;
+	u16 end;
+};
+
+static const struct lan87xx_sqi_range lan87xx_sqi_map[] = {
+	{ 299, 65535 },
+	{ 237, 298 },
+	{ 189, 236 },
+	{ 150, 188 },
+	{ 119, 149 },
+	{  94, 118 },
+	{  75, 93 },
+	{   0, 74 },
+};
+
 #define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
 #define DRIVER_DESC	"Microchip LAN87XX/LAN937X T1 PHY driver"
 
@@ -493,14 +509,11 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 	int sqi_avg = 0, link_avg = 0;
 	unsigned short temp;
 	int link_temp,i,j;
-	int sqi_num;
+	int sqi;
+	int ret;
 
 	access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_DSP,
 				   0x04, 0x00, 0x01);
-
-	/* Enable SQI measurement */
-	access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_DSP,
-				   0x2E, 0x72, 0x7F);
 
 	/* Below effectively throws away first reading - update 0x82/0x83
 	* required delay before reading DSP 0x83 otherwise it will
@@ -517,9 +530,12 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 		raw_table[i] = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
 					   PHYACC_ATTR_BANK_DSP, 0x83, 0x0);
 
-		lan937x_read_status(phydev);
+		ret = genphy_update_link(phydev);
+		if (ret)
+			return ret;
+
 		link_table[i] = phydev->link;
-		usleep_range(300, 700);
+		usleep_range(300, 500);
 	}
 
 	/*Sorting arrays*/
@@ -547,32 +563,21 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 	}
 
 	/*Calculating SQI number*/
-	sqi_avg /= 120;
+	sqi_avg /= LAN87XX_SQI_ENTRY;
 	link_avg /= LAN87XX_SQI_ENTRY;
 
-	if ((sqi_avg <= 74) && (sqi_avg >=0)) {
-		sqi_num = 7;
-	} else if ((sqi_avg <= 93) && (sqi_avg >=75)) {
-		sqi_num = 6;
-	} else if ((sqi_avg <= 118) && (sqi_avg >=94)) {
-		sqi_num = 5;
-	} else if ((sqi_avg <= 149) && (sqi_avg >=119)) {
-		sqi_num = 4;
-	} else if ((sqi_avg <= 188) && (sqi_avg >=150)) {
-		sqi_num = 3;
-	} else if ((sqi_avg <= 236) && (sqi_avg >=189)) {
-		sqi_num = 2;
-	} else if ((sqi_avg <= 298) && (sqi_avg >=237)) {
-		sqi_num = 1;
-	} else {
-		sqi_num = 0;
-	}
-
 	if (link_avg != LAN87XX_LINK_UP) {
-		sqi_num = 0;
+		return 0;
+	}
+	else {
+		for (sqi = 0; sqi < ARRAY_SIZE(lan87xx_sqi_map); sqi++) {
+			if (sqi_avg >= lan87xx_sqi_map[sqi].start &&
+			    sqi_avg <= lan87xx_sqi_map[sqi].end)
+				return sqi;
+		}
 	}
 
-	return sqi_num;
+	return -EINVAL;
 }
 
 static int lan87xx_get_sqi_max(struct phy_device *phydev)
