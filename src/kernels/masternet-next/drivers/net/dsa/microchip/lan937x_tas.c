@@ -94,8 +94,6 @@ int lan937x_setup_tc_taprio(struct dsa_switch *ds, int port,
 		cycle_cnt = qopt->entries[i].interval / 12;
 		event |= (cycle_cnt & TAS_GATE_CYCLE_M);
 
-		pr_err("event value %x", event);
-
 		ret = lan937x_pwrite32(dev, port, REG_PORT_TAS_EVENT__4, event);
 		if (ret)
 			return ret;
