@@ -17,33 +17,51 @@ static int lan937x_cut_through_get(struct ksz_device *dev, u8 *value)
 
 /* Each bit in value correspond to one port.
  * For example, if bit 0 is 1, then it enable the cut through for port 0
- * otherwise disable.
+ * otherwise disable. Cut-through will enabled only if the TAS is enabled
+ * for the port.
  */
 static int lan937x_cut_through_set(struct ksz_device *dev, u8 value)
 {
 	struct dsa_switch *ds = dev->ds;
+	u8 tas_gate_ctl;
 	bool enable;
 	int port;
 	int ret;
 
-	dev->cut_through_enable = value;
 
 	for (port = 0; port < ds->num_ports; port++) {
 		if (!dsa_is_user_port(ds, port))
 			continue;
 
-		if(value & (1<<port))
+		if (value & (1<<port)) {
+			ret = lan937x_pread8(dev, port,
+					     REG_PORT_TAS_GATE_CTRL__1,
+					     &tas_gate_ctl);
+			if (ret)
+				return ret;
+
+
+			if (!(tas_gate_ctl & TAS_GATE_ENABLE)) { 
+				dev_err(dev->dev, "Cut through cannot be 
+					enabled for port %d", port);
+				continue;
+			}
+
+			dev->cut_through_enable |= (1<<port);
 			enable = 1;
-		else
+		}
+		else {
+			dev->cut_through_enable &= ~(1<<port);
 			enable = 0;
+		}
 
 		ret = lan937x_port_cfg(dev, port, REG_PORT_TAS_CTL__1,
 				       TAS_CUT_THROUGH, enable);
 		if (ret)
-			break;
+			return ret;
 	}
 
-	return ret;
+	return 0;
 }
 
 enum lan937x_devlink_param_id {
