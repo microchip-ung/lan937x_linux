@@ -354,7 +354,7 @@ static inline void set_que_en(u8 *act)
 
 static inline void set_que_sel(u8 *act, u8 pri)
 {
-	act[3] |= ((pri >> TCAM_AAR_QUE_SEL_POS) & LAN937X_ACL_AAR_QUE_SEL);
+	act[3] |= ((pri << TCAM_AAR_QUE_SEL_POS) & LAN937X_ACL_AAR_QUE_SEL);
 }
 
 static inline void set_map_mode(u8 *act, u8 MM)
