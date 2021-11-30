@@ -64,5 +64,18 @@ elif [ $1 == "13" ]; then
 	ip link add link $iface name $iface.5 type vlan id 5 egress-qos-map 1:1 2:2 3:3 4:4 5:5 6:6 7:7
 	ip link set dev iface.5 up
 elif [ $1 == "14" ]; then
-	./tsn_talker -d 54:ee:75:5d:95:2f -i $iface -p 7
+	mount -t debugfs none /sys/kernel/debug
+	tc qdisc add dev $iface root handle 100: taprio \
+		num_tc 8 \
+		map 0 1 2 3 4 5 6 7 \
+		queues 1@0 1@1 1@2 1@3 1@4 1@5 1@6 1@7 \
+		base-time 192453000000000\
+		sched-entry S 03 20000000 \
+		sched-entry S 03 20000000 \
+		flags 0x2
+	sleep 2
+	cat -n /sys/kernel/debug/regmap/spi1.3-16/registers | grep $taprio_stat
+elif [ $1 == "15" ]; then
+	echo -n '0x1900 '$2 > /sys/kernel/debug/regmap/spi1.3-32/registers
+	cat -n /sys/kernel/debug/regmap/spi1.3-8/registers | grep 001920 
 fi
