@@ -8,58 +8,70 @@
 #include "lan937x_dev.h"
 #include "lan937x_devlink.h"
 
-static int lan937x_cut_through_get(struct ksz_device *dev, u8 *value)
+static int lan937x_cut_through_get(struct ksz_device *dev, u16 *value)
 {
 	*value = dev->cut_through_enable;
 
 	return 0;
 }
 
-/* Each bit in value correspond to one port.
- * For example, if bit 0 is 1, then it enable the cut through for port 0
- * otherwise disable. Cut-through will enabled only if the TAS is enabled
- * for the port.
+/* Devlink param is not accepting the hex decimal number. So as of now
+ * 1000, 2000, is used to differentiate the lan1, 2 and so on.
+ * Bit 0 to 7 corresponds to each queue. So if 1255 then for lan1 all the
+ * queues are cut-through enabled.
  */
-static int lan937x_cut_through_set(struct ksz_device *dev, u8 value)
+static int lan937x_cut_through_set(struct ksz_device *dev, u16 value)
 {
 	struct dsa_switch *ds = dev->ds;
+	u8 queue = (value % 1000);
+	u8 port = (value / 1000);
 	u8 tas_gate_ctl;
 	bool enable;
-	int port;
 	int ret;
+	u8 i;
 
+	if ((port == 0) || (port > ds->num_ports)) {
+		dev_err(dev->dev, "Port number should be from 1 to %d",
+			ds->num_ports);
+		return -EINVAL;
+	}
 
-	for (port = 0; port < ds->num_ports; port++) {
-		if (!dsa_is_user_port(ds, port))
-			continue;
+	//Port starts from value 0
+	port = port - 1;
 
-		if (value & (1<<port)) {
-			ret = lan937x_pread8(dev, port,
-					     REG_PORT_TAS_GATE_CTRL__1,
-					     &tas_gate_ctl);
-			if (ret)
-				return ret;
+	if (!dsa_is_user_port(ds, port)) {
+		dev_err(dev->dev, "Port is not a user port");
+		return -EINVAL;
+	}
 
+	ret = lan937x_pread8(dev, port, REG_PORT_TAS_GATE_CTRL__1,
+			     &tas_gate_ctl);
+	if (ret)
+		return ret;
 
-			if (!(tas_gate_ctl & TAS_GATE_ENABLE)) { 
-				dev_err(dev->dev, "Cut through cannot be 
-					enabled for port %d", port);
-				continue;
-			}
+	if (!(tas_gate_ctl & TAS_GATE_ENABLE)) {
+		dev_err(dev->dev, "TAS should be enabled before cut-through");
+		return -EINVAL;
+	}
 
-			dev->cut_through_enable |= (1<<port);
+	for (i = 0; i < ds->num_tx_queues; i++) {
+		ret = lan937x_pwrite32(dev, port, REG_PORT_MTI_QUEUE_INDEX__4,
+				       i);
+		if (ret)
+			return ret;
+
+		if (queue & (1<<i))
 			enable = 1;
-		}
-		else {
-			dev->cut_through_enable &= ~(1<<port);
+		else
 			enable = 0;
-		}
 
 		ret = lan937x_port_cfg(dev, port, REG_PORT_TAS_CTL__1,
 				       TAS_CUT_THROUGH, enable);
 		if (ret)
 			return ret;
 	}
+
+	dev->cut_through_enable = value;
 
 	return 0;
 }
@@ -77,7 +89,7 @@ int lan937x_devlink_param_get(struct dsa_switch *ds, u32 id,
 
 	switch (id) {
 	case LAN937X_DEVLINK_PARAM_ID_CUT_THROUGH:
-		ret = lan937x_cut_through_get(dev, &ctx->val.vu8);
+		ret = lan937x_cut_through_get(dev, &ctx->val.vu16);
 		break;
 	default:
 		ret = -EOPNOTSUPP;
@@ -95,7 +107,7 @@ int lan937x_devlink_param_set(struct dsa_switch *ds, u32 id,
 
 	switch (id) {
 	case LAN937X_DEVLINK_PARAM_ID_CUT_THROUGH:
-		ret = lan937x_cut_through_set(dev, ctx->val.vu8);
+		ret = lan937x_cut_through_set(dev, ctx->val.vu16);
 		break;
 	default:
 		ret = -EOPNOTSUPP;
@@ -107,7 +119,7 @@ int lan937x_devlink_param_set(struct dsa_switch *ds, u32 id,
 
 static const struct devlink_param lan937x_devlink_params[] = {
 	DSA_DEVLINK_PARAM_DRIVER(LAN937X_DEVLINK_PARAM_ID_CUT_THROUGH,
-				 "cut_through", DEVLINK_PARAM_TYPE_U8,
+				 "cut_through", DEVLINK_PARAM_TYPE_U16,
 				 BIT(DEVLINK_PARAM_CMODE_RUNTIME)),
 };
 
