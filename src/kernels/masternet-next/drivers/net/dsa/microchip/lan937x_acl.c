@@ -708,6 +708,8 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
 			break;
 		case LAN937X_ACT_STREAM_POLICE:
 		case LAN937X_ACT_STREAM_GATE:
+			set_map_mode(acl_action, 2);
+			set_dst_port(acl_action, 0xff);
 			set_strm_en(acl_action, resrc->type.strm_flt.en);
 			set_strm_id(acl_action, resrc->type.strm_flt.index);
 			break;
