@@ -474,9 +474,14 @@ static int lan937x_read_status(struct phy_device *phydev)
 	phydev->master_slave_get = MASTER_SLAVE_CFG_UNKNOWN;
 	phydev->master_slave_state = MASTER_SLAVE_STATE_UNKNOWN;
 
-	ret = genphy_update_link(phydev);
-	if (ret)
+	ret = phy_read(phydev, T1_MODE_STAT_REG);
+	if (ret < 0)
 		return ret;
+
+	if (ret & T1_LINK_UP_MSK)
+		phydev->link = 1;
+	else
+		phydev->link = 0;
 
 	ret = phy_read(phydev, MII_CTRL1000);
 	if (ret < 0)
