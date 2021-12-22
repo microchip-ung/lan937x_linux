@@ -419,58 +419,72 @@ static void lan937x_config_gbit(struct ksz_device *dev, bool gbit, u8 *data)
 		*data |= PORT_MII_NOT_1GBIT;
 }
 
-static void lan937x_update_rgmii_delay (struct ksz_device *dev, int port, bool is_tx)
+static void lan937x_update_rgmii_tx_rx_delay (struct ksz_device *dev, int port, bool is_tx)
 {
 	struct ksz_port *p = &dev->ports[port];
 	u16 data16;
 	int reg;
+	u8 val;
 
-	/* choose register based on tx/rx */
-	if (is_tx)
+	/* Apply different codes based on the ports as per characterization
+	 * as per characterization results
+	 */
+	if (is_tx) {
 		reg = REG_PORT_XMII_CTRL_5;
-	else
+		val = (port == LAN937X_RGMII_1_PORT) ? RGMII_1_TX_DELAY_2NS :
+						       RGMII_2_TX_DELAY_2NS;
+	} else {
 		reg = REG_PORT_XMII_CTRL_4;
+		val = (port == LAN937X_RGMII_1_PORT) ? RGMII_1_RX_DELAY_2NS : 
+						       RGMII_2_RX_DELAY_2NS;
+	}
 
 	lan937x_pread16(dev, port, reg, &data16);
 
 	/* clear tune Adjust */
-	data16 &=~ (PORT_RX_TUNE_ADJ);
-
-	data16 |= (p->rgmii_tx_val << 7);
+	data16 &=~ (PORT_TUNE_ADJ);
+	data16 |= (val << 7);
 
 	/* write tune Adjust */
 	lan937x_pwrite16(dev, port, reg, data16);
 
-	data16 |= PORT_TX_RX_DLL_RESET;
+	data16 |= PORT_DLL_RESET;
 
 	/* write DLL reset to take effect */
 	lan937x_pwrite16(dev, port, reg, data16);
 }
 
-static void lan937x_apply_rgmii_delay(struct ksz_device *dev, int port)
+static void lan937x_apply_rgmii_delay(struct ksz_device *dev, int port, 
+				      phy_interface_t interface, u8 val)
 {
 	struct ksz_port *p = &dev->ports[port];
-	u8 data8;
 
-	/* clear the bits */
-	lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
-	data8 &= ~(PORT_RGMII_ID_EG_ENABLE | PORT_RGMII_ID_IG_ENABLE);
+	val &= ~(PORT_RGMII_ID_EG_ENABLE | PORT_RGMII_ID_IG_ENABLE);
 
-	if (p->rgmii_tx_val) {
-		lan937x_update_rgmii_delay (dev, port, true);
-		data8 |= PORT_RGMII_ID_EG_ENABLE;
+	if (interface == PHY_INTERFACE_MODE_RGMII_TXID ||
+	    interface == PHY_INTERFACE_MODE_RGMII_ID) {
+		/* if the delay is 0, let us not enable DLL */
+		if (p->rgmii_tx_val) {
+			lan937x_update_rgmii_tx_rx_delay(dev, port, true);
+			dev_info(dev->dev, "Applied rgmii tx delay for the port %d\n",
+				port);
+			val |= PORT_RGMII_ID_EG_ENABLE;
+		}
 	}
-	
-	if (p->rgmii_rx_val) {
-		lan937x_update_rgmii_delay (dev, port, false);
-		data8 |= PORT_RGMII_ID_IG_ENABLE;
+
+	if (interface == PHY_INTERFACE_MODE_RGMII_RXID ||
+	    interface == PHY_INTERFACE_MODE_RGMII_ID) {
+		/* if the delay is 0, let us not enable DLL */
+		if (p->rgmii_rx_val) {
+			lan937x_update_rgmii_tx_rx_delay(dev, port, false);
+			dev_info(dev->dev, "Applied rgmii rx delay for the port %d\n",
+				port);
+			val |= PORT_RGMII_ID_IG_ENABLE;
+		}
 	}
 
 	/* Enable RGMII internal delays */
-	lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, data8);
-
-	dev_info(dev->dev, "Applied rgmii delay for"
-		 " port %d\n",port);
+	lan937x_pwrite8(dev, port, REG_PORT_XMII_CTRL_1, val);
 }
 
 void lan937x_mac_config(struct ksz_device *dev, int port,
@@ -504,8 +518,12 @@ void lan937x_mac_config(struct ksz_device *dev, int port,
 		data8 |= PORT_RGMII_SEL;
 
 		/* Apply rgmii internal delay for the mac */
-		lan937x_apply_rgmii_delay (dev, port);
-		break;
+		lan937x_apply_rgmii_delay(dev, port, interface, data8);
+
+		/* rgmii delay configuration is already applied above,
+		 * hence return from here as no changes required
+		 */
+		return;
 	default:
 		dev_err(dev->dev, "Unsupported interface '%s' for port %d\n",
 			phy_modes(interface), port);

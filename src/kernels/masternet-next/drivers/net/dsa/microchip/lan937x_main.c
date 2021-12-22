@@ -1069,8 +1069,6 @@ static int lan937x_config_cpu_port(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
 	struct ksz_port *p;
-	u16 value;
-	int ret;
 	int i;
 
 	ds->num_ports = dev->port_cnt;
@@ -1121,39 +1119,27 @@ static int lan937x_config_cpu_port(struct dsa_switch *ds)
 	return 0;
 }
 
-static u8 lan937x_rgmii_dly_reg_val(int port, u32 val)
-{
-	u8 reg_val;
-
-	/* force minimum delay if delay is less than min delay */
-	if (val && (val < 2170))
-		val = 2170;
-
-	/* maximum delay is 4ns */
-	if (val > 4000)
-		val = 4000;
-
-	/* different calculations to be applied based on the ports 
-	 * as per characterization results
-	 */	
-	if (port == LAN937X_RGMII_2_PORT)
-		reg_val =  DIV_ROUND_CLOSEST((val - 2170), 34);
-		
-	if (port == LAN937X_RGMII_1_PORT) 
-		reg_val =  DIV_ROUND_CLOSEST((val - 1450), 36);
-
-	return reg_val;
-}
-
-static void lan937x_set_rgmii_delay(struct ksz_device *dev, int port,
-				    u32 val, bool is_tx)
+static int lan937x_set_rgmii_delay(struct ksz_device *dev, int port,
+				   u32 val, bool is_tx)
 {
 	struct ksz_port *p = &dev->ports[port];
+	const char *name[2] = { "rx", "tx" };
 
+	/* alert if delay is out of range */
+	if (val != 0 && val != 2000) {
+		dev_err(dev->dev,
+			"rgmii %s delay %d is out of range for the port %d\n",
+			name[is_tx], val, port);
+		return -EOPNOTSUPP;
+	}
+
+	/* get the valid value & store it for delay calculation */
 	if (is_tx)
-		p->rgmii_tx_val = lan937x_rgmii_dly_reg_val(port, val);
+		p->rgmii_tx_val = val;
 	else
-		p->rgmii_rx_val = lan937x_rgmii_dly_reg_val(port, val);
+		p->rgmii_rx_val = val;
+
+	return 0;
 
 }
 

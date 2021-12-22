@@ -479,8 +479,8 @@
 #define PORT_TX_TUNE_ADJ		0x3F80
 
 #define REG_PORT_XMII_CTRL_5		0x0306
-#define PORT_TX_RX_DLL_RESET		BIT(15)
-#define PORT_RX_TUNE_ADJ		0x3F80
+#define PORT_DLL_RESET			BIT(15)
+#define PORT_TUNE_ADJ			0x3F80
 
 /* 4 - MAC */
 #define REG_PORT_MAC_CTRL_0		0x0400
@@ -1089,5 +1089,10 @@
 #define PCTRL_KEY3_VLAN_TAG_EN			BIT(16)
 #define PCTRL_KEY1_VLAN_TAG_EN			BIT(18)
 #define PCTRL_KEY0_VLAN_TAG_EN			BIT(19)
+
+#define RGMII_1_TX_DELAY_2NS 		2
+#define RGMII_2_TX_DELAY_2NS 		0
+#define RGMII_1_RX_DELAY_2NS 		0x1B
+#define RGMII_2_RX_DELAY_2NS 		0x14
 
 #endif
