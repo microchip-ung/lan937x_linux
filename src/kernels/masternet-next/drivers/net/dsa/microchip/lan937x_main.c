@@ -651,7 +651,7 @@ static int lan937x_port_fdb_dump(struct dsa_switch *ds, int port,
 
 			lan937x_convert_alu(&alu, alu_table);
 
-			if (alu.port_forward & BIT(port)) {
+			if ((lan937x_data & ALU_VALID) && alu.port_forward & BIT(port)) {
 				ret = cb(alu.mac, alu.fid, alu.is_static, data);
 				if (ret)
 					goto exit;
