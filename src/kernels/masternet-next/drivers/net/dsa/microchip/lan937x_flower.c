@@ -158,6 +158,8 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 			key->acl_dissector_map |= IPV6_NXTHDR_DISSECTOR_PRESENT;
 			match_proto = true;
 		}
+		if ((proto != ETH_P_ALL) && (proto != ETH_P_8021Q) && (match_proto == false))
+			return -EOPNOTSUPP;
 	}
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ETH_ADDRS)) {
