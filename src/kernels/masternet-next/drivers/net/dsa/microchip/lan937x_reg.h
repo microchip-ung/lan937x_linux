@@ -1090,9 +1090,9 @@
 #define PCTRL_KEY1_VLAN_TAG_EN			BIT(18)
 #define PCTRL_KEY0_VLAN_TAG_EN			BIT(19)
 
-#define RGMII_1_TX_DELAY_2NS 		2
-#define RGMII_2_TX_DELAY_2NS 		0
+#define RGMII_1_TX_DELAY_2NS 		0x1B	
+#define RGMII_2_TX_DELAY_2NS 		0x1B
 #define RGMII_1_RX_DELAY_2NS 		0x1B
-#define RGMII_2_RX_DELAY_2NS 		0x14
+#define RGMII_2_RX_DELAY_2NS 		0x1B
 
 #endif
