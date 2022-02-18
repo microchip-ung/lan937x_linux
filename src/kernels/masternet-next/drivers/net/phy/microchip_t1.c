@@ -520,6 +520,10 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 	access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_DSP,
 				   0x04, 0x00, 0x01);
 
+	 /* Enable SQI measurement */
+	access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_DSP,
+				   0x2E, 0x72, 0x7F);
+
 	/* Below effectively throws away first reading - update 0x82/0x83
 	* required delay before reading DSP 0x83 otherwise it will
 	* return a high value on first read
