@@ -246,13 +246,13 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 	case BR_STATE_DISABLED:
 		data |= PORT_LEARN_DISABLE;
 		break;
+	case BR_STATE_BLOCKING:
 	case BR_STATE_LISTENING:
-		data |= (PORT_RX_ENABLE | PORT_LEARN_DISABLE);
+		data |= PORT_LEARN_DISABLE;
 		if (p->stp_state == BR_STATE_DISABLED)
 			member = dev->host_mask | p->vid_member;
 		break;
 	case BR_STATE_LEARNING:
-		data |= PORT_RX_ENABLE;
 		break;
 	case BR_STATE_FORWARDING:
 		data |= (PORT_TX_ENABLE | PORT_RX_ENABLE);
@@ -263,11 +263,6 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 			dev->member |= (1 << port);
 			member = dev->member;
 		}
-		break;
-	case BR_STATE_BLOCKING:
-		data |= PORT_LEARN_DISABLE;
-		if (p->stp_state == BR_STATE_DISABLED)
-			member = dev->host_mask | p->vid_member;
 		break;
 	default:
 		dev_err(ds->dev, "invalid STP state: %d\n", state);
@@ -1187,6 +1182,35 @@ static int lan937x_parse_dt_rgmii_delay(struct ksz_device *dev)
 	return 0;
 }
 
+static int lan937x_enable_rsvd__multicast(struct ksz_device *dev)
+{
+	int ret;
+
+	/* Enable Reserved multicast table */
+	lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_RESV_MCAST_ENABLE, true);
+
+	/* Set the Override bit for forwarding BPDU packet to CPU */
+	ret = ksz_write32(dev, REG_SW_ALU_VAL_B,
+			ALU_V_OVERRIDE | BIT(dev->cpu_port));
+	if (ret < 0)
+		return ret;
+
+	ret = ksz_write32(dev, REG_SW_ALU_STAT_CTRL__4,
+		       	ALU_STAT_START | ALU_RESV_MCAST_ADDR | ALU_STAT_WRITE);
+	if (ret < 0)
+		return ret;
+
+	/* wait to be finished */
+	ret = lan937x_wait_alu_sta_ready(dev);
+	if (ret < 0) {
+		dev_err(dev->dev, "Failed to update Reserved Multicast table\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+
 static int lan937x_setup(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
@@ -1216,7 +1240,7 @@ static int lan937x_setup(struct dsa_switch *ds)
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_1, NO_EXC_COLLISION_DROP, true);
 
 	/* Enable reserved multicast table */
-	lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_RESV_MCAST_ENABLE, true);
+	lan937x_enable_rsvd__multicast(dev);
 
 	/* enable global MIB counter freeze function */
 	lan937x_cfg(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FREEZE, true);

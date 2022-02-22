@@ -78,6 +78,9 @@ create_br_dev() {
     done
 
     ifconfig br0 $SUBNET1.$SUBNET2.$SUBNET3.$SUBNET4
+
+    #Enable the STP on the port
+    brctl stp br0 on
 }
 
 start() {
