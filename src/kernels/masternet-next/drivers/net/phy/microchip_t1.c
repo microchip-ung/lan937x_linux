@@ -482,6 +482,7 @@ static int lan87xx_update_link(struct phy_device *phydev)
 	else
 		phydev->link = 0;
 
+
 	return rc;
 }
 
@@ -524,8 +525,8 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 {
 	u16 raw_table[LAN87XX_SQI_ENTRY];
 	u8 link_table[LAN87XX_SQI_ENTRY];
-	u8 link_avg;
 	u16 sqi_avg;
+	u8 link_avg;
 	u16 temp;
 	u8 i, j;
 	int rc;
@@ -549,8 +550,7 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 		return rc;
 
 	/* Below effectively throws away first reading - update 0x82/0x83
-	 * required delay before reading DSP 0x83 otherwise it will
-	 * return a high value on first read
+	 * required delay before reading DSP 0x83.
 	 */
 	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_DSP,
 					T1_COEF_RW_CTL_CFG, 0x01, 0x01);
@@ -595,18 +595,19 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 
 	/* Discarding outliers */
 	for (i = 0; i < LAN87XX_SQI_ENTRY; i++) {
+		link_avg += link_table[i];
+
 		if ((i >= 40) && (i <= 160)) {
 			sqi_avg += raw_table[i];
 		}
 
-		link_avg += link_table[i];
 	}
 
 	/* Calculating SQI number */
-	sqi_avg /= 200;
+	sqi_avg /= 120;
 	link_avg /= LAN87XX_SQI_ENTRY;
 
-	if (link_avg < T1_LINK_UP_MSK) {
+	if (link_avg != T1_LINK_UP_MSK) {
 		return 0;
 	}
 
