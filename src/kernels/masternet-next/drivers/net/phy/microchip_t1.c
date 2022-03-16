@@ -772,9 +772,8 @@ static int lan87xx_sqi_cmp(const void *a, const void *b)
 static int lan87xx_get_sqi(struct phy_device *phydev)
 {
 	u16 raw_table[LAN87XX_SQI_ENTRY];
-	u8 link_table[LAN87XX_SQI_ENTRY];
-	u32 sqi_avg;
-	u8 link_avg;
+	u32 sqi_avg = 0;
+	u8 i;
 	int rc;
 
 	rc = lan87xx_update_link(phydev);
@@ -806,6 +805,14 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 	usleep_range(4000, 5000);
 
 	for (i = 0; i < LAN87XX_SQI_ENTRY; i++) {
+
+		rc = lan87xx_update_link(phydev);
+		if (rc < 0)
+			return rc;
+
+		if (phydev->link == 0)
+			return 0;
+
 		rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_DSP,
 						T1_COEF_RW_CTL_CFG, 0x01, 0x01);
 		if (rc < 0)
@@ -815,13 +822,7 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 					   PHYACC_ATTR_BANK_DSP,
 					   T1_SQI_SQU_MEAN_MSB, 0x0);
 
-		rc = lan87xx_update_link(phydev);
-		if (rc < 0)
-			return rc;
-
-		link_table[i] = phydev->link;
-
-		usleep_range(300, 500);
+		usleep_range(30, 50);
 	}
 
 	/* Sorting arrays */
@@ -829,18 +830,12 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 
 	/* Discarding outliers */
 	for (i = 0; i < LAN87XX_SQI_ENTRY; i++) {
-		link_avg += link_table[i];
-
 		if (i >= 40 && i <= 160)
 			sqi_avg += raw_table[i];
 	}
 
 	/* Calculating SQI number */
 	sqi_avg /= 121;
-	link_avg /= LAN87XX_SQI_ENTRY;
-
-	if (link_avg != T1_LINK_UP_MSK)
-		return 0;
 
 	for (i = 0; i < ARRAY_SIZE(lan87xx_sqi_map); i++) {
 		if (sqi_avg >= lan87xx_sqi_map[i].start &&
