@@ -9,6 +9,7 @@
 #include <linux/ethtool.h>
 #include <linux/ethtool_netlink.h>
 #include <linux/bitfield.h>
+#include <linux/sort.h>
 
 #define PHY_ID_LAN87XX				0x0007c150
 #define PHY_ID_LAN937X				0x0007c180
@@ -763,14 +764,17 @@ static int lan87xx_config_aneg(struct phy_device *phydev)
 	return rc;
 }
 
+static int lan87xx_sqi_cmp(const void *a, const void *b) 
+{
+	return *(u16 *)a - *(u16 *)b;
+}
+
 static int lan87xx_get_sqi(struct phy_device *phydev)
 {
 	u16 raw_table[LAN87XX_SQI_ENTRY];
 	u8 link_table[LAN87XX_SQI_ENTRY];
-	u16 sqi_avg;
+	u32 sqi_avg;
 	u8 link_avg;
-	u16 temp;
-	u8 i, j;
 	int rc;
 
 	rc = lan87xx_update_link(phydev);
@@ -821,19 +825,7 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 	}
 
 	/* Sorting arrays */
-	for (i = 0; i < LAN87XX_SQI_ENTRY; i++) {
-		for (j = 0; j < LAN87XX_SQI_ENTRY; j++) {
-			if (raw_table[j] > raw_table[i]) {
-				temp = raw_table[i];
-				raw_table[i] = raw_table[j];
-				raw_table[j] = temp;
-
-				temp = link_table[i];
-				link_table[i] = link_table[j];
-				link_table[j] = temp;
-			}
-		}
-	}
+	sort(raw_table, LAN87XX_SQI_ENTRY, sizeof(u16), lan87xx_sqi_cmp, NULL);
 
 	/* Discarding outliers */
 	for (i = 0; i < LAN87XX_SQI_ENTRY; i++) {
@@ -844,7 +836,7 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 	}
 
 	/* Calculating SQI number */
-	sqi_avg /= 120;
+	sqi_avg /= 121;
 	link_avg /= LAN87XX_SQI_ENTRY;
 
 	if (link_avg != T1_LINK_UP_MSK)
