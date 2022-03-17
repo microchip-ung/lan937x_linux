@@ -73,6 +73,8 @@
 #define T1_COEF_RW_CTL_CFG		0x0D
 #define T1_SQI_CONFIG_REG		0x2E
 #define T1_SQI_CONFIG2_REG		0x4A
+#define T1_DCQ_MSE_REG			0xC1
+#define T1_MSE_VLD_MSK			BIT(9)
 #define T1_DCQ_SQI_REG			0xC3
 #define T1_DCQ_SQI_MSK			GENMASK(3,1)
 #define T1_MDIO_CONTROL2_REG		0x10
@@ -789,8 +791,9 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 	/* Below effectively throws away first reading 
 	 * required delay before reading DSP. 
 	 */
-	rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_DSP,
-					T1_COEF_RW_CTL_CFG, 0x0301, 0x0301);
+	rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
+			 PHYACC_ATTR_BANK_DSP,
+			 T1_COEF_RW_CTL_CFG, 0x0301);
 	if (rc < 0)
 		return rc;
 
@@ -805,21 +808,42 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 		if (phydev->link == 0)
 			return 0;
 
-		rc = access_ereg_modify_changed(phydev, PHYACC_ATTR_BANK_DSP,
-						T1_COEF_RW_CTL_CFG, 0x0301,
-					       	0x0301);
+		rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
+				 PHYACC_ATTR_BANK_DSP,
+				 T1_COEF_RW_CTL_CFG, 0x0301);
 		if (rc < 0)
 			return rc;
 
-		 rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
-					   PHYACC_ATTR_BANK_DSP,
-					   T1_DCQ_SQI_REG, 0x0);
+		rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
+				  PHYACC_ATTR_BANK_DSP, T1_DCQ_SQI_REG, 0x0);
 		if (rc < 0)
 			return rc;
 
 		raw_table[i] = FIELD_GET(T1_DCQ_SQI_MSK, rc);
 
-		usleep_range(300, 500);
+		rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
+				  PHYACC_ATTR_BANK_DSP, T1_DCQ_MSE_REG, 0x0);
+		if (rc < 0)
+			return rc;
+		
+		//check invalid
+		if (FIELD_GET(T1_MSE_VLD_MSK, rc) == 1) {
+			rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
+					 PHYACC_ATTR_BANK_DSP,
+					 T1_COEF_RW_CTL_CFG, 0x0301);
+			if (rc < 0)
+				return rc;
+
+			msleep(250);
+
+			rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
+					 PHYACC_ATTR_BANK_DSP, T1_DCQ_SQI_REG, 0x0);
+			if (rc < 0)
+				return rc;
+
+			raw_table[i] = FIELD_GET(T1_DCQ_SQI_MSK, rc);
+
+		}
 	}
 
 	/* Sorting arrays */
