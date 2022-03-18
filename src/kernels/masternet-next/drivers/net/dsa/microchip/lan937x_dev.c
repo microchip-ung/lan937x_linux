@@ -119,7 +119,6 @@ int lan937x_pwrite8_bulk(struct ksz_device *dev, int port, int offset,
 void lan937x_cfg_port_member(struct ksz_device *dev, int port, u8 member)
 {
 	lan937x_pwrite32(dev, port, REG_PORT_VLAN_MEMBERSHIP__4, member);
-	dev->ports[port].member = member;
 }
 
 static void lan937x_flush_dyn_mac_table(struct ksz_device *dev, int port)
@@ -421,7 +420,6 @@ static void lan937x_config_gbit(struct ksz_device *dev, bool gbit, u8 *data)
 
 static void lan937x_update_rgmii_tx_rx_delay (struct ksz_device *dev, int port, bool is_tx)
 {
-	struct ksz_port *p = &dev->ports[port];
 	u16 data16;
 	int reg;
 	u8 val;
@@ -582,7 +580,7 @@ void lan937x_config_interface(struct ksz_device *dev, int port,
 
 void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 {
-	struct ksz_port *p = &dev->ports[port];
+	struct dsa_switch *ds = dev->ds;
 	u8 member;
 
 	/* enable tag tail for host port */
@@ -609,10 +607,10 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 				 true);
 	}
 
-	if (cpu_port)
-		member = dev->port_mask;
-	else
-		member = dev->host_mask | p->vid_member;
+	if (dsa_is_cpu_port(ds, port))
+		member = dsa_user_ports(ds);
+ 	else
+		member = BIT(dsa_upstream_port(ds, port));
 
 	lan937x_cfg_port_member(dev, port, member);
 }

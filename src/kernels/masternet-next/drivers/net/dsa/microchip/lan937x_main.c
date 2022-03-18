@@ -235,8 +235,6 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 {
 	struct ksz_device *dev = ds->priv;
 	struct ksz_port *p = &dev->ports[port];
-	int forward = dev->member;
-	int member = -1;
 	u8 data;
 
 	lan937x_pread8(dev, port, P_STP_CTRL, &data);
@@ -249,20 +247,11 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 	case BR_STATE_BLOCKING:
 	case BR_STATE_LISTENING:
 		data |= PORT_LEARN_DISABLE;
-		if (p->stp_state == BR_STATE_DISABLED)
-			member = dev->host_mask | p->vid_member;
 		break;
 	case BR_STATE_LEARNING:
 		break;
 	case BR_STATE_FORWARDING:
 		data |= (PORT_TX_ENABLE | PORT_RX_ENABLE);
-		member = dev->host_mask | p->vid_member;
-
-		/* Port is a member of a bridge. */
-		if (dev->br_member & (1 << port)) {
-			dev->member |= (1 << port);
-			member = dev->member;
-		}
 		break;
 	default:
 		dev_err(ds->dev, "invalid STP state: %d\n", state);
@@ -273,21 +262,7 @@ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 
 	p->stp_state = state;
 
-	/* Port membership may share register with STP state. */
-	if (member >= 0 && member != p->member)
-		lan937x_cfg_port_member(dev, port, (u8)member);
-
-	/* Check if forwarding needs to be updated. */
-	if (state != BR_STATE_FORWARDING) {
-		if (dev->br_member & (1 << port))
-			dev->member &= ~(1 << port);
-	}
-
-	/* When topology has changed the function ksz_update_port_member
-	 * should be called to modify port forwarding behavior.
-	 */
-	if (forward != dev->member)
-		ksz_update_port_member(dev, port);
+	ksz_update_port_member(dev, port);
 }
 
 static int lan937x_port_vlan_filtering(struct dsa_switch *ds, int port,
@@ -1073,8 +1048,6 @@ static int lan937x_config_cpu_port(struct dsa_switch *ds)
 			phy_interface_t interface;
 
 			dev->cpu_port = i;
-			dev->host_mask = (1 << dev->cpu_port);
-			dev->port_mask |= dev->host_mask;
 			p = &dev->ports[i];
 
 			/* Check if the device tree have specific interface
@@ -1092,11 +1065,8 @@ static int lan937x_config_cpu_port(struct dsa_switch *ds)
 
 			/* enable cpu port */
 			lan937x_port_setup(dev, i, true);
-			p->vid_member = dev->port_mask;
 		}
 	}
-
-	dev->member = dev->host_mask;
 
 	for (i = 0; i < dev->port_cnt; i++) {
 		if (i == dev->cpu_port)
@@ -1106,8 +1076,6 @@ static int lan937x_config_cpu_port(struct dsa_switch *ds)
 		/* Initialize to non-zero so that lan937x_cfg_port_member() will
 		 * be called.
 		 */
-		p->vid_member = (1 << i);
-		p->member = dev->port_mask;
 		lan937x_port_stp_state_set(ds, i, BR_STATE_DISABLED);
 	}
 
