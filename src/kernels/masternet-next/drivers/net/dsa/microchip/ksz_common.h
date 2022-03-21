@@ -34,6 +34,7 @@ struct ksz_port_mib {
 struct ksz_port {
 	u16 member;
 	u16 vid_member;
+	bool remove_tag;		/* Remove Tag flag set, for ksz8795 only */
 	int stp_state;
 	struct phy_device phydev;
 
@@ -47,7 +48,7 @@ struct ksz_port {
 
 	struct ksz_port_mib mib;
 	phy_interface_t interface;
-
+	
 	void * priv;
 
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
@@ -77,9 +78,9 @@ struct ksz_device {
 
 	struct device *dev;
 	struct regmap *regmap[3];
-	int irq;
 
 	void *priv;
+	int irq;
 
 	struct gpio_desc *reset_gpio;	/* Optional reset GPIO */
 
@@ -113,7 +114,6 @@ struct ksz_device {
 	u32 overrides;			/* chip functions set by user */
 	u16 host_mask;
 	u16 port_mask;
-
 
 	u8 tas_port;
 	u16 cut_through_enable;
@@ -243,12 +243,8 @@ static inline int ksz_read64(struct ksz_device *dev, u32 reg, u64 *val)
 	int ret;
 
 	ret = regmap_bulk_read(dev->regmap[2], reg, value, 2);
-	if (!ret) {
-		/* Ick! ToDo: Add 64bit R/W to regmap on 32bit systems */
-		value[0] = swab32(value[0]);
-		value[1] = swab32(value[1]);
-		*val = swab64((u64)*value);
-	}
+	if (!ret)
+		*val = (u64)value[0] << 32 | value[1];
 
 	return ret;
 }

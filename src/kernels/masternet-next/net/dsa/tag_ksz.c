@@ -4,10 +4,11 @@
  * Copyright (c) 2017 Microchip Technology
  */
 
+
 #include <linux/dsa/ksz_common.h>
 #include <linux/etherdevice.h>
+#include <linux/etherdevice.h>
 #include <linux/list.h>
-#include <linux/ptp_classify.h>
 #include <linux/slab.h>
 #include <net/dsa.h>
 #include "dsa_priv.h"
@@ -197,6 +198,7 @@ static const struct dsa_device_ops ksz9893_netdev_ops = {
 
 DSA_TAG_DRIVER(ksz9893_netdev_ops);
 MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
+
 
 /* For xmit, 2 bytes are added before FCS.
  * ---------------------------------------------------------------------------
