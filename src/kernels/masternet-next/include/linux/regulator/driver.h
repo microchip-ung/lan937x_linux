@@ -337,6 +337,12 @@ enum regulator_type {
  * @pull_down_val_on: Enabling value for control when using regmap
  *                     set_pull_down
  *
+ * @ramp_reg:		Register for controlling the regulator ramp-rate.
+ * @ramp_mask:		Bitmask for the ramp-rate control register.
+ * @ramp_delay_table:	Table for mapping the regulator ramp-rate values. Values
+ *			should be given in units of V/S (uV/uS). See the
+ *			regulator_set_ramp_delay_regmap().
+ *
  * @enable_time: Time taken for initial enable of regulator (in uS).
  * @off_on_delay: guard time (in uS), before re-enabling a regulator
  *
@@ -462,7 +468,7 @@ struct regulator_err_state {
 };
 
 /**
- * struct regulator_irq_data - regulator error/notification status date
+ * struct regulator_irq_data - regulator error/notification status data
  *
  * @states:	Status structs for each of the associated regulators.
  * @num_states:	Amount of associated regulators.
@@ -493,7 +499,8 @@ struct regulator_irq_data {
  *		best to shut-down regulator(s) or reboot the SOC if error
  *		handling is repeatedly failing. If fatal_cnt is given the IRQ
  *		handling is aborted if it fails for fatal_cnt times and die()
- *		callback (if populated) or BUG() is called to try to prevent
+ *		callback (if populated) is called. If die() is not populated
+ *		poweroff for the system is attempted in order to prevent any
  *		further damage.
  * @reread_ms:	The time which is waited before attempting to re-read status
  *		at the worker if IC reading fails. Immediate re-read is done
@@ -510,19 +517,20 @@ struct regulator_irq_data {
  * @data:	Driver private data pointer which will be passed as such to
  *		the renable, map_event and die callbacks in regulator_irq_data.
  * @die:	Protection callback. If IC status reading or recovery actions
- *		fail fatal_cnt times this callback or BUG() is called. This
- *		callback should implement a final protection attempt like
- *		disabling the regulator. If protection succeeded this may
- *		return 0. If anything else is returned the core assumes final
- *		protection failed and calls BUG() as a last resort.
+ *		fail fatal_cnt times this callback is called or system is
+ *		powered off. This callback should implement a final protection
+ *		attempt like disabling the regulator. If protection succeeded
+ *		die() may return 0. If anything else is returned the core
+ *		assumes final protection failed and attempts to perform a
+ *		poweroff as a last resort.
  * @map_event:	Driver callback to map IRQ status into regulator devices with
  *		events / errors. NOTE: callback MUST initialize both the
  *		errors and notifs for all rdevs which it signals having
  *		active events as core does not clean the map data.
  *		REGULATOR_FAILED_RETRY can be returned to indicate that the
  *		status reading from IC failed. If this is repeated for
- *		fatal_cnt times the core will call die() callback or BUG()
- *		as a last resort to protect the HW.
+ *		fatal_cnt times the core will call die() callback or power-off
+ *		the system as a last resort to protect the HW.
  * @renable:	Optional callback to check status (if HW supports that) before
  *		re-enabling IRQ. If implemented this should clear the error
  *		flags so that errors fetched by regulator_get_error_flags()
@@ -531,7 +539,8 @@ struct regulator_irq_data {
  *		REGULATOR_FAILED_RETRY can be returned to
  *		indicate that the status reading from IC failed. If this is
  *		repeated for 'fatal_cnt' times the core will call die()
- *		callback or BUG() as a last resort to protect the HW.
+ *		callback or if die() is not populated then attempt to power-off
+ *		the system as a last resort to protect the HW.
  *		Returning zero indicates that the problem in HW has been solved
  *		and IRQ will be re-enabled. Returning REGULATOR_ERROR_ON
  *		indicates the error condition is still active and keeps IRQ
@@ -645,7 +654,6 @@ devm_regulator_register(struct device *dev,
 			const struct regulator_desc *regulator_desc,
 			const struct regulator_config *config);
 void regulator_unregister(struct regulator_dev *rdev);
-void devm_regulator_unregister(struct device *dev, struct regulator_dev *rdev);
 
 int regulator_notifier_call_chain(struct regulator_dev *rdev,
 				  unsigned long event, void *data);
