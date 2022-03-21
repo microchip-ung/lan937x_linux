@@ -100,7 +100,7 @@ static const char *const event_names[EVENTS] = {
 
 static struct sk_buff_head tx_queue; /* used when holding the spin lock */
 
-static int ppp_ioctl(struct net_device *dev, struct if_settings *ifs);
+static int ppp_ioctl(struct net_device *dev, struct ifreq *ifr);
 
 static inline struct ppp *get_ppp(struct net_device *dev)
 {
@@ -655,17 +655,17 @@ static const struct header_ops ppp_header_ops = {
 	.create = ppp_hard_header,
 };
 
-static int ppp_ioctl(struct net_device *dev, struct if_settings *ifs)
+static int ppp_ioctl(struct net_device *dev, struct ifreq *ifr)
 {
 	hdlc_device *hdlc = dev_to_hdlc(dev);
 	struct ppp *ppp;
 	int result;
 
-	switch (ifs->type) {
+	switch (ifr->ifr_settings.type) {
 	case IF_GET_PROTO:
 		if (dev_to_hdlc(dev)->proto != &proto)
 			return -EINVAL;
-		ifs->type = IF_PROTO_PPP;
+		ifr->ifr_settings.type = IF_PROTO_PPP;
 		return 0; /* return protocol only, no settable parameters */
 
 	case IF_PROTO_PPP:

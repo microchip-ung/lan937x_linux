@@ -526,6 +526,7 @@ static int cq_create(struct mlx5_vdpa_net *ndev, u16 idx, u32 num_ent)
 	void __iomem *uar_page = ndev->mvdev.res.uar->map;
 	u32 out[MLX5_ST_SZ_DW(create_cq_out)];
 	struct mlx5_vdpa_cq *vcq = &mvq->cq;
+	unsigned int irqn;
 	__be64 *pas;
 	int inlen;
 	void *cqc;
@@ -565,14 +566,14 @@ static int cq_create(struct mlx5_vdpa_net *ndev, u16 idx, u32 num_ent)
 	/* Use vector 0 by default. Consider adding code to choose least used
 	 * vector.
 	 */
-	err = mlx5_vector2eqn(mdev, 0, &eqn);
+	err = mlx5_vector2eqn(mdev, 0, &eqn, &irqn);
 	if (err)
 		goto err_vec;
 
 	cqc = MLX5_ADDR_OF(create_cq_in, in, cq_context);
 	MLX5_SET(cqc, cqc, log_cq_size, ilog2(num_ent));
 	MLX5_SET(cqc, cqc, uar_page, ndev->mvdev.res.uar->index);
-	MLX5_SET(cqc, cqc, c_eqn_or_apu_element, eqn);
+	MLX5_SET(cqc, cqc, c_eqn, eqn);
 	MLX5_SET64(cqc, cqc, dbr_addr, vcq->db.dma);
 
 	err = mlx5_core_create_cq(mdev, &vcq->mcq, in, inlen, out, sizeof(out));

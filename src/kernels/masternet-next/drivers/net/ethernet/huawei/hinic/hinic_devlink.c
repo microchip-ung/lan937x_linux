@@ -293,9 +293,9 @@ static const struct devlink_ops hinic_devlink_ops = {
 	.flash_update = hinic_devlink_flash_update,
 };
 
-struct devlink *hinic_devlink_alloc(struct device *dev)
+struct devlink *hinic_devlink_alloc(void)
 {
-	return devlink_alloc(&hinic_devlink_ops, sizeof(struct hinic_dev), dev);
+	return devlink_alloc(&hinic_devlink_ops, sizeof(struct hinic_dev));
 }
 
 void hinic_devlink_free(struct devlink *devlink)
@@ -303,11 +303,11 @@ void hinic_devlink_free(struct devlink *devlink)
 	devlink_free(devlink);
 }
 
-int hinic_devlink_register(struct hinic_devlink_priv *priv)
+int hinic_devlink_register(struct hinic_devlink_priv *priv, struct device *dev)
 {
 	struct devlink *devlink = priv_to_devlink(priv);
 
-	return devlink_register(devlink);
+	return devlink_register(devlink, dev);
 }
 
 void hinic_devlink_unregister(struct hinic_devlink_priv *priv)

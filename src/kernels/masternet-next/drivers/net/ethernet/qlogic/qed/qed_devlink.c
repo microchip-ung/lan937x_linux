@@ -207,15 +207,14 @@ struct devlink *qed_devlink_register(struct qed_dev *cdev)
 	struct devlink *dl;
 	int rc;
 
-	dl = devlink_alloc(&qed_dl_ops, sizeof(struct qed_devlink),
-			   &cdev->pdev->dev);
+	dl = devlink_alloc(&qed_dl_ops, sizeof(struct qed_devlink));
 	if (!dl)
 		return ERR_PTR(-ENOMEM);
 
 	qdevlink = devlink_priv(dl);
 	qdevlink->cdev = cdev;
 
-	rc = devlink_register(dl);
+	rc = devlink_register(dl, &cdev->pdev->dev);
 	if (rc)
 		goto err_free;
 

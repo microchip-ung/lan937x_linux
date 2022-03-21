@@ -768,13 +768,8 @@ static void bnxt_get_ringparam(struct net_device *dev,
 {
 	struct bnxt *bp = netdev_priv(dev);
 
-	if (bp->flags & BNXT_FLAG_AGG_RINGS) {
-		ering->rx_max_pending = BNXT_MAX_RX_DESC_CNT_JUM_ENA;
-		ering->rx_jumbo_max_pending = BNXT_MAX_RX_JUM_DESC_CNT;
-	} else {
-		ering->rx_max_pending = BNXT_MAX_RX_DESC_CNT;
-		ering->rx_jumbo_max_pending = 0;
-	}
+	ering->rx_max_pending = BNXT_MAX_RX_DESC_CNT;
+	ering->rx_jumbo_max_pending = BNXT_MAX_RX_JUM_DESC_CNT;
 	ering->tx_max_pending = BNXT_MAX_TX_DESC_CNT;
 
 	ering->rx_pending = bp->rx_ring_size;

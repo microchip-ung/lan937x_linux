@@ -4547,8 +4547,7 @@ static int qlge_probe(struct pci_dev *pdev,
 	static int cards_found;
 	int err;
 
-	devlink = devlink_alloc(&qlge_devlink_ops, sizeof(struct qlge_adapter),
-				&pdev->dev);
+	devlink = devlink_alloc(&qlge_devlink_ops, sizeof(struct qlge_adapter));
 	if (!devlink)
 		return -ENOMEM;
 
@@ -4614,7 +4613,7 @@ static int qlge_probe(struct pci_dev *pdev,
 		goto netdev_free;
 	}
 
-	err = devlink_register(devlink);
+	err = devlink_register(devlink, &pdev->dev);
 	if (err)
 		goto netdev_free;
 

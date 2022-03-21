@@ -495,7 +495,7 @@ int tcf_idr_create(struct tc_action_net *tn, u32 index, struct nlattr *est,
 	p->tcfa_tm.install = jiffies;
 	p->tcfa_tm.lastuse = jiffies;
 	p->tcfa_tm.firstuse = 0;
-	p->tcfa_flags = flags & TCA_ACT_FLAGS_USER_MASK;
+	p->tcfa_flags = flags;
 	if (est) {
 		err = gen_new_estimator(&p->tcfa_bstats, p->cpu_bstats,
 					&p->tcfa_rate_est,
@@ -941,7 +941,7 @@ void tcf_idr_insert_many(struct tc_action *actions[])
 	}
 }
 
-struct tc_action_ops *tc_action_load_ops(struct nlattr *nla, bool police,
+struct tc_action_ops *tc_action_load_ops(char *name, struct nlattr *nla,
 					 bool rtnl_held,
 					 struct netlink_ext_ack *extack)
 {
@@ -951,7 +951,7 @@ struct tc_action_ops *tc_action_load_ops(struct nlattr *nla, bool police,
 	struct nlattr *kind;
 	int err;
 
-	if (!police) {
+	if (name == NULL) {
 		err = nla_parse_nested_deprecated(tb, TCA_ACT_MAX, nla,
 						  tcf_action_policy, extack);
 		if (err < 0)
@@ -967,7 +967,7 @@ struct tc_action_ops *tc_action_load_ops(struct nlattr *nla, bool police,
 			return ERR_PTR(err);
 		}
 	} else {
-		if (strlcpy(act_name, "police", IFNAMSIZ) >= IFNAMSIZ) {
+		if (strlcpy(act_name, name, IFNAMSIZ) >= IFNAMSIZ) {
 			NL_SET_ERR_MSG(extack, "TC action name too long");
 			return ERR_PTR(-EINVAL);
 		}
@@ -1004,11 +1004,12 @@ struct tc_action_ops *tc_action_load_ops(struct nlattr *nla, bool police,
 
 struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 				    struct nlattr *nla, struct nlattr *est,
+				    char *name, int ovr, int bind,
 				    struct tc_action_ops *a_o, int *init_res,
-				    u32 flags, struct netlink_ext_ack *extack)
+				    bool rtnl_held,
+				    struct netlink_ext_ack *extack)
 {
-	bool police = flags & TCA_ACT_FLAGS_POLICE;
-	struct nla_bitfield32 userflags = { 0, 0 };
+	struct nla_bitfield32 flags = { 0, 0 };
 	u8 hw_stats = TCA_ACT_HW_STATS_ANY;
 	struct nlattr *tb[TCA_ACT_MAX + 1];
 	struct tc_cookie *cookie = NULL;
@@ -1016,7 +1017,7 @@ struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 	int err;
 
 	/* backward compatibility for policer */
-	if (!police) {
+	if (name == NULL) {
 		err = nla_parse_nested_deprecated(tb, TCA_ACT_MAX, nla,
 						  tcf_action_policy, extack);
 		if (err < 0)
@@ -1031,22 +1032,22 @@ struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 		}
 		hw_stats = tcf_action_hw_stats_get(tb[TCA_ACT_HW_STATS]);
 		if (tb[TCA_ACT_FLAGS])
-			userflags = nla_get_bitfield32(tb[TCA_ACT_FLAGS]);
+			flags = nla_get_bitfield32(tb[TCA_ACT_FLAGS]);
 
-		err = a_o->init(net, tb[TCA_ACT_OPTIONS], est, &a, tp,
-				userflags.value | flags, extack);
+		err = a_o->init(net, tb[TCA_ACT_OPTIONS], est, &a, ovr, bind,
+				rtnl_held, tp, flags.value, extack);
 	} else {
-		err = a_o->init(net, nla, est, &a, tp, userflags.value | flags,
-				extack);
+		err = a_o->init(net, nla, est, &a, ovr, bind, rtnl_held,
+				tp, flags.value, extack);
 	}
 	if (err < 0)
 		goto err_out;
 	*init_res = err;
 
-	if (!police && tb[TCA_ACT_COOKIE])
+	if (!name && tb[TCA_ACT_COOKIE])
 		tcf_set_action_cookie(&a->act_cookie, cookie);
 
-	if (!police)
+	if (!name)
 		a->hw_stats = hw_stats;
 
 	return a;
@@ -1062,9 +1063,9 @@ err_out:
 /* Returns numbers of initialized actions or negative error. */
 
 int tcf_action_init(struct net *net, struct tcf_proto *tp, struct nlattr *nla,
-		    struct nlattr *est, struct tc_action *actions[],
-		    int init_res[], size_t *attr_size, u32 flags,
-		    struct netlink_ext_ack *extack)
+		    struct nlattr *est, char *name, int ovr, int bind,
+		    struct tc_action *actions[], int init_res[], size_t *attr_size,
+		    bool rtnl_held, struct netlink_ext_ack *extack)
 {
 	struct tc_action_ops *ops[TCA_ACT_MAX_PRIO] = {};
 	struct nlattr *tb[TCA_ACT_MAX_PRIO + 1];
@@ -1081,9 +1082,7 @@ int tcf_action_init(struct net *net, struct tcf_proto *tp, struct nlattr *nla,
 	for (i = 1; i <= TCA_ACT_MAX_PRIO && tb[i]; i++) {
 		struct tc_action_ops *a_o;
 
-		a_o = tc_action_load_ops(tb[i], flags & TCA_ACT_FLAGS_POLICE,
-					 !(flags & TCA_ACT_FLAGS_NO_RTNL),
-					 extack);
+		a_o = tc_action_load_ops(name, tb[i], rtnl_held, extack);
 		if (IS_ERR(a_o)) {
 			err = PTR_ERR(a_o);
 			goto err_mod;
@@ -1092,8 +1091,9 @@ int tcf_action_init(struct net *net, struct tcf_proto *tp, struct nlattr *nla,
 	}
 
 	for (i = 1; i <= TCA_ACT_MAX_PRIO && tb[i]; i++) {
-		act = tcf_action_init_1(net, tp, tb[i], est, ops[i - 1],
-					&init_res[i - 1], flags, extack);
+		act = tcf_action_init_1(net, tp, tb[i], est, name, ovr, bind,
+					ops[i - 1], &init_res[i - 1], rtnl_held,
+					extack);
 		if (IS_ERR(act)) {
 			err = PTR_ERR(act);
 			goto err;
@@ -1113,7 +1113,7 @@ int tcf_action_init(struct net *net, struct tcf_proto *tp, struct nlattr *nla,
 	goto err_mod;
 
 err:
-	tcf_action_destroy(actions, flags & TCA_ACT_FLAGS_BIND);
+	tcf_action_destroy(actions, bind);
 err_mod:
 	for (i = 0; i < TCA_ACT_MAX_PRIO; i++) {
 		if (ops[i])
@@ -1351,6 +1351,8 @@ static int tca_action_flush(struct net *net, struct nlattr *nla,
 	module_put(ops->owner);
 	err = rtnetlink_send(skb, net, portid, RTNLGRP_TC,
 			     n->nlmsg_flags & NLM_F_ECHO);
+	if (err > 0)
+		return 0;
 	if (err < 0)
 		NL_SET_ERR_MSG(extack, "Failed to send TC action flush notification");
 
@@ -1421,6 +1423,8 @@ tcf_del_notify(struct net *net, struct nlmsghdr *n, struct tc_action *actions[],
 
 	ret = rtnetlink_send(skb, net, portid, RTNLGRP_TC,
 			     n->nlmsg_flags & NLM_F_ECHO);
+	if (ret > 0)
+		return 0;
 	return ret;
 }
 
@@ -1477,6 +1481,7 @@ tcf_add_notify(struct net *net, struct nlmsghdr *n, struct tc_action *actions[],
 	       u32 portid, size_t attr_size, struct netlink_ext_ack *extack)
 {
 	struct sk_buff *skb;
+	int err = 0;
 
 	skb = alloc_skb(attr_size <= NLMSG_GOODSIZE ? NLMSG_GOODSIZE : attr_size,
 			GFP_KERNEL);
@@ -1490,12 +1495,15 @@ tcf_add_notify(struct net *net, struct nlmsghdr *n, struct tc_action *actions[],
 		return -EINVAL;
 	}
 
-	return rtnetlink_send(skb, net, portid, RTNLGRP_TC,
-			      n->nlmsg_flags & NLM_F_ECHO);
+	err = rtnetlink_send(skb, net, portid, RTNLGRP_TC,
+			     n->nlmsg_flags & NLM_F_ECHO);
+	if (err > 0)
+		err = 0;
+	return err;
 }
 
 static int tcf_action_add(struct net *net, struct nlattr *nla,
-			  struct nlmsghdr *n, u32 portid, u32 flags,
+			  struct nlmsghdr *n, u32 portid, int ovr,
 			  struct netlink_ext_ack *extack)
 {
 	size_t attr_size = 0;
@@ -1504,8 +1512,8 @@ static int tcf_action_add(struct net *net, struct nlattr *nla,
 	int init_res[TCA_ACT_MAX_PRIO] = {};
 
 	for (loop = 0; loop < 10; loop++) {
-		ret = tcf_action_init(net, NULL, nla, NULL, actions, init_res,
-				      &attr_size, flags, extack);
+		ret = tcf_action_init(net, NULL, nla, NULL, NULL, ovr, 0,
+				      actions, init_res, &attr_size, true, extack);
 		if (ret != -EAGAIN)
 			break;
 	}
@@ -1535,8 +1543,7 @@ static int tc_ctl_action(struct sk_buff *skb, struct nlmsghdr *n,
 	struct net *net = sock_net(skb->sk);
 	struct nlattr *tca[TCA_ROOT_MAX + 1];
 	u32 portid = NETLINK_CB(skb).portid;
-	u32 flags = 0;
-	int ret = 0;
+	int ret = 0, ovr = 0;
 
 	if ((n->nlmsg_type != RTM_GETACTION) &&
 	    !netlink_capable(skb, CAP_NET_ADMIN))
@@ -1562,8 +1569,8 @@ static int tc_ctl_action(struct sk_buff *skb, struct nlmsghdr *n,
 		 * is zero) then just set this
 		 */
 		if (n->nlmsg_flags & NLM_F_REPLACE)
-			flags = TCA_ACT_FLAGS_REPLACE;
-		ret = tcf_action_add(net, tca[TCA_ACT_TAB], n, portid, flags,
+			ovr = 1;
+		ret = tcf_action_add(net, tca[TCA_ACT_TAB], n, portid, ovr,
 				     extack);
 		break;
 	case RTM_DELACTION:

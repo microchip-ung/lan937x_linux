@@ -912,7 +912,6 @@ static int hellcreek_fdb_dump(struct dsa_switch *ds, int port,
 {
 	struct hellcreek *hellcreek = ds->priv;
 	u16 entries;
-	int ret = 0;
 	size_t i;
 
 	mutex_lock(&hellcreek->reg_lock);
@@ -944,14 +943,12 @@ static int hellcreek_fdb_dump(struct dsa_switch *ds, int port,
 		if (!(entry.portmask & BIT(port)))
 			continue;
 
-		ret = cb(entry.mac, 0, entry.is_static, data);
-		if (ret)
-			break;
+		cb(entry.mac, 0, entry.is_static, data);
 	}
 
 	mutex_unlock(&hellcreek->reg_lock);
 
-	return ret;
+	return 0;
 }
 
 static int hellcreek_vlan_filtering(struct dsa_switch *ds, int port,

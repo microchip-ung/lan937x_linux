@@ -57,7 +57,7 @@ int fib_default_rule_add(struct fib_rules_ops *ops,
 {
 	struct fib_rule *r;
 
-	r = kzalloc(ops->rule_size, GFP_KERNEL_ACCOUNT);
+	r = kzalloc(ops->rule_size, GFP_KERNEL);
 	if (r == NULL)
 		return -ENOMEM;
 
@@ -541,7 +541,7 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 			goto errout;
 	}
 
-	nlrule = kzalloc(ops->rule_size, GFP_KERNEL_ACCOUNT);
+	nlrule = kzalloc(ops->rule_size, GFP_KERNEL);
 	if (!nlrule) {
 		err = -ENOMEM;
 		goto errout;

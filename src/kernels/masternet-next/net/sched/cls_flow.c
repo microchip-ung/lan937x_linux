@@ -387,7 +387,7 @@ static void flow_destroy_filter_work(struct work_struct *work)
 static int flow_change(struct net *net, struct sk_buff *in_skb,
 		       struct tcf_proto *tp, unsigned long base,
 		       u32 handle, struct nlattr **tca,
-		       void **arg, u32 flags,
+		       void **arg, bool ovr, bool rtnl_held,
 		       struct netlink_ext_ack *extack)
 {
 	struct flow_head *head = rtnl_dereference(tp->root);
@@ -442,8 +442,8 @@ static int flow_change(struct net *net, struct sk_buff *in_skb,
 	if (err < 0)
 		goto err2;
 
-	err = tcf_exts_validate(net, tp, tb, tca[TCA_RATE], &fnew->exts, flags,
-				extack);
+	err = tcf_exts_validate(net, tp, tb, tca[TCA_RATE], &fnew->exts, ovr,
+				true, extack);
 	if (err < 0)
 		goto err2;
 

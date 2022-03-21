@@ -682,20 +682,11 @@ static int aic32x4_set_dosr(struct snd_soc_component *component, u16 dosr)
 static int aic32x4_set_processing_blocks(struct snd_soc_component *component,
 						u8 r_block, u8 p_block)
 {
-	struct aic32x4_priv *aic32x4 = snd_soc_component_get_drvdata(component);
+	if (r_block > 18 || p_block > 25)
+		return -EINVAL;
 
-	if (aic32x4->type == AIC32X4_TYPE_TAS2505) {
-		if (r_block || p_block > 3)
-			return -EINVAL;
-
-		snd_soc_component_write(component, AIC32X4_DACSPB, p_block);
-	} else { /* AIC32x4 */
-		if (r_block > 18 || p_block > 25)
-			return -EINVAL;
-
-		snd_soc_component_write(component, AIC32X4_ADCSPB, r_block);
-		snd_soc_component_write(component, AIC32X4_DACSPB, p_block);
-	}
+	snd_soc_component_write(component, AIC32X4_ADCSPB, r_block);
+	snd_soc_component_write(component, AIC32X4_DACSPB, p_block);
 
 	return 0;
 }
@@ -704,7 +695,6 @@ static int aic32x4_setup_clocks(struct snd_soc_component *component,
 				unsigned int sample_rate, unsigned int channels,
 				unsigned int bit_depth)
 {
-	struct aic32x4_priv *aic32x4 = snd_soc_component_get_drvdata(component);
 	u8 aosr;
 	u16 dosr;
 	u8 adc_resource_class, dac_resource_class;
@@ -731,28 +721,19 @@ static int aic32x4_setup_clocks(struct snd_soc_component *component,
 		adc_resource_class = 6;
 		dac_resource_class = 8;
 		dosr_increment = 8;
-		if (aic32x4->type == AIC32X4_TYPE_TAS2505)
-			aic32x4_set_processing_blocks(component, 0, 1);
-		else
-			aic32x4_set_processing_blocks(component, 1, 1);
+		aic32x4_set_processing_blocks(component, 1, 1);
 	} else if (sample_rate <= 96000) {
 		aosr = 64;
 		adc_resource_class = 6;
 		dac_resource_class = 8;
 		dosr_increment = 4;
-		if (aic32x4->type == AIC32X4_TYPE_TAS2505)
-			aic32x4_set_processing_blocks(component, 0, 1);
-		else
-			aic32x4_set_processing_blocks(component, 1, 9);
+		aic32x4_set_processing_blocks(component, 1, 9);
 	} else if (sample_rate == 192000) {
 		aosr = 32;
 		adc_resource_class = 3;
 		dac_resource_class = 4;
 		dosr_increment = 2;
-		if (aic32x4->type == AIC32X4_TYPE_TAS2505)
-			aic32x4_set_processing_blocks(component, 0, 1);
-		else
-			aic32x4_set_processing_blocks(component, 13, 19);
+		aic32x4_set_processing_blocks(component, 13, 19);
 	} else {
 		dev_err(component->dev, "Sampling rate not supported\n");
 		return -EINVAL;

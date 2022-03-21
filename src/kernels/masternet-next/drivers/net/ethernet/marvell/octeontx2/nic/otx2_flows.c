@@ -5,13 +5,10 @@
  */
 
 #include <net/ipv6.h>
-#include <linux/sort.h>
 
 #include "otx2_common.h"
 
 #define OTX2_DEFAULT_ACTION	0x1
-
-static int otx2_mcam_entry_init(struct otx2_nic *pfvf);
 
 struct otx2_flow {
 	struct ethtool_rx_flow_spec flow_spec;
@@ -33,7 +30,8 @@ static void otx2_clear_ntuple_flow_info(struct otx2_nic *pfvf, struct otx2_flow_
 {
 	devm_kfree(pfvf->dev, flow_cfg->flow_ent);
 	flow_cfg->flow_ent = NULL;
-	flow_cfg->max_flows = 0;
+	flow_cfg->ntuple_max_flows = 0;
+	flow_cfg->tc_max_flows = 0;
 }
 
 static int otx2_free_ntuple_mcam_entries(struct otx2_nic *pfvf)
@@ -42,11 +40,11 @@ static int otx2_free_ntuple_mcam_entries(struct otx2_nic *pfvf)
 	struct npc_mcam_free_entry_req *req;
 	int ent, err;
 
-	if (!flow_cfg->max_flows)
+	if (!flow_cfg->ntuple_max_flows)
 		return 0;
 
 	mutex_lock(&pfvf->mbox.lock);
-	for (ent = 0; ent < flow_cfg->max_flows; ent++) {
+	for (ent = 0; ent < flow_cfg->ntuple_max_flows; ent++) {
 		req = otx2_mbox_alloc_msg_npc_mcam_free_entry(&pfvf->mbox);
 		if (!req)
 			break;
@@ -63,12 +61,7 @@ static int otx2_free_ntuple_mcam_entries(struct otx2_nic *pfvf)
 	return 0;
 }
 
-static int mcam_entry_cmp(const void *a, const void *b)
-{
-	return *(u16 *)a - *(u16 *)b;
-}
-
-int otx2_alloc_mcam_entries(struct otx2_nic *pfvf, u16 count)
+static int otx2_alloc_ntuple_mcam_entries(struct otx2_nic *pfvf, u16 count)
 {
 	struct otx2_flow_config *flow_cfg = pfvf->flow_cfg;
 	struct npc_mcam_alloc_entry_req *req;
@@ -83,12 +76,8 @@ int otx2_alloc_mcam_entries(struct otx2_nic *pfvf, u16 count)
 
 	flow_cfg->flow_ent = devm_kmalloc_array(pfvf->dev, count,
 						sizeof(u16), GFP_KERNEL);
-	if (!flow_cfg->flow_ent) {
-		netdev_err(pfvf->netdev,
-			   "%s: Unable to allocate memory for flow entries\n",
-			    __func__);
+	if (!flow_cfg->flow_ent)
 		return -ENOMEM;
-	}
 
 	mutex_lock(&pfvf->mbox.lock);
 
@@ -103,14 +92,8 @@ int otx2_alloc_mcam_entries(struct otx2_nic *pfvf, u16 count)
 		req->contig = false;
 		req->count = (count - allocated) > NPC_MAX_NONCONTIG_ENTRIES ?
 				NPC_MAX_NONCONTIG_ENTRIES : count - allocated;
-
-		/* Allocate higher priority entries for PFs, so that VF's entries
-		 * will be on top of PF.
-		 */
-		if (!is_otx2_vf(pfvf->pcifunc)) {
-			req->priority = NPC_MCAM_HIGHER_PRIO;
-			req->ref_entry = flow_cfg->def_ent[0];
-		}
+		req->priority = NPC_MCAM_HIGHER_PRIO;
+		req->ref_entry = flow_cfg->def_ent[0];
 
 		/* Send message to AF */
 		if (otx2_sync_mbox_msg(&pfvf->mbox))
@@ -131,34 +114,22 @@ int otx2_alloc_mcam_entries(struct otx2_nic *pfvf, u16 count)
 			break;
 	}
 
-	/* Multiple MCAM entry alloc requests could result in non-sequential
-	 * MCAM entries in the flow_ent[] array. Sort them in an ascending order,
-	 * otherwise user installed ntuple filter index and MCAM entry index will
-	 * not be in sync.
-	 */
-	if (allocated)
-		sort(&flow_cfg->flow_ent[0], allocated,
-		     sizeof(flow_cfg->flow_ent[0]), mcam_entry_cmp, NULL);
-
 exit:
 	mutex_unlock(&pfvf->mbox.lock);
 
-	flow_cfg->max_flows = allocated;
-
-	if (allocated) {
-		pfvf->flags |= OTX2_FLAG_MCAM_ENTRIES_ALLOC;
-		pfvf->flags |= OTX2_FLAG_NTUPLE_SUPPORT;
-	}
+	flow_cfg->ntuple_offset = 0;
+	flow_cfg->ntuple_max_flows = allocated;
+	flow_cfg->tc_max_flows = allocated;
 
 	if (allocated != count)
 		netdev_info(pfvf->netdev,
-			    "Unable to allocate %d MCAM entries, got only %d\n",
+			    "Unable to allocate %d MCAM entries for ntuple, got %d\n",
 			    count, allocated);
+
 	return allocated;
 }
-EXPORT_SYMBOL(otx2_alloc_mcam_entries);
 
-static int otx2_mcam_entry_init(struct otx2_nic *pfvf)
+int otx2_alloc_mcam_entries(struct otx2_nic *pfvf)
 {
 	struct otx2_flow_config *flow_cfg = pfvf->flow_cfg;
 	struct npc_mcam_alloc_entry_req *req;
@@ -218,34 +189,17 @@ static int otx2_mcam_entry_init(struct otx2_nic *pfvf)
 	mutex_unlock(&pfvf->mbox.lock);
 
 	/* Allocate entries for Ntuple filters */
-	count = otx2_alloc_mcam_entries(pfvf, OTX2_DEFAULT_FLOWCOUNT);
+	count = otx2_alloc_ntuple_mcam_entries(pfvf, OTX2_DEFAULT_FLOWCOUNT);
 	if (count <= 0) {
 		otx2_clear_ntuple_flow_info(pfvf, flow_cfg);
 		return 0;
 	}
 
+	pfvf->flags |= OTX2_FLAG_NTUPLE_SUPPORT;
 	pfvf->flags |= OTX2_FLAG_TC_FLOWER_SUPPORT;
 
 	return 0;
 }
-
-int otx2vf_mcam_flow_init(struct otx2_nic *pfvf)
-{
-	struct otx2_flow_config *flow_cfg;
-
-	pfvf->flow_cfg = devm_kzalloc(pfvf->dev,
-				      sizeof(struct otx2_flow_config),
-				      GFP_KERNEL);
-	if (!pfvf->flow_cfg)
-		return -ENOMEM;
-
-	flow_cfg = pfvf->flow_cfg;
-	INIT_LIST_HEAD(&flow_cfg->flow_list);
-	flow_cfg->max_flows = 0;
-
-	return 0;
-}
-EXPORT_SYMBOL(otx2vf_mcam_flow_init);
 
 int otx2_mcam_flow_init(struct otx2_nic *pf)
 {
@@ -258,10 +212,7 @@ int otx2_mcam_flow_init(struct otx2_nic *pf)
 
 	INIT_LIST_HEAD(&pf->flow_cfg->flow_list);
 
-	/* Allocate bare minimum number of MCAM entries needed for
-	 * unicast and ntuple filters.
-	 */
-	err = otx2_mcam_entry_init(pf);
+	err = otx2_alloc_mcam_entries(pf);
 	if (err)
 		return err;
 
@@ -297,7 +248,6 @@ void otx2_mcam_flow_del(struct otx2_nic *pf)
 {
 	otx2_destroy_mcam_flows(pf);
 }
-EXPORT_SYMBOL(otx2_mcam_flow_del);
 
 /*  On success adds mcam entry
  *  On failure enable promisous mode
@@ -429,19 +379,15 @@ static void otx2_add_flow_to_list(struct otx2_nic *pfvf, struct otx2_flow *flow)
 	list_add(&flow->list, head);
 }
 
-int otx2_get_maxflows(struct otx2_flow_config *flow_cfg)
+static int otx2_get_maxflows(struct otx2_flow_config *flow_cfg)
 {
-	if (!flow_cfg)
-		return 0;
-
-	if (flow_cfg->nr_flows == flow_cfg->max_flows ||
+	if (flow_cfg->nr_flows == flow_cfg->ntuple_max_flows ||
 	    bitmap_weight(&flow_cfg->dmacflt_bmap,
 			  flow_cfg->dmacflt_max_flows))
-		return flow_cfg->max_flows + flow_cfg->dmacflt_max_flows;
+		return flow_cfg->ntuple_max_flows + flow_cfg->dmacflt_max_flows;
 	else
-		return flow_cfg->max_flows;
+		return flow_cfg->ntuple_max_flows;
 }
-EXPORT_SYMBOL(otx2_get_maxflows);
 
 int otx2_get_flow(struct otx2_nic *pfvf, struct ethtool_rxnfc *nfc,
 		  u32 location)
@@ -786,7 +732,7 @@ int otx2_prepare_flow_request(struct ethtool_rx_flow_spec *fsp,
 			ether_addr_copy(pmask->dmac, eth_mask->h_dest);
 			req->features |= BIT_ULL(NPC_DMAC);
 		}
-		if (eth_hdr->h_proto) {
+		if (eth_mask->h_proto) {
 			memcpy(&pkt->etype, &eth_hdr->h_proto,
 			       sizeof(pkt->etype));
 			memcpy(&pmask->etype, &eth_mask->h_proto,
@@ -948,7 +894,7 @@ static int otx2_add_flow_with_pfmac(struct otx2_nic *pfvf,
 
 	pf_mac->entry = 0;
 	pf_mac->dmac_filter = true;
-	pf_mac->location = pfvf->flow_cfg->max_flows;
+	pf_mac->location = pfvf->flow_cfg->ntuple_max_flows;
 	memcpy(&pf_mac->flow_spec, &flow->flow_spec,
 	       sizeof(struct ethtool_rx_flow_spec));
 	pf_mac->flow_spec.location = pf_mac->location;
@@ -1029,7 +975,7 @@ int otx2_add_flow(struct otx2_nic *pfvf, struct ethtool_rxnfc *nfc)
 		flow->dmac_filter = true;
 		flow->entry = find_first_zero_bit(&flow_cfg->dmacflt_bmap,
 						  flow_cfg->dmacflt_max_flows);
-		fsp->location = flow_cfg->max_flows + flow->entry;
+		fsp->location = flow_cfg->ntuple_max_flows + flow->entry;
 		flow->flow_spec.location = fsp->location;
 		flow->location = fsp->location;
 
@@ -1037,11 +983,11 @@ int otx2_add_flow(struct otx2_nic *pfvf, struct ethtool_rxnfc *nfc)
 		otx2_dmacflt_add(pfvf, eth_hdr->h_dest, flow->entry);
 
 	} else {
-		if (flow->location >= pfvf->flow_cfg->max_flows) {
+		if (flow->location >= pfvf->flow_cfg->ntuple_max_flows) {
 			netdev_warn(pfvf->netdev,
 				    "Can't insert non dmac ntuple rule at %d, allowed range %d-0\n",
 				    flow->location,
-				    flow_cfg->max_flows - 1);
+				    flow_cfg->ntuple_max_flows - 1);
 			err = -EINVAL;
 		} else {
 			flow->entry = flow_cfg->flow_ent[flow->location];
@@ -1050,8 +996,6 @@ int otx2_add_flow(struct otx2_nic *pfvf, struct ethtool_rxnfc *nfc)
 	}
 
 	if (err) {
-		if (err == MBOX_MSG_INVALID)
-			err = -EINVAL;
 		if (new)
 			kfree(flow);
 		return err;
@@ -1196,7 +1140,7 @@ int otx2_destroy_ntuple_flows(struct otx2_nic *pfvf)
 	}
 
 	req->start = flow_cfg->flow_ent[0];
-	req->end   = flow_cfg->flow_ent[flow_cfg->max_flows - 1];
+	req->end   = flow_cfg->flow_ent[flow_cfg->ntuple_max_flows - 1];
 	err = otx2_sync_mbox_msg(&pfvf->mbox);
 	mutex_unlock(&pfvf->mbox.lock);
 

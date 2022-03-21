@@ -9605,12 +9605,7 @@ static int dm_update_crtc_state(struct amdgpu_display_manager *dm,
 		} else if (amdgpu_freesync_vid_mode && aconnector &&
 			   is_freesync_video_mode(&new_crtc_state->mode,
 						  aconnector)) {
-			struct drm_display_mode *high_mode;
-
-			high_mode = get_highest_refresh_rate_mode(aconnector, false);
-			if (!drm_mode_equal(&new_crtc_state->mode, high_mode)) {
-				set_freesync_fixed_config(dm_new_crtc_state);
-			}
+			set_freesync_fixed_config(dm_new_crtc_state);
 		}
 
 		ret = dm_atomic_get_state(state, &dm_state);

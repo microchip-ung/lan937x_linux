@@ -7,6 +7,7 @@
 #define _IPA_MODEM_H_
 
 struct ipa;
+struct ipa_endpoint;
 struct net_device;
 struct sk_buff;
 
@@ -23,5 +24,8 @@ void ipa_modem_exit(struct ipa *ipa);
 
 int ipa_modem_config(struct ipa *ipa);
 void ipa_modem_deconfig(struct ipa *ipa);
+
+int ipa_modem_setup(struct ipa *ipa);
+void ipa_modem_teardown(struct ipa *ipa);
 
 #endif /* _IPA_MODEM_H_ */

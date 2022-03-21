@@ -522,6 +522,7 @@ static void ultra_pio_input(struct net_device *dev, int count,
 	/* We know skbuffs are padded to at least word alignment. */
 	insw(ioaddr + IOPD, buf, (count+1)>>1);
 }
+
 static void ultra_pio_output(struct net_device *dev, int count,
 							const unsigned char *buf, const int start_page)
 {
@@ -571,7 +572,8 @@ MODULE_LICENSE("GPL");
 
 /* This is set up so that only a single autoprobe takes place per call.
 ISA device autoprobes on a running machine are not recommended. */
-static int __init ultra_init_module(void)
+int __init
+init_module(void)
 {
 	struct net_device *dev;
 	int this_dev, found = 0;
@@ -598,7 +600,6 @@ static int __init ultra_init_module(void)
 		return 0;
 	return -ENXIO;
 }
-module_init(ultra_init_module);
 
 static void cleanup_card(struct net_device *dev)
 {
@@ -612,7 +613,8 @@ static void cleanup_card(struct net_device *dev)
 	iounmap(ei_status.mem);
 }
 
-static void __exit ultra_cleanup_module(void)
+void __exit
+cleanup_module(void)
 {
 	int this_dev;
 
@@ -625,5 +627,4 @@ static void __exit ultra_cleanup_module(void)
 		}
 	}
 }
-module_exit(ultra_cleanup_module);
 #endif /* MODULE */

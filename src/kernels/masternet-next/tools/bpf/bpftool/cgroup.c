@@ -501,8 +501,7 @@ static int do_help(int argc, char **argv)
 		HELP_SPEC_ATTACH_TYPES "\n"
 		"       " HELP_SPEC_ATTACH_FLAGS "\n"
 		"       " HELP_SPEC_PROGRAM "\n"
-		"       " HELP_SPEC_OPTIONS " |\n"
-		"                    {-f|--bpffs} }\n"
+		"       " HELP_SPEC_OPTIONS "\n"
 		"",
 		bin_name, argv[-2]);
 

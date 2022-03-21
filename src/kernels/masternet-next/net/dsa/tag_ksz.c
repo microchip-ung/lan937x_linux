@@ -26,7 +26,7 @@ static struct sk_buff *ksz_common_rcv(struct sk_buff *skb,
 
 	pskb_trim_rcsum(skb, skb->len - len);
 
-	dsa_default_offload_fwd_mark(skb);
+	skb->offload_fwd_mark = true;
 
 	return skb;
 }
@@ -69,7 +69,8 @@ static struct sk_buff *ksz8795_xmit(struct sk_buff *skb, struct net_device *dev)
 	return skb;
 }
 
-static struct sk_buff *ksz8795_rcv(struct sk_buff *skb, struct net_device *dev)
+static struct sk_buff *ksz8795_rcv(struct sk_buff *skb, struct net_device *dev,
+				  struct packet_type *pt)
 {
 	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
 
@@ -135,7 +136,8 @@ static struct sk_buff *ksz9477_xmit(struct sk_buff *skb,
 	return skb;
 }
 
-static struct sk_buff *ksz9477_rcv(struct sk_buff *skb, struct net_device *dev)
+static struct sk_buff *ksz9477_rcv(struct sk_buff *skb, struct net_device *dev,
+				   struct packet_type *pt)
 {
 	/* Tag decoding */
 	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
@@ -345,7 +347,8 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	return lan937x_defer_xmit(dp, skb);
 }
 
-static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev)
+static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev,
+				   struct packet_type *pt)
 {
 	/* Tag decoding */
 	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;

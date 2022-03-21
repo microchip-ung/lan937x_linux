@@ -142,6 +142,11 @@ static int hostess_close(struct net_device *d)
 	return 0;
 }
 
+static int hostess_ioctl(struct net_device *d, struct ifreq *ifr, int cmd)
+{
+	return hdlc_ioctl(d, ifr, cmd);
+}
+
 /*	Passed network frames, fire them downwind.
  */
 
@@ -166,7 +171,7 @@ static const struct net_device_ops hostess_ops = {
 	.ndo_open       = hostess_open,
 	.ndo_stop       = hostess_close,
 	.ndo_start_xmit = hdlc_start_xmit,
-	.ndo_siocwandev = hdlc_ioctl,
+	.ndo_do_ioctl   = hostess_ioctl,
 };
 
 static struct z8530_dev *sv11_init(int iobase, int irq)
@@ -319,18 +324,16 @@ MODULE_DESCRIPTION("Modular driver for the Comtrol Hostess SV11");
 
 static struct z8530_dev *sv11_unit;
 
-static int sv11_module_init(void)
+int init_module(void)
 {
 	sv11_unit = sv11_init(io, irq);
 	if (!sv11_unit)
 		return -ENODEV;
 	return 0;
 }
-module_init(sv11_module_init);
 
-static void sv11_module_cleanup(void)
+void cleanup_module(void)
 {
 	if (sv11_unit)
 		sv11_shutdown(sv11_unit);
 }
-module_exit(sv11_module_cleanup);

@@ -12,8 +12,7 @@ SYNOPSIS
 
 	**bpftool** [*OPTIONS*] **gen** *COMMAND*
 
-	*OPTIONS* := { { **-j** | **--json** } [{ **-p** | **--pretty** }] | { **-d** | **--debug** } |
-		{ **-L** | **--use-loader** } }
+	*OPTIONS* := { { **-j** | **--json** } [{ **-p** | **--pretty** }] }
 
 	*COMMAND* := { **object** | **skeleton** | **help** }
 
@@ -152,12 +151,6 @@ DESCRIPTION
 OPTIONS
 =======
 	.. include:: common_options.rst
-
-	-L, --use-loader
-		  For skeletons, generate a "light" skeleton (also known as "loader"
-		  skeleton). A light skeleton contains a loader eBPF program. It does
-		  not use the majority of the libbpf infrastructure, and does not need
-		  libelf.
 
 EXAMPLES
 ========

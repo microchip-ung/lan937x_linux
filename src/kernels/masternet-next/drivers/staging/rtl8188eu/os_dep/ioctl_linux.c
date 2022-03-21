@@ -2769,6 +2769,9 @@ int rtw_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		ret = rtw_hostapd_ioctl(dev, &wrq->u.data);
 		break;
 #endif /*  CONFIG_88EU_AP_MODE */
+	case (SIOCDEVPRIVATE + 1):
+		ret = rtw_android_priv_cmd(dev, rq, cmd);
+		break;
 	default:
 		ret = -EOPNOTSUPP;
 		break;

@@ -223,10 +223,10 @@ static int perf_event__synthesize_one_bpf_prog(struct perf_session *session,
 			free(info_linear);
 			return -1;
 		}
-		btf = btf__load_from_kernel_by_id(info->btf_id);
-		if (libbpf_get_error(btf)) {
+		if (btf__get_from_id(info->btf_id, &btf)) {
 			pr_debug("%s: failed to get BTF of id %u, aborting\n", __func__, info->btf_id);
 			err = -1;
+			btf = NULL;
 			goto out;
 		}
 		perf_env__fetch_btf(env, info->btf_id, btf);
@@ -296,7 +296,7 @@ static int perf_event__synthesize_one_bpf_prog(struct perf_session *session,
 
 out:
 	free(info_linear);
-	btf__free(btf);
+	free(btf);
 	return err ? -1 : 0;
 }
 
@@ -478,8 +478,7 @@ static void perf_env__add_bpf_info(struct perf_env *env, u32 id)
 	if (btf_id == 0)
 		goto out;
 
-	btf = btf__load_from_kernel_by_id(btf_id);
-	if (libbpf_get_error(btf)) {
+	if (btf__get_from_id(btf_id, &btf)) {
 		pr_debug("%s: failed to get BTF of id %u, aborting\n",
 			 __func__, btf_id);
 		goto out;
@@ -487,7 +486,7 @@ static void perf_env__add_bpf_info(struct perf_env *env, u32 id)
 	perf_env__fetch_btf(env, btf_id, btf);
 
 out:
-	btf__free(btf);
+	free(btf);
 	close(fd);
 }
 

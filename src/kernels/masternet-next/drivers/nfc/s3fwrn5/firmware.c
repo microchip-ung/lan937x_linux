@@ -421,9 +421,10 @@ int s3fwrn5_fw_download(struct s3fwrn5_fw_info *fw_info)
 
 	tfm = crypto_alloc_shash("sha1", 0, 0);
 	if (IS_ERR(tfm)) {
+		ret = PTR_ERR(tfm);
 		dev_err(&fw_info->ndev->nfc_dev->dev,
 			"Cannot allocate shash (code=%pe)\n", tfm);
-		return PTR_ERR(tfm);
+		goto out;
 	}
 
 	ret = crypto_shash_tfm_digest(tfm, fw->image, image_size, hash_data);
@@ -432,7 +433,7 @@ int s3fwrn5_fw_download(struct s3fwrn5_fw_info *fw_info)
 	if (ret) {
 		dev_err(&fw_info->ndev->nfc_dev->dev,
 			"Cannot compute hash (code=%d)\n", ret);
-		return ret;
+		goto out;
 	}
 
 	/* Firmware update process */
@@ -445,7 +446,7 @@ int s3fwrn5_fw_download(struct s3fwrn5_fw_info *fw_info)
 	if (ret < 0) {
 		dev_err(&fw_info->ndev->nfc_dev->dev,
 			"Unable to enter update mode\n");
-		return ret;
+		goto out;
 	}
 
 	for (off = 0; off < image_size; off += fw_info->sector_size) {
@@ -454,7 +455,7 @@ int s3fwrn5_fw_download(struct s3fwrn5_fw_info *fw_info)
 		if (ret < 0) {
 			dev_err(&fw_info->ndev->nfc_dev->dev,
 				"Firmware update error (code=%d)\n", ret);
-			return ret;
+			goto out;
 		}
 	}
 
@@ -462,12 +463,13 @@ int s3fwrn5_fw_download(struct s3fwrn5_fw_info *fw_info)
 	if (ret < 0) {
 		dev_err(&fw_info->ndev->nfc_dev->dev,
 			"Unable to complete update mode\n");
-		return ret;
+		goto out;
 	}
 
 	dev_info(&fw_info->ndev->nfc_dev->dev,
 		"Firmware update: success\n");
 
+out:
 	return ret;
 }
 

@@ -12,8 +12,7 @@ SYNOPSIS
 
 	**bpftool** [*OPTIONS*] **link** *COMMAND*
 
-	*OPTIONS* := { { **-j** | **--json** } [{ **-p** | **--pretty** }] | { **-d** | **--debug** } |
-		{ **-f** | **--bpffs** } | { **-n** | **--nomount** } }
+	*OPTIONS* := { { **-j** | **--json** } [{ **-p** | **--pretty** }] | { **-f** | **--bpffs** } }
 
 	*COMMANDS* := { **show** | **list** | **pin** | **help** }
 

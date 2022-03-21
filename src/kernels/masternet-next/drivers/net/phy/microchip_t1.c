@@ -714,10 +714,11 @@ static int lan87xx_read_status(struct phy_device *phydev)
 	phydev->duplex = DUPLEX_UNKNOWN;
 	phydev->pause = 0;
 	phydev->asym_pause = 0;
-
+/*
 	rc = genphy_read_master_slave(phydev);
 	if (rc < 0)
 		return rc;
+		*/
 
 	rc = genphy_read_status_fixed(phydev);
 	if (rc < 0)

@@ -163,12 +163,13 @@ static const struct nla_policy mall_policy[TCA_MATCHALL_MAX + 1] = {
 static int mall_set_parms(struct net *net, struct tcf_proto *tp,
 			  struct cls_mall_head *head,
 			  unsigned long base, struct nlattr **tb,
-			  struct nlattr *est, u32 flags,
+			  struct nlattr *est, bool ovr,
 			  struct netlink_ext_ack *extack)
 {
 	int err;
 
-	err = tcf_exts_validate(net, tp, tb, est, &head->exts, flags, extack);
+	err = tcf_exts_validate(net, tp, tb, est, &head->exts, ovr, true,
+				extack);
 	if (err < 0)
 		return err;
 
@@ -182,13 +183,13 @@ static int mall_set_parms(struct net *net, struct tcf_proto *tp,
 static int mall_change(struct net *net, struct sk_buff *in_skb,
 		       struct tcf_proto *tp, unsigned long base,
 		       u32 handle, struct nlattr **tca,
-		       void **arg, u32 flags,
+		       void **arg, bool ovr, bool rtnl_held,
 		       struct netlink_ext_ack *extack)
 {
 	struct cls_mall_head *head = rtnl_dereference(tp->root);
 	struct nlattr *tb[TCA_MATCHALL_MAX + 1];
 	struct cls_mall_head *new;
-	u32 userflags = 0;
+	u32 flags = 0;
 	int err;
 
 	if (!tca[TCA_OPTIONS])
@@ -203,8 +204,8 @@ static int mall_change(struct net *net, struct sk_buff *in_skb,
 		return err;
 
 	if (tb[TCA_MATCHALL_FLAGS]) {
-		userflags = nla_get_u32(tb[TCA_MATCHALL_FLAGS]);
-		if (!tc_flags_valid(userflags))
+		flags = nla_get_u32(tb[TCA_MATCHALL_FLAGS]);
+		if (!tc_flags_valid(flags))
 			return -EINVAL;
 	}
 
@@ -219,14 +220,14 @@ static int mall_change(struct net *net, struct sk_buff *in_skb,
 	if (!handle)
 		handle = 1;
 	new->handle = handle;
-	new->flags = userflags;
+	new->flags = flags;
 	new->pf = alloc_percpu(struct tc_matchall_pcnt);
 	if (!new->pf) {
 		err = -ENOMEM;
 		goto err_alloc_percpu;
 	}
 
-	err = mall_set_parms(net, tp, new, base, tb, tca[TCA_RATE], flags,
+	err = mall_set_parms(net, tp, new, base, tb, tca[TCA_RATE], ovr,
 			     extack);
 	if (err)
 		goto err_set_parms;

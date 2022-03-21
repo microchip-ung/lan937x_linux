@@ -49,9 +49,6 @@ int dsa_tree_notify(struct dsa_switch_tree *dst, unsigned long e, void *v)
  * Can be used to notify the switching fabric of events such as cross-chip
  * bridging between disjoint trees (such as islands of tagger-compatible
  * switches bridged by an incompatible middle switch).
- *
- * WARNING: this function is not reliable during probe time, because probing
- * between trees is asynchronous and not all DSA trees might have probed.
  */
 int dsa_broadcast(unsigned long e, void *v)
 {
@@ -314,9 +311,6 @@ static struct dsa_port *dsa_tree_find_first_cpu(struct dsa_switch_tree *dst)
 	return NULL;
 }
 
-/* Assign the default CPU port (the first one in the tree) to all ports of the
- * fabric which don't already have one as part of their own switch.
- */
 static int dsa_tree_setup_default_cpu(struct dsa_switch_tree *dst)
 {
 	struct dsa_port *cpu_dp, *dp;
@@ -327,48 +321,15 @@ static int dsa_tree_setup_default_cpu(struct dsa_switch_tree *dst)
 		return -EINVAL;
 	}
 
-	list_for_each_entry(dp, &dst->ports, list) {
-		if (dp->cpu_dp)
-			continue;
-
+	/* Assign the default CPU port to all ports of the fabric */
+	list_for_each_entry(dp, &dst->ports, list)
 		if (dsa_port_is_user(dp) || dsa_port_is_dsa(dp))
 			dp->cpu_dp = cpu_dp;
-	}
 
 	return 0;
 }
 
-/* Perform initial assignment of CPU ports to user ports and DSA links in the
- * fabric, giving preference to CPU ports local to each switch. Default to
- * using the first CPU port in the switch tree if the port does not have a CPU
- * port local to this switch.
- */
-static int dsa_tree_setup_cpu_ports(struct dsa_switch_tree *dst)
-{
-	struct dsa_port *cpu_dp, *dp;
-
-	list_for_each_entry(cpu_dp, &dst->ports, list) {
-		if (!dsa_port_is_cpu(cpu_dp))
-			continue;
-
-		list_for_each_entry(dp, &dst->ports, list) {
-			/* Prefer a local CPU port */
-			if (dp->ds != cpu_dp->ds)
-				continue;
-
-			/* Prefer the first local CPU port found */
-			if (dp->cpu_dp)
-				continue;
-
-			if (dsa_port_is_user(dp) || dsa_port_is_dsa(dp))
-				dp->cpu_dp = cpu_dp;
-		}
-	}
-
-	return dsa_tree_setup_default_cpu(dst);
-}
-
-static void dsa_tree_teardown_cpu_ports(struct dsa_switch_tree *dst)
+static void dsa_tree_teardown_default_cpu(struct dsa_switch_tree *dst)
 {
 	struct dsa_port *dp;
 
@@ -749,14 +710,13 @@ static int dsa_switch_setup(struct dsa_switch *ds)
 	/* Add the switch to devlink before calling setup, so that setup can
 	 * add dpipe tables
 	 */
-	ds->devlink =
-		devlink_alloc(&dsa_devlink_ops, sizeof(*dl_priv), ds->dev);
+	ds->devlink = devlink_alloc(&dsa_devlink_ops, sizeof(*dl_priv));
 	if (!ds->devlink)
 		return -ENOMEM;
 	dl_priv = devlink_priv(ds->devlink);
 	dl_priv->ds = ds;
 
-	err = devlink_register(ds->devlink);
+	err = devlink_register(ds->devlink, ds->dev);
 	if (err)
 		goto free_devlink;
 
@@ -961,13 +921,13 @@ static int dsa_tree_setup(struct dsa_switch_tree *dst)
 	if (!complete)
 		return 0;
 
-	err = dsa_tree_setup_cpu_ports(dst);
+	err = dsa_tree_setup_default_cpu(dst);
 	if (err)
 		return err;
 
 	err = dsa_tree_setup_switches(dst);
 	if (err)
-		goto teardown_cpu_ports;
+		goto teardown_default_cpu;
 
 	err = dsa_tree_setup_master(dst);
 	if (err)
@@ -987,8 +947,8 @@ teardown_master:
 	dsa_tree_teardown_master(dst);
 teardown_switches:
 	dsa_tree_teardown_switches(dst);
-teardown_cpu_ports:
-	dsa_tree_teardown_cpu_ports(dst);
+teardown_default_cpu:
+	dsa_tree_teardown_default_cpu(dst);
 
 	return err;
 }
@@ -1006,7 +966,7 @@ static void dsa_tree_teardown(struct dsa_switch_tree *dst)
 
 	dsa_tree_teardown_switches(dst);
 
-	dsa_tree_teardown_cpu_ports(dst);
+	dsa_tree_teardown_default_cpu(dst);
 
 	list_for_each_entry_safe(dl, next, &dst->rtable, list) {
 		list_del(&dl->list);
@@ -1084,7 +1044,6 @@ static struct dsa_port *dsa_port_touch(struct dsa_switch *ds, int index)
 
 	dp->ds = ds;
 	dp->index = index;
-	dp->bridge_num = -1;
 
 	INIT_LIST_HEAD(&dp->list);
 	list_add_tail(&dp->list, &dst->ports);
@@ -1305,9 +1264,6 @@ static int dsa_switch_parse_member_of(struct dsa_switch *ds,
 			ds->index, ds->dst->index);
 		return -EEXIST;
 	}
-
-	if (ds->dst->last_switch < ds->index)
-		ds->dst->last_switch = ds->index;
 
 	return 0;
 }

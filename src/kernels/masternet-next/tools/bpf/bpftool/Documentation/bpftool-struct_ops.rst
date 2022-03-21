@@ -12,7 +12,7 @@ SYNOPSIS
 
 	**bpftool** [*OPTIONS*] **struct_ops** *COMMAND*
 
-	*OPTIONS* := { { **-j** | **--json** } [{ **-p** | **--pretty** }] | { **-d** | **--debug** } }
+	*OPTIONS* := { { **-j** | **--json** } [{ **-p** | **--pretty** }] }
 
 	*COMMANDS* :=
 	{ **show** | **list** | **dump** | **register** | **unregister** | **help** }

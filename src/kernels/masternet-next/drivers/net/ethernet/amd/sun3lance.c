@@ -245,7 +245,7 @@ static void set_multicast_list( struct net_device *dev );
 
 /************************* End of Prototypes **************************/
 
-static struct net_device * __init sun3lance_probe(void)
+struct net_device * __init sun3lance_probe(int unit)
 {
 	struct net_device *dev;
 	static int found;
@@ -272,6 +272,10 @@ static struct net_device * __init sun3lance_probe(void)
 	dev = alloc_etherdev(sizeof(struct lance_private));
 	if (!dev)
 		return ERR_PTR(-ENOMEM);
+	if (unit >= 0) {
+		sprintf(dev->name, "eth%d", unit);
+		netdev_boot_setup_check(dev);
+	}
 
 	if (!lance_probe(dev))
 		goto out;
@@ -920,16 +924,17 @@ static void set_multicast_list( struct net_device *dev )
 }
 
 
+#ifdef MODULE
+
 static struct net_device *sun3lance_dev;
 
-static int __init sun3lance_init(void)
+int __init init_module(void)
 {
-	sun3lance_dev = sun3lance_probe();
+	sun3lance_dev = sun3lance_probe(-1);
 	return PTR_ERR_OR_ZERO(sun3lance_dev);
 }
-module_init(sun3lance_init);
 
-static void __exit sun3lance_cleanup(void)
+void __exit cleanup_module(void)
 {
 	unregister_netdev(sun3lance_dev);
 #ifdef CONFIG_SUN3
@@ -937,4 +942,6 @@ static void __exit sun3lance_cleanup(void)
 #endif
 	free_netdev(sun3lance_dev);
 }
-module_exit(sun3lance_cleanup);
+
+#endif /* MODULE */
+

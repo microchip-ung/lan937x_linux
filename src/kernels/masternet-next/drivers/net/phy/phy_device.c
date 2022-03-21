@@ -969,20 +969,6 @@ void phy_device_remove(struct phy_device *phydev)
 EXPORT_SYMBOL(phy_device_remove);
 
 /**
- * phy_get_c45_ids - Read 802.3-c45 IDs for phy device.
- * @phydev: phy_device structure to read 802.3-c45 IDs
- *
- * Returns zero on success, %-EIO on bus access error, or %-ENODEV if
- * the "devices in package" is invalid.
- */
-int phy_get_c45_ids(struct phy_device *phydev)
-{
-	return get_phy_c45_ids(phydev->mdio.bus, phydev->mdio.addr,
-			       &phydev->c45_ids);
-}
-EXPORT_SYMBOL(phy_get_c45_ids);
-
-/**
  * phy_find_first - finds the first PHY device on the bus
  * @bus: the target MII bus
  */
@@ -2052,10 +2038,16 @@ static int genphy_setup_master_slave(struct phy_device *phydev)
 				   CTL1000_PREFER_MASTER), ctl);
 }
 
-int genphy_read_master_slave(struct phy_device *phydev)
+static int genphy_read_master_slave(struct phy_device *phydev)
 {
 	int cfg, state;
 	int val;
+
+	if (!phydev->is_gigabit_capable) {
+		phydev->master_slave_get = MASTER_SLAVE_CFG_UNSUPPORTED;
+		phydev->master_slave_state = MASTER_SLAVE_STATE_UNSUPPORTED;
+		return 0;
+	}
 
 	phydev->master_slave_get = MASTER_SLAVE_CFG_UNKNOWN;
 	phydev->master_slave_state = MASTER_SLAVE_STATE_UNKNOWN;
@@ -2097,7 +2089,6 @@ int genphy_read_master_slave(struct phy_device *phydev)
 
 	return 0;
 }
-EXPORT_SYMBOL(genphy_read_master_slave);
 
 /**
  * genphy_restart_aneg - Enable and Restart Autonegotiation
@@ -2392,18 +2383,14 @@ int genphy_read_status(struct phy_device *phydev)
 	if (phydev->autoneg == AUTONEG_ENABLE && old_link && phydev->link)
 		return 0;
 
-	phydev->master_slave_get = MASTER_SLAVE_CFG_UNSUPPORTED;
-	phydev->master_slave_state = MASTER_SLAVE_STATE_UNSUPPORTED;
 	phydev->speed = SPEED_UNKNOWN;
 	phydev->duplex = DUPLEX_UNKNOWN;
 	phydev->pause = 0;
 	phydev->asym_pause = 0;
 
-	if (phydev->is_gigabit_capable) {
-		err = genphy_read_master_slave(phydev);
-		if (err < 0)
-			return err;
-	}
+	err = genphy_read_master_slave(phydev);
+	if (err < 0)
+		return err;
 
 	err = genphy_read_lpa(phydev);
 	if (err < 0)

@@ -948,33 +948,6 @@ const struct bpf_func_proto bpf_snprintf_btf_proto = {
 	.arg5_type	= ARG_ANYTHING,
 };
 
-BPF_CALL_1(bpf_get_func_ip_tracing, void *, ctx)
-{
-	/* This helper call is inlined by verifier. */
-	return ((u64 *)ctx)[-1];
-}
-
-static const struct bpf_func_proto bpf_get_func_ip_proto_tracing = {
-	.func		= bpf_get_func_ip_tracing,
-	.gpl_only	= true,
-	.ret_type	= RET_INTEGER,
-	.arg1_type	= ARG_PTR_TO_CTX,
-};
-
-BPF_CALL_1(bpf_get_func_ip_kprobe, struct pt_regs *, regs)
-{
-	struct kprobe *kp = kprobe_running();
-
-	return kp ? (uintptr_t)kp->addr : 0;
-}
-
-static const struct bpf_func_proto bpf_get_func_ip_proto_kprobe = {
-	.func		= bpf_get_func_ip_kprobe,
-	.gpl_only	= true,
-	.ret_type	= RET_INTEGER,
-	.arg1_type	= ARG_PTR_TO_CTX,
-};
-
 const struct bpf_func_proto *
 bpf_tracing_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {
@@ -1017,29 +990,28 @@ bpf_tracing_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 		return &bpf_get_numa_node_id_proto;
 	case BPF_FUNC_perf_event_read:
 		return &bpf_perf_event_read_proto;
+	case BPF_FUNC_probe_write_user:
+		return bpf_get_probe_write_proto();
 	case BPF_FUNC_current_task_under_cgroup:
 		return &bpf_current_task_under_cgroup_proto;
 	case BPF_FUNC_get_prandom_u32:
 		return &bpf_get_prandom_u32_proto;
-	case BPF_FUNC_probe_write_user:
-		return security_locked_down(LOCKDOWN_BPF_WRITE_USER) < 0 ?
-		       NULL : bpf_get_probe_write_proto();
 	case BPF_FUNC_probe_read_user:
 		return &bpf_probe_read_user_proto;
 	case BPF_FUNC_probe_read_kernel:
-		return security_locked_down(LOCKDOWN_BPF_READ_KERNEL) < 0 ?
+		return security_locked_down(LOCKDOWN_BPF_READ) < 0 ?
 		       NULL : &bpf_probe_read_kernel_proto;
 	case BPF_FUNC_probe_read_user_str:
 		return &bpf_probe_read_user_str_proto;
 	case BPF_FUNC_probe_read_kernel_str:
-		return security_locked_down(LOCKDOWN_BPF_READ_KERNEL) < 0 ?
+		return security_locked_down(LOCKDOWN_BPF_READ) < 0 ?
 		       NULL : &bpf_probe_read_kernel_str_proto;
 #ifdef CONFIG_ARCH_HAS_NON_OVERLAPPING_ADDRESS_SPACE
 	case BPF_FUNC_probe_read:
-		return security_locked_down(LOCKDOWN_BPF_READ_KERNEL) < 0 ?
+		return security_locked_down(LOCKDOWN_BPF_READ) < 0 ?
 		       NULL : &bpf_probe_read_compat_proto;
 	case BPF_FUNC_probe_read_str:
-		return security_locked_down(LOCKDOWN_BPF_READ_KERNEL) < 0 ?
+		return security_locked_down(LOCKDOWN_BPF_READ) < 0 ?
 		       NULL : &bpf_probe_read_compat_str_proto;
 #endif
 #ifdef CONFIG_CGROUPS
@@ -1086,10 +1058,8 @@ bpf_tracing_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 		return &bpf_for_each_map_elem_proto;
 	case BPF_FUNC_snprintf:
 		return &bpf_snprintf_proto;
-	case BPF_FUNC_get_func_ip:
-		return &bpf_get_func_ip_proto_tracing;
 	default:
-		return bpf_base_func_proto(func_id);
+		return NULL;
 	}
 }
 
@@ -1107,8 +1077,6 @@ kprobe_prog_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 	case BPF_FUNC_override_return:
 		return &bpf_override_return_proto;
 #endif
-	case BPF_FUNC_get_func_ip:
-		return &bpf_get_func_ip_proto_kprobe;
 	default:
 		return bpf_tracing_func_proto(func_id, prog);
 	}
@@ -1462,8 +1430,6 @@ raw_tp_prog_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 const struct bpf_func_proto *
 tracing_prog_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {
-	const struct bpf_func_proto *fn;
-
 	switch (func_id) {
 #ifdef CONFIG_NET
 	case BPF_FUNC_skb_output:
@@ -1504,10 +1470,7 @@ tracing_prog_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 	case BPF_FUNC_d_path:
 		return &bpf_d_path_proto;
 	default:
-		fn = raw_tp_prog_func_proto(func_id, prog);
-		if (!fn && prog->expected_attach_type == BPF_TRACE_ITER)
-			fn = bpf_iter_get_func_proto(func_id, prog);
-		return fn;
+		return raw_tp_prog_func_proto(func_id, prog);
 	}
 }
 

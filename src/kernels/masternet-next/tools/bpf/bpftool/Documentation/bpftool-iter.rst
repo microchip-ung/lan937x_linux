@@ -12,8 +12,6 @@ SYNOPSIS
 
 	**bpftool** [*OPTIONS*] **iter** *COMMAND*
 
-	*OPTIONS* := { { **-j** | **--json** } [{ **-p** | **--pretty** }] | { **-d** | **--debug** } }
-
 	*COMMANDS* := { **pin** | **help** }
 
 ITER COMMANDS

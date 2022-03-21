@@ -89,8 +89,7 @@ static void mlx5_add_cq_to_tasklet(struct mlx5_core_cq *cq,
 int mlx5_core_create_cq(struct mlx5_core_dev *dev, struct mlx5_core_cq *cq,
 			u32 *in, int inlen, u32 *out, int outlen)
 {
-	int eqn = MLX5_GET(cqc, MLX5_ADDR_OF(create_cq_in, in, cq_context),
-			   c_eqn_or_apu_element);
+	int eqn = MLX5_GET(cqc, MLX5_ADDR_OF(create_cq_in, in, cq_context), c_eqn);
 	u32 din[MLX5_ST_SZ_DW(destroy_cq_in)] = {};
 	struct mlx5_eq_comp *eq;
 	int err;
@@ -135,7 +134,6 @@ int mlx5_core_create_cq(struct mlx5_core_dev *dev, struct mlx5_core_cq *cq,
 			      cq->cqn);
 
 	cq->uar = dev->priv.uar;
-	cq->irqn = eq->core.irqn;
 
 	return 0;
 

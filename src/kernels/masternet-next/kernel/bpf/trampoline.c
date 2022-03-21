@@ -172,7 +172,7 @@ static int register_fentry(struct bpf_trampoline *tr, void *new_addr)
 }
 
 static struct bpf_tramp_progs *
-bpf_trampoline_get_progs(const struct bpf_trampoline *tr, int *total, bool *ip_arg)
+bpf_trampoline_get_progs(const struct bpf_trampoline *tr, int *total)
 {
 	const struct bpf_prog_aux *aux;
 	struct bpf_tramp_progs *tprogs;
@@ -189,10 +189,8 @@ bpf_trampoline_get_progs(const struct bpf_trampoline *tr, int *total, bool *ip_a
 		*total += tr->progs_cnt[kind];
 		progs = tprogs[kind].progs;
 
-		hlist_for_each_entry(aux, &tr->progs_hlist[kind], tramp_hlist) {
-			*ip_arg |= aux->prog->call_get_func_ip;
+		hlist_for_each_entry(aux, &tr->progs_hlist[kind], tramp_hlist)
 			*progs++ = aux->prog;
-		}
 	}
 	return tprogs;
 }
@@ -335,10 +333,9 @@ static int bpf_trampoline_update(struct bpf_trampoline *tr)
 	struct bpf_tramp_image *im;
 	struct bpf_tramp_progs *tprogs;
 	u32 flags = BPF_TRAMP_F_RESTORE_REGS;
-	bool ip_arg = false;
 	int err, total;
 
-	tprogs = bpf_trampoline_get_progs(tr, &total, &ip_arg);
+	tprogs = bpf_trampoline_get_progs(tr, &total);
 	if (IS_ERR(tprogs))
 		return PTR_ERR(tprogs);
 
@@ -359,9 +356,6 @@ static int bpf_trampoline_update(struct bpf_trampoline *tr)
 	if (tprogs[BPF_TRAMP_FEXIT].nr_progs ||
 	    tprogs[BPF_TRAMP_MODIFY_RETURN].nr_progs)
 		flags = BPF_TRAMP_F_CALL_ORIG | BPF_TRAMP_F_SKIP_FRAME;
-
-	if (ip_arg)
-		flags |= BPF_TRAMP_F_IP_ARG;
 
 	err = arch_prepare_bpf_trampoline(im, im->image, im->image + PAGE_SIZE,
 					  &tr->func.model, flags, tprogs,

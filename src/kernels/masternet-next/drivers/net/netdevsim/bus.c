@@ -183,6 +183,8 @@ new_port_store(struct device *dev, struct device_attribute *attr,
 	       const char *buf, size_t count)
 {
 	struct nsim_bus_dev *nsim_bus_dev = to_nsim_bus_dev(dev);
+	struct nsim_dev *nsim_dev = dev_get_drvdata(dev);
+	struct devlink *devlink;
 	unsigned int port_index;
 	int ret;
 
@@ -193,15 +195,12 @@ new_port_store(struct device *dev, struct device_attribute *attr,
 	if (ret)
 		return ret;
 
-	if (!mutex_trylock(&nsim_bus_dev->nsim_bus_reload_lock))
-		return -EBUSY;
+	devlink = priv_to_devlink(nsim_dev);
 
-	if (nsim_bus_dev->in_reload) {
-		mutex_unlock(&nsim_bus_dev->nsim_bus_reload_lock);
-		return -EBUSY;
-	}
-
+	mutex_lock(&nsim_bus_dev->nsim_bus_reload_lock);
+	devlink_reload_disable(devlink);
 	ret = nsim_dev_port_add(nsim_bus_dev, NSIM_DEV_PORT_TYPE_PF, port_index);
+	devlink_reload_enable(devlink);
 	mutex_unlock(&nsim_bus_dev->nsim_bus_reload_lock);
 	return ret ? ret : count;
 }
@@ -213,6 +212,8 @@ del_port_store(struct device *dev, struct device_attribute *attr,
 	       const char *buf, size_t count)
 {
 	struct nsim_bus_dev *nsim_bus_dev = to_nsim_bus_dev(dev);
+	struct nsim_dev *nsim_dev = dev_get_drvdata(dev);
+	struct devlink *devlink;
 	unsigned int port_index;
 	int ret;
 
@@ -223,15 +224,12 @@ del_port_store(struct device *dev, struct device_attribute *attr,
 	if (ret)
 		return ret;
 
-	if (!mutex_trylock(&nsim_bus_dev->nsim_bus_reload_lock))
-		return -EBUSY;
+	devlink = priv_to_devlink(nsim_dev);
 
-	if (nsim_bus_dev->in_reload) {
-		mutex_unlock(&nsim_bus_dev->nsim_bus_reload_lock);
-		return -EBUSY;
-	}
-
+	mutex_lock(&nsim_bus_dev->nsim_bus_reload_lock);
+	devlink_reload_disable(devlink);
 	ret = nsim_dev_port_del(nsim_bus_dev, NSIM_DEV_PORT_TYPE_PF, port_index);
+	devlink_reload_enable(devlink);
 	mutex_unlock(&nsim_bus_dev->nsim_bus_reload_lock);
 	return ret ? ret : count;
 }
@@ -264,31 +262,29 @@ static struct device_type nsim_bus_dev_type = {
 };
 
 static struct nsim_bus_dev *
-nsim_bus_dev_new(unsigned int id, unsigned int port_count, unsigned int num_queues);
+nsim_bus_dev_new(unsigned int id, unsigned int port_count);
 
 static ssize_t
 new_device_store(struct bus_type *bus, const char *buf, size_t count)
 {
-	unsigned int id, port_count, num_queues;
 	struct nsim_bus_dev *nsim_bus_dev;
+	unsigned int port_count;
+	unsigned int id;
 	int err;
 
-	err = sscanf(buf, "%u %u %u", &id, &port_count, &num_queues);
+	err = sscanf(buf, "%u %u", &id, &port_count);
 	switch (err) {
 	case 1:
 		port_count = 1;
 		fallthrough;
 	case 2:
-		num_queues = 1;
-		fallthrough;
-	case 3:
 		if (id > INT_MAX) {
 			pr_err("Value of \"id\" is too big.\n");
 			return -EINVAL;
 		}
 		break;
 	default:
-		pr_err("Format for adding new device is \"id port_count num_queues\" (uint uint unit).\n");
+		pr_err("Format for adding new device is \"id port_count\" (uint uint).\n");
 		return -EINVAL;
 	}
 
@@ -299,7 +295,7 @@ new_device_store(struct bus_type *bus, const char *buf, size_t count)
 		goto err;
 	}
 
-	nsim_bus_dev = nsim_bus_dev_new(id, port_count, num_queues);
+	nsim_bus_dev = nsim_bus_dev_new(id, port_count);
 	if (IS_ERR(nsim_bus_dev)) {
 		err = PTR_ERR(nsim_bus_dev);
 		goto err;
@@ -401,7 +397,7 @@ static struct bus_type nsim_bus = {
 #define NSIM_BUS_DEV_MAX_VFS 4
 
 static struct nsim_bus_dev *
-nsim_bus_dev_new(unsigned int id, unsigned int port_count, unsigned int num_queues)
+nsim_bus_dev_new(unsigned int id, unsigned int port_count)
 {
 	struct nsim_bus_dev *nsim_bus_dev;
 	int err;
@@ -417,7 +413,6 @@ nsim_bus_dev_new(unsigned int id, unsigned int port_count, unsigned int num_queu
 	nsim_bus_dev->dev.bus = &nsim_bus;
 	nsim_bus_dev->dev.type = &nsim_bus_dev_type;
 	nsim_bus_dev->port_count = port_count;
-	nsim_bus_dev->num_queues = num_queues;
 	nsim_bus_dev->initial_net = current->nsproxy->net_ns;
 	nsim_bus_dev->max_vfs = NSIM_BUS_DEV_MAX_VFS;
 	mutex_init(&nsim_bus_dev->nsim_bus_reload_lock);

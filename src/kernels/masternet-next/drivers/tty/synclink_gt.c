@@ -1524,11 +1524,11 @@ static int hdlcdev_close(struct net_device *dev)
  *
  * Return: 0 if success, otherwise error code
  */
-static int hdlcdev_ioctl(struct net_device *dev, struct if_settings *ifs)
+static int hdlcdev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	const size_t size = sizeof(sync_serial_settings);
 	sync_serial_settings new_line;
-	sync_serial_settings __user *line = ifs->ifs_ifsu.sync;
+	sync_serial_settings __user *line = ifr->ifr_settings.ifs_ifsu.sync;
 	struct slgt_info *info = dev_to_port(dev);
 	unsigned int flags;
 
@@ -1538,14 +1538,17 @@ static int hdlcdev_ioctl(struct net_device *dev, struct if_settings *ifs)
 	if (info->port.count)
 		return -EBUSY;
 
+	if (cmd != SIOCWANDEV)
+		return hdlc_ioctl(dev, ifr, cmd);
+
 	memset(&new_line, 0, sizeof(new_line));
 
-	switch (ifs->type) {
+	switch(ifr->ifr_settings.type) {
 	case IF_GET_IFACE: /* return current sync_serial_settings */
 
-		ifs->type = IF_IFACE_SYNC_SERIAL;
-		if (ifs->size < size) {
-			ifs->size = size; /* data size wanted */
+		ifr->ifr_settings.type = IF_IFACE_SYNC_SERIAL;
+		if (ifr->ifr_settings.size < size) {
+			ifr->ifr_settings.size = size; /* data size wanted */
 			return -ENOBUFS;
 		}
 
@@ -1612,7 +1615,7 @@ static int hdlcdev_ioctl(struct net_device *dev, struct if_settings *ifs)
 		return 0;
 
 	default:
-		return hdlc_ioctl(dev, ifs);
+		return hdlc_ioctl(dev, ifr, cmd);
 	}
 }
 
@@ -1685,7 +1688,7 @@ static const struct net_device_ops hdlcdev_ops = {
 	.ndo_open       = hdlcdev_open,
 	.ndo_stop       = hdlcdev_close,
 	.ndo_start_xmit = hdlc_start_xmit,
-	.ndo_siocwandev = hdlcdev_ioctl,
+	.ndo_do_ioctl   = hdlcdev_ioctl,
 	.ndo_tx_timeout = hdlcdev_tx_timeout,
 };
 

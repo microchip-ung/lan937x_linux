@@ -683,12 +683,14 @@ static int nfnl_compat_get_rcu(struct sk_buff *skb,
 		goto out_put;
 	}
 
-	ret = nfnetlink_unicast(skb2, info->net, NETLINK_CB(skb).portid);
+	ret = netlink_unicast(info->sk, skb2, NETLINK_CB(skb).portid,
+			      MSG_DONTWAIT);
+	if (ret > 0)
+		ret = 0;
 out_put:
 	rcu_read_lock();
 	module_put(THIS_MODULE);
-
-	return ret;
+	return ret == -EAGAIN ? -ENOBUFS : ret;
 }
 
 static const struct nla_policy nfnl_compat_policy_get[NFTA_COMPAT_MAX+1] = {

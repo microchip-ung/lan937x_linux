@@ -226,7 +226,6 @@ static struct lock_class_key af_family_kern_slock_keys[AF_MAX];
   x "AF_IEEE802154",	x "AF_CAIF"	,	x "AF_ALG"      , \
   x "AF_NFC"   ,	x "AF_VSOCK"    ,	x "AF_KCM"      , \
   x "AF_QIPCRTR",	x "AF_SMC"	,	x "AF_XDP"	, \
-  x "AF_MCTP"  , \
   x "AF_MAX"
 
 static const char *const af_family_key_strings[AF_MAX+1] = {
@@ -1358,15 +1357,6 @@ set_sndbuf:
 		ret = sock_bindtoindex_locked(sk, val);
 		break;
 
-	case SO_BUF_LOCK:
-		if (val & ~SOCK_BUF_LOCK_MASK) {
-			ret = -EINVAL;
-			break;
-		}
-		sk->sk_userlocks = val | (sk->sk_userlocks &
-					  ~SOCK_BUF_LOCK_MASK);
-		break;
-
 	default:
 		ret = -ENOPROTOOPT;
 		break;
@@ -1727,10 +1717,6 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 		if (len != lv)
 			return -EINVAL;
 		v.val64 = sock_net(sk)->net_cookie;
-		break;
-
-	case SO_BUF_LOCK:
-		v.val = sk->sk_userlocks & SOCK_BUF_LOCK_MASK;
 		break;
 
 	default:

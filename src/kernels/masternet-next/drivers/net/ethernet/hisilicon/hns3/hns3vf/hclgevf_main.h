@@ -6,7 +6,6 @@
 #include <linux/fs.h>
 #include <linux/if_vlan.h>
 #include <linux/types.h>
-#include <net/devlink.h>
 #include "hclge_mbx.h"
 #include "hclgevf_cmd.h"
 #include "hnae3.h"
@@ -331,8 +330,6 @@ struct hclgevf_dev {
 	u32 flag;
 	unsigned long serv_processed_cnt;
 	unsigned long last_serv_processed;
-
-	struct devlink *devlink;
 };
 
 static inline bool hclgevf_is_reset_pending(struct hclgevf_dev *hdev)

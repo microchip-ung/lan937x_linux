@@ -25,12 +25,15 @@ MODULE_DESCRIPTION("iptables security table, for MAC rules");
 				(1 << NF_INET_FORWARD) | \
 				(1 << NF_INET_LOCAL_OUT)
 
+static int __net_init iptable_security_table_init(struct net *net);
+
 static const struct xt_table security_table = {
 	.name		= "security",
 	.valid_hooks	= SECURITY_VALID_HOOKS,
 	.me		= THIS_MODULE,
 	.af		= NFPROTO_IPV4,
 	.priority	= NF_IP_PRI_SECURITY,
+	.table_init	= iptable_security_table_init,
 };
 
 static unsigned int
@@ -42,7 +45,7 @@ iptable_security_hook(void *priv, struct sk_buff *skb,
 
 static struct nf_hook_ops *sectbl_ops __read_mostly;
 
-static int iptable_security_table_init(struct net *net)
+static int __net_init iptable_security_table_init(struct net *net)
 {
 	struct ipt_replace *repl;
 	int ret;
@@ -72,23 +75,22 @@ static struct pernet_operations iptable_security_net_ops = {
 
 static int __init iptable_security_init(void)
 {
-	int ret = xt_register_template(&security_table,
-				       iptable_security_table_init);
-
-	if (ret < 0)
-		return ret;
+	int ret;
 
 	sectbl_ops = xt_hook_ops_alloc(&security_table, iptable_security_hook);
-	if (IS_ERR(sectbl_ops)) {
-		xt_unregister_template(&security_table);
+	if (IS_ERR(sectbl_ops))
 		return PTR_ERR(sectbl_ops);
-	}
 
 	ret = register_pernet_subsys(&iptable_security_net_ops);
 	if (ret < 0) {
-		xt_unregister_template(&security_table);
 		kfree(sectbl_ops);
 		return ret;
+	}
+
+	ret = iptable_security_table_init(&init_net);
+	if (ret) {
+		unregister_pernet_subsys(&iptable_security_net_ops);
+		kfree(sectbl_ops);
 	}
 
 	return ret;
@@ -98,7 +100,6 @@ static void __exit iptable_security_fini(void)
 {
 	unregister_pernet_subsys(&iptable_security_net_ops);
 	kfree(sectbl_ops);
-	xt_unregister_template(&security_table);
 }
 
 module_init(iptable_security_init);

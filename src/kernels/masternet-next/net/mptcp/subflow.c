@@ -435,12 +435,10 @@ static void subflow_finish_connect(struct sock *sk, const struct sk_buff *skb)
 			goto do_reset;
 		}
 
-		subflow->backup = mp_opt.backup;
 		subflow->thmac = mp_opt.thmac;
 		subflow->remote_nonce = mp_opt.nonce;
-		pr_debug("subflow=%p, thmac=%llu, remote_nonce=%u backup=%d",
-			 subflow, subflow->thmac, subflow->remote_nonce,
-			 subflow->backup);
+		pr_debug("subflow=%p, thmac=%llu, remote_nonce=%u", subflow,
+			 subflow->thmac, subflow->remote_nonce);
 
 		if (!subflow_thmac_valid(subflow)) {
 			MPTCP_INC_STATS(sock_net(sk), MPTCP_MIB_JOINACKMAC);

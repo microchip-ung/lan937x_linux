@@ -710,8 +710,15 @@ out:
 int rtnetlink_send(struct sk_buff *skb, struct net *net, u32 pid, unsigned int group, int echo)
 {
 	struct sock *rtnl = net->rtnl;
+	int err = 0;
 
-	return nlmsg_notify(rtnl, skb, pid, group, echo, GFP_KERNEL);
+	NETLINK_CB(skb).dst_group = group;
+	if (echo)
+		refcount_inc(&skb->users);
+	netlink_broadcast(rtnl, skb, pid, group, GFP_KERNEL);
+	if (echo)
+		err = netlink_unicast(rtnl, skb, pid, MSG_DONTWAIT);
+	return err;
 }
 
 int rtnl_unicast(struct sk_buff *skb, struct net *net, u32 pid)
@@ -726,8 +733,12 @@ void rtnl_notify(struct sk_buff *skb, struct net *net, u32 pid, u32 group,
 		 struct nlmsghdr *nlh, gfp_t flags)
 {
 	struct sock *rtnl = net->rtnl;
+	int report = 0;
 
-	nlmsg_notify(rtnl, skb, pid, group, nlmsg_report(nlh), flags);
+	if (nlh)
+		report = nlmsg_report(nlh);
+
+	nlmsg_notify(rtnl, skb, pid, group, report, flags);
 }
 EXPORT_SYMBOL(rtnl_notify);
 
@@ -1959,13 +1970,6 @@ static bool link_master_filtered(struct net_device *dev, int master_idx)
 		return false;
 
 	master = netdev_master_upper_dev_get(dev);
-
-	/* 0 is already used to denote IFLA_MASTER wasn't passed, therefore need
-	 * another invalid value for ifindex to denote "no master".
-	 */
-	if (master_idx == -1)
-		return !!master;
-
 	if (!master || master->ifindex != master_idx)
 		return true;
 
@@ -2264,8 +2268,7 @@ invalid_attr:
 	return -EINVAL;
 }
 
-static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[],
-			    struct netlink_ext_ack *extack)
+static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[])
 {
 	if (dev) {
 		if (tb[IFLA_ADDRESS] &&
@@ -2292,7 +2295,7 @@ static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[],
 				return -EOPNOTSUPP;
 
 			if (af_ops->validate_link_af) {
-				err = af_ops->validate_link_af(dev, af, extack);
+				err = af_ops->validate_link_af(dev, af);
 				if (err < 0)
 					return err;
 			}
@@ -2600,7 +2603,7 @@ static int do_setlink(const struct sk_buff *skb,
 	const struct net_device_ops *ops = dev->netdev_ops;
 	int err;
 
-	err = validate_linkmsg(dev, tb, extack);
+	err = validate_linkmsg(dev, tb);
 	if (err < 0)
 		return err;
 
@@ -3298,7 +3301,7 @@ replay:
 			m_ops = master_dev->rtnl_link_ops;
 	}
 
-	err = validate_linkmsg(dev, tb, extack);
+	err = validate_linkmsg(dev, tb);
 	if (err < 0)
 		return err;
 

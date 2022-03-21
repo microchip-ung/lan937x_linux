@@ -3941,8 +3941,7 @@ const struct iw_handler_def hostap_iw_handler_def =
 	.get_wireless_stats = hostap_get_wireless_stats,
 };
 
-/* Private ioctls (iwpriv) that have not yet been converted
- * into new wireless extensions API */
+
 int hostap_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	struct iwreq *wrq = (struct iwreq *) ifr;
@@ -3954,6 +3953,9 @@ int hostap_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	local = iface->local;
 
 	switch (cmd) {
+		/* Private ioctls (iwpriv) that have not yet been converted
+		 * into new wireless extensions API */
+
 	case PRISM2_IOCTL_INQUIRE:
 		if (!capable(CAP_NET_ADMIN)) ret = -EPERM;
 		else ret = prism2_ioctl_priv_inquire(dev, (int *) wrq->u.name);
@@ -4007,31 +4009,11 @@ int hostap_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 					       wrq->u.ap_addr.sa_data);
 		break;
 #endif /* PRISM2_NO_KERNEL_IEEE80211_MGMT */
-	default:
-		ret = -EOPNOTSUPP;
-		break;
-	}
 
-	return ret;
-}
 
-/* Private ioctls that are not used with iwpriv;
- * in SIOCDEVPRIVATE range */
-int hostap_siocdevprivate(struct net_device *dev, struct ifreq *ifr,
-			  void __user *data, int cmd)
-{
-	struct iwreq *wrq = (struct iwreq *)ifr;
-	struct hostap_interface *iface;
-	local_info_t *local;
-	int ret = 0;
+		/* Private ioctls that are not used with iwpriv;
+		 * in SIOCDEVPRIVATE range */
 
-	iface = netdev_priv(dev);
-	local = iface->local;
-
-	if (in_compat_syscall()) /* not implemented yet */
-		return -EOPNOTSUPP;
-
-	switch (cmd) {
 #ifdef PRISM2_DOWNLOAD_SUPPORT
 	case PRISM2_IOCTL_DOWNLOAD:
 		if (!capable(CAP_NET_ADMIN)) ret = -EPERM;

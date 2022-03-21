@@ -34,7 +34,6 @@ struct ksz_port_mib {
 struct ksz_port {
 	u16 member;
 	u16 vid_member;
-	bool remove_tag;		/* Remove Tag flag set, for ksz8795 only */
 	int stp_state;
 	struct phy_device phydev;
 
@@ -55,11 +54,11 @@ struct ksz_port {
 	bool hwts_tx_en;
         struct lan937x_port_ptp_shared ptp_shared;
         ktime_t tstamp_sync;
-	struct completion tstamp_sync_comp;	
+	struct completion tstamp_sync_comp;
         ktime_t tstamp_pdelayreq;
-	struct completion tstamp_pdelayreq_comp;	
+	struct completion tstamp_pdelayreq_comp;
         ktime_t tstamp_pdelayrsp;
-	struct completion tstamp_pdelayrsp_comp;	
+	struct completion tstamp_pdelayrsp_comp;
 #endif
 	u32 rgmii_tx_val;
 	u32 rgmii_rx_val;
@@ -115,13 +114,14 @@ struct ksz_device {
 	u16 host_mask;
 	u16 port_mask;
 
+
 	u8 tas_port;
 	u16 cut_through_enable;
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
 	struct ptp_clock_info ptp_caps;
 	struct ptp_clock *ptp_clock;
 	struct mutex ptp_mutex;  //to serialize the activity in the phc
-	
+
 	struct ksz_device_ptp_shared ptp_shared;
 	enum ksz_ptp_tou_mode ptp_tou_mode;
 #endif
@@ -243,8 +243,12 @@ static inline int ksz_read64(struct ksz_device *dev, u32 reg, u64 *val)
 	int ret;
 
 	ret = regmap_bulk_read(dev->regmap[2], reg, value, 2);
-	if (!ret)
-		*val = (u64)value[0] << 32 | value[1];
+	if (!ret) {
+		/* Ick! ToDo: Add 64bit R/W to regmap on 32bit systems */
+		value[0] = swab32(value[0]);
+		value[1] = swab32(value[1]);
+		*val = swab64((u64)*value);
+	}
 
 	return ret;
 }

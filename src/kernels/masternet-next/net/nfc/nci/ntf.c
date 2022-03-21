@@ -28,10 +28,10 @@
 /* Handle NCI Notification packets */
 
 static void nci_core_reset_ntf_packet(struct nci_dev *ndev,
-				      const struct sk_buff *skb)
+				      struct sk_buff *skb)
 {
 	/* Handle NCI 2.x core reset notification */
-	const struct nci_core_reset_ntf *ntf = (void *)skb->data;
+	struct nci_core_reset_ntf *ntf = (void *)skb->data;
 
 	ndev->nci_ver = ntf->nci_ver;
 	pr_debug("nci_ver 0x%x, config_status 0x%x\n",
@@ -48,7 +48,7 @@ static void nci_core_conn_credits_ntf_packet(struct nci_dev *ndev,
 					     struct sk_buff *skb)
 {
 	struct nci_core_conn_credit_ntf *ntf = (void *) skb->data;
-	struct nci_conn_info *conn_info;
+	struct nci_conn_info	*conn_info;
 	int i;
 
 	pr_debug("num_entries %d\n", ntf->num_entries);
@@ -80,7 +80,7 @@ static void nci_core_conn_credits_ntf_packet(struct nci_dev *ndev,
 }
 
 static void nci_core_generic_error_ntf_packet(struct nci_dev *ndev,
-					      const struct sk_buff *skb)
+					      struct sk_buff *skb)
 {
 	__u8 status = skb->data[0];
 
@@ -107,10 +107,9 @@ static void nci_core_conn_intf_error_ntf_packet(struct nci_dev *ndev,
 		nci_data_exchange_complete(ndev, NULL, ntf->conn_id, -EIO);
 }
 
-static const __u8 *
-nci_extract_rf_params_nfca_passive_poll(struct nci_dev *ndev,
-					struct rf_tech_specific_params_nfca_poll *nfca_poll,
-					const __u8 *data)
+static __u8 *nci_extract_rf_params_nfca_passive_poll(struct nci_dev *ndev,
+			struct rf_tech_specific_params_nfca_poll *nfca_poll,
+						     __u8 *data)
 {
 	nfca_poll->sens_res = __le16_to_cpu(*((__le16 *)data));
 	data += 2;
@@ -135,10 +134,9 @@ nci_extract_rf_params_nfca_passive_poll(struct nci_dev *ndev,
 	return data;
 }
 
-static const __u8 *
-nci_extract_rf_params_nfcb_passive_poll(struct nci_dev *ndev,
-					struct rf_tech_specific_params_nfcb_poll *nfcb_poll,
-					const __u8 *data)
+static __u8 *nci_extract_rf_params_nfcb_passive_poll(struct nci_dev *ndev,
+			struct rf_tech_specific_params_nfcb_poll *nfcb_poll,
+						     __u8 *data)
 {
 	nfcb_poll->sensb_res_len = min_t(__u8, *data++, NFC_SENSB_RES_MAXSIZE);
 
@@ -150,10 +148,9 @@ nci_extract_rf_params_nfcb_passive_poll(struct nci_dev *ndev,
 	return data;
 }
 
-static const __u8 *
-nci_extract_rf_params_nfcf_passive_poll(struct nci_dev *ndev,
-					struct rf_tech_specific_params_nfcf_poll *nfcf_poll,
-					const __u8 *data)
+static __u8 *nci_extract_rf_params_nfcf_passive_poll(struct nci_dev *ndev,
+			struct rf_tech_specific_params_nfcf_poll *nfcf_poll,
+						     __u8 *data)
 {
 	nfcf_poll->bit_rate = *data++;
 	nfcf_poll->sensf_res_len = min_t(__u8, *data++, NFC_SENSF_RES_MAXSIZE);
@@ -167,10 +164,9 @@ nci_extract_rf_params_nfcf_passive_poll(struct nci_dev *ndev,
 	return data;
 }
 
-static const __u8 *
-nci_extract_rf_params_nfcv_passive_poll(struct nci_dev *ndev,
-					struct rf_tech_specific_params_nfcv_poll *nfcv_poll,
-					const __u8 *data)
+static __u8 *nci_extract_rf_params_nfcv_passive_poll(struct nci_dev *ndev,
+			struct rf_tech_specific_params_nfcv_poll *nfcv_poll,
+						     __u8 *data)
 {
 	++data;
 	nfcv_poll->dsfid = *data++;
@@ -179,10 +175,9 @@ nci_extract_rf_params_nfcv_passive_poll(struct nci_dev *ndev,
 	return data;
 }
 
-static const __u8 *
-nci_extract_rf_params_nfcf_passive_listen(struct nci_dev *ndev,
-					  struct rf_tech_specific_params_nfcf_listen *nfcf_listen,
-					  const __u8 *data)
+static __u8 *nci_extract_rf_params_nfcf_passive_listen(struct nci_dev *ndev,
+			struct rf_tech_specific_params_nfcf_listen *nfcf_listen,
+						     __u8 *data)
 {
 	nfcf_listen->local_nfcid2_len = min_t(__u8, *data++,
 					      NFC_NFCID2_MAXSIZE);
@@ -203,12 +198,12 @@ static int nci_add_new_protocol(struct nci_dev *ndev,
 				struct nfc_target *target,
 				__u8 rf_protocol,
 				__u8 rf_tech_and_mode,
-				const void *params)
+				void *params)
 {
-	const struct rf_tech_specific_params_nfca_poll *nfca_poll;
-	const struct rf_tech_specific_params_nfcb_poll *nfcb_poll;
-	const struct rf_tech_specific_params_nfcf_poll *nfcf_poll;
-	const struct rf_tech_specific_params_nfcv_poll *nfcv_poll;
+	struct rf_tech_specific_params_nfca_poll *nfca_poll;
+	struct rf_tech_specific_params_nfcb_poll *nfcb_poll;
+	struct rf_tech_specific_params_nfcf_poll *nfcf_poll;
+	struct rf_tech_specific_params_nfcv_poll *nfcv_poll;
 	__u32 protocol;
 
 	if (rf_protocol == NCI_RF_PROTOCOL_T1T)
@@ -279,7 +274,7 @@ static int nci_add_new_protocol(struct nci_dev *ndev,
 }
 
 static void nci_add_new_target(struct nci_dev *ndev,
-			       const struct nci_rf_discover_ntf *ntf)
+			       struct nci_rf_discover_ntf *ntf)
 {
 	struct nfc_target *target;
 	int i, rc;
@@ -324,10 +319,10 @@ void nci_clear_target_list(struct nci_dev *ndev)
 }
 
 static void nci_rf_discover_ntf_packet(struct nci_dev *ndev,
-				       const struct sk_buff *skb)
+				       struct sk_buff *skb)
 {
 	struct nci_rf_discover_ntf ntf;
-	const __u8 *data = skb->data;
+	__u8 *data = skb->data;
 	bool add_target = true;
 
 	ntf.rf_discovery_id = *data++;
@@ -387,8 +382,7 @@ static void nci_rf_discover_ntf_packet(struct nci_dev *ndev,
 }
 
 static int nci_extract_activation_params_iso_dep(struct nci_dev *ndev,
-						 struct nci_rf_intf_activated_ntf *ntf,
-						 const __u8 *data)
+			struct nci_rf_intf_activated_ntf *ntf, __u8 *data)
 {
 	struct activation_params_nfca_poll_iso_dep *nfca_poll;
 	struct activation_params_nfcb_poll_iso_dep *nfcb_poll;
@@ -424,8 +418,7 @@ static int nci_extract_activation_params_iso_dep(struct nci_dev *ndev,
 }
 
 static int nci_extract_activation_params_nfc_dep(struct nci_dev *ndev,
-						 struct nci_rf_intf_activated_ntf *ntf,
-						 const __u8 *data)
+			struct nci_rf_intf_activated_ntf *ntf, __u8 *data)
 {
 	struct activation_params_poll_nfc_dep *poll;
 	struct activation_params_listen_nfc_dep *listen;
@@ -461,7 +454,7 @@ static int nci_extract_activation_params_nfc_dep(struct nci_dev *ndev,
 }
 
 static void nci_target_auto_activated(struct nci_dev *ndev,
-				      const struct nci_rf_intf_activated_ntf *ntf)
+				      struct nci_rf_intf_activated_ntf *ntf)
 {
 	struct nfc_target *target;
 	int rc;
@@ -484,7 +477,7 @@ static void nci_target_auto_activated(struct nci_dev *ndev,
 }
 
 static int nci_store_general_bytes_nfc_dep(struct nci_dev *ndev,
-					   const struct nci_rf_intf_activated_ntf *ntf)
+		struct nci_rf_intf_activated_ntf *ntf)
 {
 	ndev->remote_gb_len = 0;
 
@@ -526,11 +519,11 @@ static int nci_store_general_bytes_nfc_dep(struct nci_dev *ndev,
 }
 
 static void nci_rf_intf_activated_ntf_packet(struct nci_dev *ndev,
-					     const struct sk_buff *skb)
+					     struct sk_buff *skb)
 {
-	struct nci_conn_info *conn_info;
+	struct nci_conn_info    *conn_info;
 	struct nci_rf_intf_activated_ntf ntf;
-	const __u8 *data = skb->data;
+	__u8 *data = skb->data;
 	int err = NCI_STATUS_OK;
 
 	ntf.rf_discovery_id = *data++;
@@ -688,10 +681,10 @@ listen:
 }
 
 static void nci_rf_deactivate_ntf_packet(struct nci_dev *ndev,
-					 const struct sk_buff *skb)
+					 struct sk_buff *skb)
 {
-	const struct nci_conn_info *conn_info;
-	const struct nci_rf_deactivate_ntf *ntf = (void *)skb->data;
+	struct nci_conn_info    *conn_info;
+	struct nci_rf_deactivate_ntf *ntf = (void *) skb->data;
 
 	pr_debug("entry, type 0x%x, reason 0x%x\n", ntf->type, ntf->reason);
 
@@ -732,10 +725,10 @@ static void nci_rf_deactivate_ntf_packet(struct nci_dev *ndev,
 }
 
 static void nci_nfcee_discover_ntf_packet(struct nci_dev *ndev,
-					  const struct sk_buff *skb)
+					  struct sk_buff *skb)
 {
 	u8 status = NCI_STATUS_OK;
-	const struct nci_nfcee_discover_ntf *nfcee_ntf =
+	struct nci_nfcee_discover_ntf   *nfcee_ntf =
 				(struct nci_nfcee_discover_ntf *)skb->data;
 
 	pr_debug("\n");
@@ -752,7 +745,7 @@ static void nci_nfcee_discover_ntf_packet(struct nci_dev *ndev,
 }
 
 static void nci_nfcee_action_ntf_packet(struct nci_dev *ndev,
-					const struct sk_buff *skb)
+					struct sk_buff *skb)
 {
 	pr_debug("\n");
 }

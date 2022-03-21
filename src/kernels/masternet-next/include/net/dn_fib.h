@@ -29,7 +29,7 @@ struct dn_fib_nh {
 struct dn_fib_info {
 	struct dn_fib_info	*fib_next;
 	struct dn_fib_info	*fib_prev;
-	refcount_t		fib_treeref;
+	int 			fib_treeref;
 	refcount_t		fib_clntref;
 	int			fib_dead;
 	unsigned int		fib_flags;

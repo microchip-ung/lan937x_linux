@@ -352,7 +352,6 @@ struct nsim_bus_dev {
 	struct device dev;
 	struct list_head list;
 	unsigned int port_count;
-	unsigned int num_queues; /* Number of queues for each port on this bus */
 	struct net *initial_net; /* Purpose of this is to carry net pointer
 				  * during the probe time only.
 				  */
@@ -362,7 +361,6 @@ struct nsim_bus_dev {
 	struct nsim_vf_config *vfconfigs;
 	/* Lock for devlink->reload_enabled in netdevsim module */
 	struct mutex nsim_bus_reload_lock;
-	bool in_reload;
 	bool init;
 };
 

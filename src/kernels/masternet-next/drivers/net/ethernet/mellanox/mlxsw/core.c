@@ -1927,8 +1927,7 @@ __mlxsw_core_bus_device_register(const struct mlxsw_bus_info *mlxsw_bus_info,
 
 	if (!reload) {
 		alloc_size = sizeof(*mlxsw_core) + mlxsw_driver->priv_size;
-		devlink = devlink_alloc(&mlxsw_devlink_ops, alloc_size,
-					mlxsw_bus_info->dev);
+		devlink = devlink_alloc(&mlxsw_devlink_ops, alloc_size);
 		if (!devlink) {
 			err = -ENOMEM;
 			goto err_devlink_alloc;
@@ -1975,7 +1974,7 @@ __mlxsw_core_bus_device_register(const struct mlxsw_bus_info *mlxsw_bus_info,
 		goto err_emad_init;
 
 	if (!reload) {
-		err = devlink_register(devlink);
+		err = devlink_register(devlink, mlxsw_bus_info->dev);
 		if (err)
 			goto err_devlink_register;
 	}

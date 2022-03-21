@@ -864,24 +864,16 @@ static int nsim_dev_reload_down(struct devlink *devlink, bool netns_change,
 				struct netlink_ext_ack *extack)
 {
 	struct nsim_dev *nsim_dev = devlink_priv(devlink);
-	struct nsim_bus_dev *nsim_bus_dev;
-
-	nsim_bus_dev = nsim_dev->nsim_bus_dev;
-	if (!mutex_trylock(&nsim_bus_dev->nsim_bus_reload_lock))
-		return -EOPNOTSUPP;
 
 	if (nsim_dev->dont_allow_reload) {
 		/* For testing purposes, user set debugfs dont_allow_reload
 		 * value to true. So forbid it.
 		 */
 		NL_SET_ERR_MSG_MOD(extack, "User forbid the reload for testing purposes");
-		mutex_unlock(&nsim_bus_dev->nsim_bus_reload_lock);
 		return -EOPNOTSUPP;
 	}
-	nsim_bus_dev->in_reload = true;
 
 	nsim_dev_reload_destroy(nsim_dev);
-	mutex_unlock(&nsim_bus_dev->nsim_bus_reload_lock);
 	return 0;
 }
 
@@ -890,26 +882,17 @@ static int nsim_dev_reload_up(struct devlink *devlink, enum devlink_reload_actio
 			      struct netlink_ext_ack *extack)
 {
 	struct nsim_dev *nsim_dev = devlink_priv(devlink);
-	struct nsim_bus_dev *nsim_bus_dev;
-	int ret;
-
-	nsim_bus_dev = nsim_dev->nsim_bus_dev;
-	mutex_lock(&nsim_bus_dev->nsim_bus_reload_lock);
-	nsim_bus_dev->in_reload = false;
 
 	if (nsim_dev->fail_reload) {
 		/* For testing purposes, user set debugfs fail_reload
 		 * value to true. Fail right away.
 		 */
 		NL_SET_ERR_MSG_MOD(extack, "User setup the reload to fail for testing purposes");
-		mutex_unlock(&nsim_bus_dev->nsim_bus_reload_lock);
 		return -EINVAL;
 	}
 
 	*actions_performed = BIT(DEVLINK_RELOAD_ACTION_DRIVER_REINIT);
-	ret = nsim_dev_reload_create(nsim_dev, extack);
-	mutex_unlock(&nsim_bus_dev->nsim_bus_reload_lock);
-	return ret;
+	return nsim_dev_reload_create(nsim_dev, extack);
 }
 
 static int nsim_dev_info_get(struct devlink *devlink,
@@ -1448,10 +1431,10 @@ int nsim_dev_probe(struct nsim_bus_dev *nsim_bus_dev)
 	struct devlink *devlink;
 	int err;
 
-	devlink = devlink_alloc_ns(&nsim_dev_devlink_ops, sizeof(*nsim_dev),
-				 nsim_bus_dev->initial_net, &nsim_bus_dev->dev);
+	devlink = devlink_alloc(&nsim_dev_devlink_ops, sizeof(*nsim_dev));
 	if (!devlink)
 		return -ENOMEM;
+	devlink_net_set(devlink, nsim_bus_dev->initial_net);
 	nsim_dev = devlink_priv(devlink);
 	nsim_dev->nsim_bus_dev = nsim_bus_dev;
 	nsim_dev->switch_id.id_len = sizeof(nsim_dev->switch_id.id);
@@ -1470,7 +1453,7 @@ int nsim_dev_probe(struct nsim_bus_dev *nsim_bus_dev)
 	if (err)
 		goto err_devlink_free;
 
-	err = devlink_register(devlink);
+	err = devlink_register(devlink, &nsim_bus_dev->dev);
 	if (err)
 		goto err_resources_unregister;
 

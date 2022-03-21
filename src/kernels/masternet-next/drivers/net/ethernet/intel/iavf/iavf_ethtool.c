@@ -1352,7 +1352,8 @@ static int iavf_add_fdir_ethtool(struct iavf_adapter *adapter, struct ethtool_rx
 	if (!fltr)
 		return -ENOMEM;
 
-	while (!mutex_trylock(&adapter->crit_lock)) {
+	while (test_and_set_bit(__IAVF_IN_CRITICAL_TASK,
+				&adapter->crit_section)) {
 		if (--count == 0) {
 			kfree(fltr);
 			return -EINVAL;
@@ -1377,7 +1378,7 @@ ret:
 	if (err && fltr)
 		kfree(fltr);
 
-	mutex_unlock(&adapter->crit_lock);
+	clear_bit(__IAVF_IN_CRITICAL_TASK, &adapter->crit_section);
 	return err;
 }
 
@@ -1562,7 +1563,8 @@ iavf_set_adv_rss_hash_opt(struct iavf_adapter *adapter,
 		return -EINVAL;
 	}
 
-	while (!mutex_trylock(&adapter->crit_lock)) {
+	while (test_and_set_bit(__IAVF_IN_CRITICAL_TASK,
+				&adapter->crit_section)) {
 		if (--count == 0) {
 			kfree(rss_new);
 			return -EINVAL;
@@ -1598,7 +1600,7 @@ iavf_set_adv_rss_hash_opt(struct iavf_adapter *adapter,
 	if (!err)
 		mod_delayed_work(iavf_wq, &adapter->watchdog_task, 0);
 
-	mutex_unlock(&adapter->crit_lock);
+	clear_bit(__IAVF_IN_CRITICAL_TASK, &adapter->crit_section);
 
 	if (!rss_new_add)
 		kfree(rss_new);

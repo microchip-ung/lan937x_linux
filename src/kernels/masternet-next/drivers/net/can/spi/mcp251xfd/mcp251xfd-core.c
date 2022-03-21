@@ -15,10 +15,10 @@
 #include <linux/bitfield.h>
 #include <linux/clk.h>
 #include <linux/device.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
 #include <linux/pm_runtime.h>
-#include <linux/property.h>
 
 #include <asm/unaligned.h>
 
@@ -2195,10 +2195,8 @@ static irqreturn_t mcp251xfd_irq(int irq, void *dev_id)
 			FIELD_GET(MCP251XFD_REG_INT_IE_MASK,
 				  priv->regs_status.intf);
 
-		if (!(intf_pending)) {
-			can_rx_offload_threaded_irq_finish(&priv->offload);
+		if (!(intf_pending))
 			return handled;
-		}
 
 		/* Some interrupts must be ACKed in the
 		 * MCP251XFD_REG_INT register.
@@ -2298,8 +2296,6 @@ static irqreturn_t mcp251xfd_irq(int irq, void *dev_id)
 	} while (1);
 
  out_fail:
-	can_rx_offload_threaded_irq_finish(&priv->offload);
-
 	netdev_err(priv->ndev, "IRQ handler returned %d (intf=0x%08x).\n",
 		   err, priv->regs_status.intf);
 	mcp251xfd_dump(priv);
@@ -2528,8 +2524,8 @@ static int mcp251xfd_open(struct net_device *ndev)
 	can_rx_offload_enable(&priv->offload);
 
 	err = request_threaded_irq(spi->irq, NULL, mcp251xfd_irq,
-				   IRQF_SHARED | IRQF_ONESHOT,
-				   dev_name(&spi->dev), priv);
+				   IRQF_ONESHOT, dev_name(&spi->dev),
+				   priv);
 	if (err)
 		goto out_can_rx_offload_disable;
 
@@ -2861,7 +2857,7 @@ static int mcp251xfd_probe(struct spi_device *spi)
 	struct gpio_desc *rx_int;
 	struct regulator *reg_vdd, *reg_xceiver;
 	struct clk *clk;
-	u32 freq = 0;
+	u32 freq;
 	int err;
 
 	if (!spi->irq)
@@ -2888,19 +2884,11 @@ static int mcp251xfd_probe(struct spi_device *spi)
 		return dev_err_probe(&spi->dev, PTR_ERR(reg_xceiver),
 				     "Failed to get Transceiver regulator!\n");
 
-	clk = devm_clk_get_optional(&spi->dev, NULL);
+	clk = devm_clk_get(&spi->dev, NULL);
 	if (IS_ERR(clk))
 		return dev_err_probe(&spi->dev, PTR_ERR(clk),
 				     "Failed to get Oscillator (clock)!\n");
-	if (clk) {
-		freq = clk_get_rate(clk);
-	} else {
-		err = device_property_read_u32(&spi->dev, "clock-frequency",
-					       &freq);
-		if (err)
-			return dev_err_probe(&spi->dev, err,
-					     "Failed to get clock-frequency!\n");
-	}
+	freq = clk_get_rate(clk);
 
 	/* Sanity check */
 	if (freq < MCP251XFD_SYSCLOCK_HZ_MIN ||

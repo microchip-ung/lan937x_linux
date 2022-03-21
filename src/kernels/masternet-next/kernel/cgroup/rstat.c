@@ -347,20 +347,19 @@ static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu)
 }
 
 static struct cgroup_rstat_cpu *
-cgroup_base_stat_cputime_account_begin(struct cgroup *cgrp, unsigned long *flags)
+cgroup_base_stat_cputime_account_begin(struct cgroup *cgrp)
 {
 	struct cgroup_rstat_cpu *rstatc;
 
 	rstatc = get_cpu_ptr(cgrp->rstat_cpu);
-	*flags = u64_stats_update_begin_irqsave(&rstatc->bsync);
+	u64_stats_update_begin(&rstatc->bsync);
 	return rstatc;
 }
 
 static void cgroup_base_stat_cputime_account_end(struct cgroup *cgrp,
-						 struct cgroup_rstat_cpu *rstatc,
-						 unsigned long flags)
+						 struct cgroup_rstat_cpu *rstatc)
 {
-	u64_stats_update_end_irqrestore(&rstatc->bsync, flags);
+	u64_stats_update_end(&rstatc->bsync);
 	cgroup_rstat_updated(cgrp, smp_processor_id());
 	put_cpu_ptr(rstatc);
 }
@@ -368,20 +367,18 @@ static void cgroup_base_stat_cputime_account_end(struct cgroup *cgrp,
 void __cgroup_account_cputime(struct cgroup *cgrp, u64 delta_exec)
 {
 	struct cgroup_rstat_cpu *rstatc;
-	unsigned long flags;
 
-	rstatc = cgroup_base_stat_cputime_account_begin(cgrp, &flags);
+	rstatc = cgroup_base_stat_cputime_account_begin(cgrp);
 	rstatc->bstat.cputime.sum_exec_runtime += delta_exec;
-	cgroup_base_stat_cputime_account_end(cgrp, rstatc, flags);
+	cgroup_base_stat_cputime_account_end(cgrp, rstatc);
 }
 
 void __cgroup_account_cputime_field(struct cgroup *cgrp,
 				    enum cpu_usage_stat index, u64 delta_exec)
 {
 	struct cgroup_rstat_cpu *rstatc;
-	unsigned long flags;
 
-	rstatc = cgroup_base_stat_cputime_account_begin(cgrp, &flags);
+	rstatc = cgroup_base_stat_cputime_account_begin(cgrp);
 
 	switch (index) {
 	case CPUTIME_USER:
@@ -397,7 +394,7 @@ void __cgroup_account_cputime_field(struct cgroup *cgrp,
 		break;
 	}
 
-	cgroup_base_stat_cputime_account_end(cgrp, rstatc, flags);
+	cgroup_base_stat_cputime_account_end(cgrp, rstatc);
 }
 
 /*

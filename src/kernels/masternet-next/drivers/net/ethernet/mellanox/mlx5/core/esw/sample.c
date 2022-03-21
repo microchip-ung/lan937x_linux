@@ -501,7 +501,6 @@ err_sampler:
 err_offload_rule:
 	mlx5_esw_vporttbl_put(esw, &per_vport_tbl_attr);
 err_default_tbl:
-	kfree(sample_flow);
 	return ERR_PTR(err);
 }
 

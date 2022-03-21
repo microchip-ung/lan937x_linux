@@ -164,14 +164,11 @@ static struct wwan_device *wwan_create_dev(struct device *parent)
 		goto done_unlock;
 
 	id = ida_alloc(&wwan_dev_ids, GFP_KERNEL);
-	if (id < 0) {
-		wwandev = ERR_PTR(id);
+	if (id < 0)
 		goto done_unlock;
-	}
 
 	wwandev = kzalloc(sizeof(*wwandev), GFP_KERNEL);
 	if (!wwandev) {
-		wwandev = ERR_PTR(-ENOMEM);
 		ida_free(&wwan_dev_ids, id);
 		goto done_unlock;
 	}
@@ -185,8 +182,7 @@ static struct wwan_device *wwan_create_dev(struct device *parent)
 	err = device_register(&wwandev->dev);
 	if (err) {
 		put_device(&wwandev->dev);
-		wwandev = ERR_PTR(err);
-		goto done_unlock;
+		wwandev = NULL;
 	}
 
 done_unlock:
@@ -359,8 +355,8 @@ struct wwan_port *wwan_create_port(struct device *parent,
 {
 	struct wwan_device *wwandev;
 	struct wwan_port *port;
+	int minor, err = -ENOMEM;
 	char namefmt[0x20];
-	int minor, err;
 
 	if (type > WWAN_PORT_MAX || !ops)
 		return ERR_PTR(-EINVAL);
@@ -374,14 +370,11 @@ struct wwan_port *wwan_create_port(struct device *parent,
 
 	/* A port is exposed as character device, get a minor */
 	minor = ida_alloc_range(&minors, 0, WWAN_MAX_MINORS - 1, GFP_KERNEL);
-	if (minor < 0) {
-		err = minor;
+	if (minor < 0)
 		goto error_wwandev_remove;
-	}
 
 	port = kzalloc(sizeof(*port), GFP_KERNEL);
 	if (!port) {
-		err = -ENOMEM;
 		ida_free(&minors, minor);
 		goto error_wwandev_remove;
 	}
@@ -1021,8 +1014,8 @@ int wwan_register_ops(struct device *parent, const struct wwan_ops *ops,
 		return -EINVAL;
 
 	wwandev = wwan_create_dev(parent);
-	if (IS_ERR(wwandev))
-		return PTR_ERR(wwandev);
+	if (!wwandev)
+		return -ENOMEM;
 
 	if (WARN_ON(wwandev->ops)) {
 		wwan_remove_dev(wwandev);

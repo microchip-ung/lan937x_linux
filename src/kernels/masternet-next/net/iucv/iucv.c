@@ -286,19 +286,19 @@ static union iucv_param *iucv_param_irq[NR_CPUS];
  */
 static inline int __iucv_call_b2f0(int command, union iucv_param *parm)
 {
-	int cc;
+	register unsigned long reg0 asm ("0");
+	register unsigned long reg1 asm ("1");
+	int ccode;
 
+	reg0 = command;
+	reg1 = (unsigned long)parm;
 	asm volatile(
-		"	lgr	0,%[reg0]\n"
-		"	lgr	1,%[reg1]\n"
-		"	.long	0xb2f01000\n"
-		"	ipm	%[cc]\n"
-		"	srl	%[cc],28\n"
-		: [cc] "=&d" (cc), "+m" (*parm)
-		: [reg0] "d" ((unsigned long)command),
-		  [reg1] "d" ((unsigned long)parm)
-		: "cc", "0", "1");
-	return cc;
+		"	.long 0xb2f01000\n"
+		"	ipm	%0\n"
+		"	srl	%0,28\n"
+		: "=d" (ccode), "=m" (*parm), "+d" (reg0), "+a" (reg1)
+		:  "m" (*parm) : "cc");
+	return ccode;
 }
 
 static inline int iucv_call_b2f0(int command, union iucv_param *parm)
@@ -319,21 +319,19 @@ static inline int iucv_call_b2f0(int command, union iucv_param *parm)
  */
 static int __iucv_query_maxconn(void *param, unsigned long *max_pathid)
 {
-	unsigned long reg1 = (unsigned long)param;
-	int cc;
+	register unsigned long reg0 asm ("0");
+	register unsigned long reg1 asm ("1");
+	int ccode;
 
+	reg0 = IUCV_QUERY;
+	reg1 = (unsigned long) param;
 	asm volatile (
-		"	lghi	0,%[cmd]\n"
-		"	lgr	1,%[reg1]\n"
 		"	.long	0xb2f01000\n"
-		"	ipm	%[cc]\n"
-		"	srl	%[cc],28\n"
-		"	lgr	%[reg1],1\n"
-		: [cc] "=&d" (cc), [reg1] "+&d" (reg1)
-		: [cmd] "K" (IUCV_QUERY)
-		: "cc", "0", "1");
+		"	ipm	%0\n"
+		"	srl	%0,28\n"
+		: "=d" (ccode), "+d" (reg0), "+d" (reg1) : : "cc");
 	*max_pathid = reg1;
-	return cc;
+	return ccode;
 }
 
 static int iucv_query_maxconn(void)
@@ -502,14 +500,14 @@ static void iucv_setmask_mp(void)
 {
 	int cpu;
 
-	cpus_read_lock();
+	get_online_cpus();
 	for_each_online_cpu(cpu)
 		/* Enable all cpus with a declared buffer. */
 		if (cpumask_test_cpu(cpu, &iucv_buffer_cpumask) &&
 		    !cpumask_test_cpu(cpu, &iucv_irq_cpumask))
 			smp_call_function_single(cpu, iucv_allow_cpu,
 						 NULL, 1);
-	cpus_read_unlock();
+	put_online_cpus();
 }
 
 /**
@@ -542,7 +540,7 @@ static int iucv_enable(void)
 	size_t alloc_size;
 	int cpu, rc;
 
-	cpus_read_lock();
+	get_online_cpus();
 	rc = -ENOMEM;
 	alloc_size = iucv_max_pathid * sizeof(struct iucv_path);
 	iucv_path_table = kzalloc(alloc_size, GFP_KERNEL);
@@ -555,12 +553,12 @@ static int iucv_enable(void)
 	if (cpumask_empty(&iucv_buffer_cpumask))
 		/* No cpu could declare an iucv buffer. */
 		goto out;
-	cpus_read_unlock();
+	put_online_cpus();
 	return 0;
 out:
 	kfree(iucv_path_table);
 	iucv_path_table = NULL;
-	cpus_read_unlock();
+	put_online_cpus();
 	return rc;
 }
 
@@ -573,11 +571,11 @@ out:
  */
 static void iucv_disable(void)
 {
-	cpus_read_lock();
+	get_online_cpus();
 	on_each_cpu(iucv_retrieve_cpu, NULL, 1);
 	kfree(iucv_path_table);
 	iucv_path_table = NULL;
-	cpus_read_unlock();
+	put_online_cpus();
 }
 
 static int iucv_cpu_dead(unsigned int cpu)
@@ -786,7 +784,7 @@ static int iucv_reboot_event(struct notifier_block *this,
 	if (cpumask_empty(&iucv_irq_cpumask))
 		return NOTIFY_DONE;
 
-	cpus_read_lock();
+	get_online_cpus();
 	on_each_cpu_mask(&iucv_irq_cpumask, iucv_block_cpu, NULL, 1);
 	preempt_disable();
 	for (i = 0; i < iucv_max_pathid; i++) {
@@ -794,7 +792,7 @@ static int iucv_reboot_event(struct notifier_block *this,
 			iucv_sever_pathid(i, NULL);
 	}
 	preempt_enable();
-	cpus_read_unlock();
+	put_online_cpus();
 	iucv_disable();
 	return NOTIFY_DONE;
 }

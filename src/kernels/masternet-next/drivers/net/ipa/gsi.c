@@ -198,6 +198,77 @@ static void gsi_irq_type_disable(struct gsi *gsi, enum gsi_irq_type_id type_id)
 	gsi_irq_type_update(gsi, gsi->type_enabled_bitmap & ~BIT(type_id));
 }
 
+/* Turn off all GSI interrupts initially; there is no gsi_irq_teardown() */
+static void gsi_irq_setup(struct gsi *gsi)
+{
+	/* Disable all interrupt types */
+	gsi_irq_type_update(gsi, 0);
+
+	/* Clear all type-specific interrupt masks */
+	iowrite32(0, gsi->virt + GSI_CNTXT_SRC_CH_IRQ_MSK_OFFSET);
+	iowrite32(0, gsi->virt + GSI_CNTXT_SRC_EV_CH_IRQ_MSK_OFFSET);
+	iowrite32(0, gsi->virt + GSI_CNTXT_GLOB_IRQ_EN_OFFSET);
+	iowrite32(0, gsi->virt + GSI_CNTXT_SRC_IEOB_IRQ_MSK_OFFSET);
+
+	/* The inter-EE interrupts are not supported for IPA v3.0-v3.1 */
+	if (gsi->version > IPA_VERSION_3_1) {
+		u32 offset;
+
+		/* These registers are in the non-adjusted address range */
+		offset = GSI_INTER_EE_SRC_CH_IRQ_MSK_OFFSET;
+		iowrite32(0, gsi->virt_raw + offset);
+		offset = GSI_INTER_EE_SRC_EV_CH_IRQ_MSK_OFFSET;
+		iowrite32(0, gsi->virt_raw + offset);
+	}
+
+	iowrite32(0, gsi->virt + GSI_CNTXT_GSI_IRQ_EN_OFFSET);
+}
+
+/* Get # supported channel and event rings; there is no gsi_ring_teardown() */
+static int gsi_ring_setup(struct gsi *gsi)
+{
+	struct device *dev = gsi->dev;
+	u32 count;
+	u32 val;
+
+	if (gsi->version < IPA_VERSION_3_5_1) {
+		/* No HW_PARAM_2 register prior to IPA v3.5.1, assume the max */
+		gsi->channel_count = GSI_CHANNEL_COUNT_MAX;
+		gsi->evt_ring_count = GSI_EVT_RING_COUNT_MAX;
+
+		return 0;
+	}
+
+	val = ioread32(gsi->virt + GSI_GSI_HW_PARAM_2_OFFSET);
+
+	count = u32_get_bits(val, NUM_CH_PER_EE_FMASK);
+	if (!count) {
+		dev_err(dev, "GSI reports zero channels supported\n");
+		return -EINVAL;
+	}
+	if (count > GSI_CHANNEL_COUNT_MAX) {
+		dev_warn(dev, "limiting to %u channels; hardware supports %u\n",
+			 GSI_CHANNEL_COUNT_MAX, count);
+		count = GSI_CHANNEL_COUNT_MAX;
+	}
+	gsi->channel_count = count;
+
+	count = u32_get_bits(val, NUM_EV_PER_EE_FMASK);
+	if (!count) {
+		dev_err(dev, "GSI reports zero event rings supported\n");
+		return -EINVAL;
+	}
+	if (count > GSI_EVT_RING_COUNT_MAX) {
+		dev_warn(dev,
+			 "limiting to %u event rings; hardware supports %u\n",
+			 GSI_EVT_RING_COUNT_MAX, count);
+		count = GSI_EVT_RING_COUNT_MAX;
+	}
+	gsi->evt_ring_count = count;
+
+	return 0;
+}
+
 /* Event ring commands are performed one at a time.  Their completion
  * is signaled by the event ring control GSI interrupt type, which is
  * only enabled when we issue an event ring command.  Only the event
@@ -849,13 +920,12 @@ static void gsi_channel_program(struct gsi_channel *channel, bool doorbell)
 	/* All done! */
 }
 
-static int __gsi_channel_start(struct gsi_channel *channel, bool resume)
+static int __gsi_channel_start(struct gsi_channel *channel, bool start)
 {
 	struct gsi *gsi = channel->gsi;
 	int ret;
 
-	/* Prior to IPA v4.0 suspend/resume is not implemented by GSI */
-	if (resume && gsi->version < IPA_VERSION_4_0)
+	if (!start)
 		return 0;
 
 	mutex_lock(&gsi->mutex);
@@ -877,7 +947,7 @@ int gsi_channel_start(struct gsi *gsi, u32 channel_id)
 	napi_enable(&channel->napi);
 	gsi_irq_ieob_enable_one(gsi, channel->evt_ring_id);
 
-	ret = __gsi_channel_start(channel, false);
+	ret = __gsi_channel_start(channel, true);
 	if (ret) {
 		gsi_irq_ieob_disable_one(gsi, channel->evt_ring_id);
 		napi_disable(&channel->napi);
@@ -901,7 +971,7 @@ static int gsi_channel_stop_retry(struct gsi_channel *channel)
 	return ret;
 }
 
-static int __gsi_channel_stop(struct gsi_channel *channel, bool suspend)
+static int __gsi_channel_stop(struct gsi_channel *channel, bool stop)
 {
 	struct gsi *gsi = channel->gsi;
 	int ret;
@@ -909,8 +979,7 @@ static int __gsi_channel_stop(struct gsi_channel *channel, bool suspend)
 	/* Wait for any underway transactions to complete before stopping. */
 	gsi_channel_trans_quiesce(channel);
 
-	/* Prior to IPA v4.0 suspend/resume is not implemented by GSI */
-	if (suspend && gsi->version < IPA_VERSION_4_0)
+	if (!stop)
 		return 0;
 
 	mutex_lock(&gsi->mutex);
@@ -928,7 +997,7 @@ int gsi_channel_stop(struct gsi *gsi, u32 channel_id)
 	struct gsi_channel *channel = &gsi->channel[channel_id];
 	int ret;
 
-	ret = __gsi_channel_stop(channel, false);
+	ret = __gsi_channel_stop(channel, true);
 	if (ret)
 		return ret;
 
@@ -957,13 +1026,13 @@ void gsi_channel_reset(struct gsi *gsi, u32 channel_id, bool doorbell)
 	mutex_unlock(&gsi->mutex);
 }
 
-/* Stop a started channel for suspend */
-int gsi_channel_suspend(struct gsi *gsi, u32 channel_id)
+/* Stop a STARTED channel for suspend (using stop if requested) */
+int gsi_channel_suspend(struct gsi *gsi, u32 channel_id, bool stop)
 {
 	struct gsi_channel *channel = &gsi->channel[channel_id];
 	int ret;
 
-	ret = __gsi_channel_stop(channel, true);
+	ret = __gsi_channel_stop(channel, stop);
 	if (ret)
 		return ret;
 
@@ -973,24 +1042,12 @@ int gsi_channel_suspend(struct gsi *gsi, u32 channel_id)
 	return 0;
 }
 
-/* Resume a suspended channel (starting if stopped) */
-int gsi_channel_resume(struct gsi *gsi, u32 channel_id)
+/* Resume a suspended channel (starting will be requested if STOPPED) */
+int gsi_channel_resume(struct gsi *gsi, u32 channel_id, bool start)
 {
 	struct gsi_channel *channel = &gsi->channel[channel_id];
 
-	return __gsi_channel_start(channel, true);
-}
-
-/* Prevent all GSI interrupts while suspended */
-void gsi_suspend(struct gsi *gsi)
-{
-	disable_irq(gsi->irq);
-}
-
-/* Allow all GSI interrupts again when resuming */
-void gsi_resume(struct gsi *gsi)
-{
-	enable_irq(gsi->irq);
+	return __gsi_channel_start(channel, start);
 }
 
 /**
@@ -1315,18 +1372,31 @@ static irqreturn_t gsi_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-/* Init function for GSI IRQ lookup; there is no gsi_irq_exit() */
 static int gsi_irq_init(struct gsi *gsi, struct platform_device *pdev)
 {
+	struct device *dev = &pdev->dev;
+	unsigned int irq;
 	int ret;
 
 	ret = platform_get_irq_byname(pdev, "gsi");
 	if (ret <= 0)
 		return ret ? : -EINVAL;
 
-	gsi->irq = ret;
+	irq = ret;
+
+	ret = request_irq(irq, gsi_isr, 0, "gsi", gsi);
+	if (ret) {
+		dev_err(dev, "error %d requesting \"gsi\" IRQ\n", ret);
+		return ret;
+	}
+	gsi->irq = irq;
 
 	return 0;
+}
+
+static void gsi_irq_exit(struct gsi *gsi)
+{
+	free_irq(gsi->irq, gsi);
 }
 
 /* Return the transaction associated with a transfer completion event */
@@ -1806,93 +1876,6 @@ static void gsi_channel_teardown(struct gsi *gsi)
 	gsi_irq_disable(gsi);
 }
 
-/* Turn off all GSI interrupts initially */
-static int gsi_irq_setup(struct gsi *gsi)
-{
-	int ret;
-
-	/* Writing 1 indicates IRQ interrupts; 0 would be MSI */
-	iowrite32(1, gsi->virt + GSI_CNTXT_INTSET_OFFSET);
-
-	/* Disable all interrupt types */
-	gsi_irq_type_update(gsi, 0);
-
-	/* Clear all type-specific interrupt masks */
-	iowrite32(0, gsi->virt + GSI_CNTXT_SRC_CH_IRQ_MSK_OFFSET);
-	iowrite32(0, gsi->virt + GSI_CNTXT_SRC_EV_CH_IRQ_MSK_OFFSET);
-	iowrite32(0, gsi->virt + GSI_CNTXT_GLOB_IRQ_EN_OFFSET);
-	iowrite32(0, gsi->virt + GSI_CNTXT_SRC_IEOB_IRQ_MSK_OFFSET);
-
-	/* The inter-EE interrupts are not supported for IPA v3.0-v3.1 */
-	if (gsi->version > IPA_VERSION_3_1) {
-		u32 offset;
-
-		/* These registers are in the non-adjusted address range */
-		offset = GSI_INTER_EE_SRC_CH_IRQ_MSK_OFFSET;
-		iowrite32(0, gsi->virt_raw + offset);
-		offset = GSI_INTER_EE_SRC_EV_CH_IRQ_MSK_OFFSET;
-		iowrite32(0, gsi->virt_raw + offset);
-	}
-
-	iowrite32(0, gsi->virt + GSI_CNTXT_GSI_IRQ_EN_OFFSET);
-
-	ret = request_irq(gsi->irq, gsi_isr, 0, "gsi", gsi);
-	if (ret)
-		dev_err(gsi->dev, "error %d requesting \"gsi\" IRQ\n", ret);
-
-	return ret;
-}
-
-static void gsi_irq_teardown(struct gsi *gsi)
-{
-	free_irq(gsi->irq, gsi);
-}
-
-/* Get # supported channel and event rings; there is no gsi_ring_teardown() */
-static int gsi_ring_setup(struct gsi *gsi)
-{
-	struct device *dev = gsi->dev;
-	u32 count;
-	u32 val;
-
-	if (gsi->version < IPA_VERSION_3_5_1) {
-		/* No HW_PARAM_2 register prior to IPA v3.5.1, assume the max */
-		gsi->channel_count = GSI_CHANNEL_COUNT_MAX;
-		gsi->evt_ring_count = GSI_EVT_RING_COUNT_MAX;
-
-		return 0;
-	}
-
-	val = ioread32(gsi->virt + GSI_GSI_HW_PARAM_2_OFFSET);
-
-	count = u32_get_bits(val, NUM_CH_PER_EE_FMASK);
-	if (!count) {
-		dev_err(dev, "GSI reports zero channels supported\n");
-		return -EINVAL;
-	}
-	if (count > GSI_CHANNEL_COUNT_MAX) {
-		dev_warn(dev, "limiting to %u channels; hardware supports %u\n",
-			 GSI_CHANNEL_COUNT_MAX, count);
-		count = GSI_CHANNEL_COUNT_MAX;
-	}
-	gsi->channel_count = count;
-
-	count = u32_get_bits(val, NUM_EV_PER_EE_FMASK);
-	if (!count) {
-		dev_err(dev, "GSI reports zero event rings supported\n");
-		return -EINVAL;
-	}
-	if (count > GSI_EVT_RING_COUNT_MAX) {
-		dev_warn(dev,
-			 "limiting to %u event rings; hardware supports %u\n",
-			 GSI_EVT_RING_COUNT_MAX, count);
-		count = GSI_EVT_RING_COUNT_MAX;
-	}
-	gsi->evt_ring_count = count;
-
-	return 0;
-}
-
 /* Setup function for GSI.  GSI firmware must be loaded and initialized */
 int gsi_setup(struct gsi *gsi)
 {
@@ -1906,34 +1889,25 @@ int gsi_setup(struct gsi *gsi)
 		return -EIO;
 	}
 
-	ret = gsi_irq_setup(gsi);
-	if (ret)
-		return ret;
+	gsi_irq_setup(gsi);		/* No matching teardown required */
 
 	ret = gsi_ring_setup(gsi);	/* No matching teardown required */
 	if (ret)
-		goto err_irq_teardown;
+		return ret;
 
 	/* Initialize the error log */
 	iowrite32(0, gsi->virt + GSI_ERROR_LOG_OFFSET);
 
-	ret = gsi_channel_setup(gsi);
-	if (ret)
-		goto err_irq_teardown;
+	/* Writing 1 indicates IRQ interrupts; 0 would be MSI */
+	iowrite32(1, gsi->virt + GSI_CNTXT_INTSET_OFFSET);
 
-	return 0;
-
-err_irq_teardown:
-	gsi_irq_teardown(gsi);
-
-	return ret;
+	return gsi_channel_setup(gsi);
 }
 
 /* Inverse of gsi_setup() */
 void gsi_teardown(struct gsi *gsi)
 {
 	gsi_channel_teardown(gsi);
-	gsi_irq_teardown(gsi);
 }
 
 /* Initialize a channel's event ring */
@@ -1990,6 +1964,7 @@ static void gsi_evt_ring_init(struct gsi *gsi)
 static bool gsi_channel_data_valid(struct gsi *gsi,
 				   const struct ipa_gsi_endpoint_data *data)
 {
+#ifdef IPA_VALIDATION
 	u32 channel_id = data->channel_id;
 	struct device *dev = gsi->dev;
 
@@ -2035,6 +2010,7 @@ static bool gsi_channel_data_valid(struct gsi *gsi,
 			channel_id, data->channel.event_count);
 		return false;
 	}
+#endif /* IPA_VALIDATION */
 
 	return true;
 }
@@ -2230,18 +2206,20 @@ int gsi_init(struct gsi *gsi, struct platform_device *pdev,
 
 	init_completion(&gsi->completion);
 
-	ret = gsi_irq_init(gsi, pdev);	/* No matching exit required */
+	ret = gsi_irq_init(gsi, pdev);
 	if (ret)
 		goto err_iounmap;
 
 	ret = gsi_channel_init(gsi, count, data);
 	if (ret)
-		goto err_iounmap;
+		goto err_irq_exit;
 
 	mutex_init(&gsi->mutex);
 
 	return 0;
 
+err_irq_exit:
+	gsi_irq_exit(gsi);
 err_iounmap:
 	iounmap(gsi->virt_raw);
 
@@ -2253,6 +2231,7 @@ void gsi_exit(struct gsi *gsi)
 {
 	mutex_destroy(&gsi->mutex);
 	gsi_channel_exit(gsi);
+	gsi_irq_exit(gsi);
 	iounmap(gsi->virt_raw);
 }
 

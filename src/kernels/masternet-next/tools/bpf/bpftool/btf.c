@@ -580,10 +580,14 @@ static int do_dump(int argc, char **argv)
 	}
 
 	if (!btf) {
-		btf = btf__load_from_kernel_by_id_split(btf_id, base_btf);
-		err = libbpf_get_error(btf);
+		err = btf__get_from_id(btf_id, &btf);
 		if (err) {
 			p_err("get btf by id (%u): %s", btf_id, strerror(err));
+			goto done;
+		}
+		if (!btf) {
+			err = -ENOENT;
+			p_err("can't find btf with ID (%u)", btf_id);
 			goto done;
 		}
 	}
@@ -981,8 +985,7 @@ static int do_help(int argc, char **argv)
 		"       FORMAT  := { raw | c }\n"
 		"       " HELP_SPEC_MAP "\n"
 		"       " HELP_SPEC_PROGRAM "\n"
-		"       " HELP_SPEC_OPTIONS " |\n"
-		"                    {-B|--base-btf} }\n"
+		"       " HELP_SPEC_OPTIONS "\n"
 		"",
 		bin_name, "btf");
 
