@@ -93,6 +93,8 @@
 /* SQI defines */
 #define LAN87XX_MAX_SQI			0x07
 #define LAN87XX_SQI_ENTRY		200
+#define SQI_AVG_MIN			40
+#define SQI_AVG_MAX			160
 
 #define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
 #define DRIVER_DESC	"Microchip LAN87XX/LAN937x T1 PHY driver"
@@ -752,24 +754,24 @@ static int lan87xx_config_aneg(struct phy_device *phydev)
 	return rc;
 }
 
-static int lan87xx_sqi_cmp(const void *a, const void *b) 
+static int lan87xx_sqi_cmp(const void *a, const void *b)
 {
 	return *(u16 *)a - *(u16 *)b;
 }
 
 static int lan87xx_get_sqi(struct phy_device *phydev)
 {
-	u16 raw_table[LAN87XX_SQI_ENTRY];
+	u16 sqi_value[LAN87XX_SQI_ENTRY];
 	u32 sqi_avg = 0;
-	u8 i;
 	int rc;
+	u8 i;
 
 	rc = lan87xx_update_link(phydev);
 	if (rc < 0)
 		return rc;
 
 	if (phydev->link == 0)
-		return 0;
+		return sqi_avg;
 
 	rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
 			 PHYACC_ATTR_BANK_DSP, T1_COEF_CLK_PWR_DN_CFG, 0x16d6);
@@ -788,12 +790,11 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 	if (rc < 0)
 		return rc;
 
-	/* Below effectively throws away first reading 
-	 * required delay before reading DSP. 
+	/* Below effectively throws away first reading
+	 * required delay before reading DSP.
 	 */
 	rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
-			 PHYACC_ATTR_BANK_DSP,
-			 T1_COEF_RW_CTL_CFG, 0x0301);
+			 PHYACC_ATTR_BANK_DSP, T1_COEF_RW_CTL_CFG, 0x0301);
 	if (rc < 0)
 		return rc;
 
@@ -806,7 +807,7 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 			return rc;
 
 		if (phydev->link == 0)
-			return 0;
+			return sqi_avg;
 
 		rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
 				 PHYACC_ATTR_BANK_DSP,
@@ -815,18 +816,20 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 			return rc;
 
 		rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
-				  PHYACC_ATTR_BANK_DSP, T1_DCQ_SQI_REG, 0x0);
+				 PHYACC_ATTR_BANK_DSP, T1_DCQ_SQI_REG, 0x0);
 		if (rc < 0)
 			return rc;
 
-		raw_table[i] = FIELD_GET(T1_DCQ_SQI_MSK, rc);
+		sqi_value[i] = FIELD_GET(T1_DCQ_SQI_MSK, rc);
 
 		rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
-				  PHYACC_ATTR_BANK_DSP, T1_DCQ_MSE_REG, 0x0);
+				 PHYACC_ATTR_BANK_DSP, T1_DCQ_MSE_REG, 0x0);
 		if (rc < 0)
 			return rc;
-		
-		//check invalid
+
+		/* Check valid value. 0 - valid, 1 - Invalid
+		 * if invalid, re-read the value after 250ms
+		 */
 		if (FIELD_GET(T1_MSE_VLD_MSK, rc) == 1) {
 			rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
 					 PHYACC_ATTR_BANK_DSP,
@@ -837,26 +840,26 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 			msleep(250);
 
 			rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
-					 PHYACC_ATTR_BANK_DSP, T1_DCQ_SQI_REG, 0x0);
+					 PHYACC_ATTR_BANK_DSP,
+					 T1_DCQ_SQI_REG, 0x0);
 			if (rc < 0)
 				return rc;
 
-			raw_table[i] = FIELD_GET(T1_DCQ_SQI_MSK, rc);
-
+			sqi_value[i] = FIELD_GET(T1_DCQ_SQI_MSK, rc);
 		}
 	}
 
-	/* Sorting arrays */
-	sort(raw_table, LAN87XX_SQI_ENTRY, sizeof(u16), lan87xx_sqi_cmp, NULL);
+	/* Sorting SQI values */
+	sort(sqi_value, LAN87XX_SQI_ENTRY, sizeof(u16), lan87xx_sqi_cmp, NULL);
 
 	/* Discarding outliers */
 	for (i = 0; i < LAN87XX_SQI_ENTRY; i++) {
-		if (i >= 40 && i <= 160)
-			sqi_avg += raw_table[i];
+		if (i >= SQI_AVG_MIN && i <= SQI_AVG_MAX)
+			sqi_avg += sqi_value[i];
 	}
 
 	/* Calculating SQI number */
-	sqi_avg = DIV_ROUND_UP(sqi_avg, 121);
+	sqi_avg = DIV_ROUND_UP(sqi_avg, (SQI_AVG_MAX - SQI_AVG_MIN + 1));
 
 	return sqi_avg;
 }
@@ -887,6 +890,7 @@ static struct phy_driver microchip_t1_phy_driver[] = {
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_LAN937X),
 		.name		= "Microchip LAN937x T1",
+		.flags          = PHY_POLL_CABLE_TEST,
 		.features	= PHY_BASIC_T1_FEATURES,
 		.config_init	= lan87xx_config_init,
 		.suspend	= genphy_suspend,
