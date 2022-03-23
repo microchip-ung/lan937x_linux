@@ -608,8 +608,8 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 	}
 
 	if (dsa_is_cpu_port(ds, port))
-		member = dsa_user_ports(ds);
- 	else
+		member = (dsa_user_ports(ds) | BIT(dev->dsa_port));
+	else
 		member = BIT(dsa_upstream_port(ds, port));
 
 	lan937x_cfg_port_member(dev, port, member);
@@ -806,6 +806,7 @@ static int lan937x_switch_init(struct ksz_device *dev)
 			irqd_get_trigger_type(irq_get_irq_data(dev->irq));
 
 		irqflags |= IRQF_ONESHOT;
+		irqflags |= IRQF_SHARED;
 		ret = devm_request_threaded_irq(dev->dev, dev->irq, NULL,
 						lan937x_switch_irq_thread,
 						irqflags, dev_name(dev->dev),
