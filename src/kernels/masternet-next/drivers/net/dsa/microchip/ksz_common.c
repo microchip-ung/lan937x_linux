@@ -125,8 +125,9 @@ static void ksz_mib_read_work(struct work_struct *work)
 		if (!p->read) {
 			const struct dsa_port *dp = dsa_to_port(dev->ds, i);
 
-			if (!netif_carrier_ok(dp->slave))
-				mib->cnt_ptr = dev->reg_mib_cnt;
+			if (!(dsa_is_dsa_port(dev->ds, i)))
+				if (!netif_carrier_ok(dp->slave))
+					mib->cnt_ptr = dev->reg_mib_cnt;
 		}
 		port_r_cnt(dev, i);
 		p->read = false;
@@ -399,6 +400,8 @@ int ksz_switch_register(struct ksz_device *dev,
 	unsigned int port_num;
 	int ret;
 
+	static int temp_var = 0;
+
 	if (dev->pdata)
 		dev->chip_id = dev->pdata->chip_id;
 
@@ -460,6 +463,14 @@ int ksz_switch_register(struct ksz_device *dev,
 	if (ret) {
 		dev->dev_ops->exit(dev);
 		return ret;
+	}
+
+	if (dev->ds->index == 0) {
+		temp_var = 1;
+	}
+
+	if (temp_var == 0) {
+		return 0;
 	}
 
 	/* Read MIB counters every 30 seconds to avoid overflow. */

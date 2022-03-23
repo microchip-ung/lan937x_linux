@@ -1040,6 +1040,10 @@ static int lan937x_config_cpu_port(struct dsa_switch *ds)
 	struct ksz_device *dev = ds->priv;
 	struct ksz_port *p;
 	int i;
+	/* Moving cpu_port parameter into invalid value */
+	dev->cpu_port = 0xFF;
+	dev->dsa_port = 0xFF;
+	dev->cascade_en = false;
 
 	ds->num_ports = dev->port_cnt;
 
@@ -1065,6 +1069,14 @@ static int lan937x_config_cpu_port(struct dsa_switch *ds)
 
 			/* enable cpu port */
 			lan937x_port_setup(dev, i, true);
+		}
+		if (dsa_is_dsa_port(ds, i)) {
+			ksz_write8(dev, 0x0033, i);
+			dev->dsa_port = i;
+			if (dev->ds->index == 1) {
+			        lan937x_port_cfg(dev, i, REG_PORT_CTRL_0,
+				     PORT_TAIL_TAG_ENABLE, true);
+			}
 		}
 	}
 

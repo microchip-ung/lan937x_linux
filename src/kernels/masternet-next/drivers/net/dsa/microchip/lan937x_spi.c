@@ -72,7 +72,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		/* can be configured as cpu port */
 		.cpu_ports = 0x38,
 		/* total port count */
-		.port_cnt = 5,
+		.port_cnt = 8,
 	},
 	{
 		.chip_id = 0x00937410,
@@ -96,6 +96,8 @@ static int lan937x_spi_probe(struct spi_device *spi)
 	dev = ksz_switch_alloc(&spi->dev, spi);
 	if (!dev)
 		return -ENOMEM;
+
+	dev->ds->index = spi->chip_select;
 
 	for (i = 0; i < ARRAY_SIZE(lan937x_regmap_config); i++) {
 		rc = lan937x_regmap_config[i];
