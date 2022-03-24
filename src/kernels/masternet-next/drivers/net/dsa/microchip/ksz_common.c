@@ -24,7 +24,7 @@ void ksz_update_port_member(struct ksz_device *dev, int port)
 {
 	struct ksz_port *p = &dev->ports[port];
 	struct dsa_switch *ds = dev->ds;
-	u8 port_member = 0, cpu_port;
+	u8 port_member = 0, cpu_port, dsa_port;
 	const struct dsa_port *dp;
 	int i, j;
 
@@ -33,6 +33,7 @@ void ksz_update_port_member(struct ksz_device *dev, int port)
 
 	dp = dsa_to_port(ds, port);
 	cpu_port = BIT(dsa_upstream_port(ds, port));
+	dsa_port = BIT(dev->dsa_port);
 
 	for (i = 0; i < ds->num_ports; i++) {
 		const struct dsa_port *other_dp = dsa_to_port(ds, i);
@@ -72,10 +73,10 @@ void ksz_update_port_member(struct ksz_device *dev, int port)
 				val |= BIT(j);
 		}
 
-		dev->dev_ops->cfg_port_member(dev, i, val | cpu_port);
+		dev->dev_ops->cfg_port_member(dev, i, val | cpu_port | dsa_port);
 	}
 
-	dev->dev_ops->cfg_port_member(dev, port, port_member | cpu_port);
+	dev->dev_ops->cfg_port_member(dev, port, port_member | cpu_port | dsa_port);
 }
 EXPORT_SYMBOL_GPL(ksz_update_port_member);
 
@@ -399,8 +400,7 @@ int ksz_switch_register(struct ksz_device *dev,
 	phy_interface_t interface;
 	unsigned int port_num;
 	int ret;
-
-	static int temp_var = 0;
+	static bool sw0_reg = false;
 
 	if (dev->pdata)
 		dev->chip_id = dev->pdata->chip_id;
@@ -466,10 +466,10 @@ int ksz_switch_register(struct ksz_device *dev,
 	}
 
 	if (dev->ds->index == 0) {
-		temp_var = 1;
+		sw0_reg = true;
 	}
 
-	if (temp_var == 0) {
+	if (!sw0_reg) {
 		return 0;
 	}
 

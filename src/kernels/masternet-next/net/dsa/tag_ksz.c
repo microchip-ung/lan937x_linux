@@ -325,15 +325,15 @@ static bool lan937x_is_cascaded(struct dsa_switch *ds)
 
 static u8 lan937x_cascade_port(struct dsa_switch *ds)
 {
-  struct dsa_port *dp;
-  struct dsa_switch_tree *dst = ds->dst;
+	struct dsa_port *dp;
+	struct dsa_switch_tree *dst = ds->dst;
 
-  list_for_each_entry(dp, &dst->ports, list) {
-    if (dsa_port_is_dsa(dp))
-      return dp->index;
-  }
+	list_for_each_entry(dp, &dst->ports, list) {
+		if (dsa_port_is_dsa(dp))
+			return dp->index;
+	}
 
-  return 0;
+	return 0;
 }
 
 static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
@@ -398,6 +398,8 @@ static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev)
 	unsigned int len = KSZ_EGRESS_TAG_LEN;
 	int device = 0;
 
+	//printk("rcv: %d", port);
+
 	/* Extra 4-bytes PTP timestamp */
 	if (tag[0] & LAN937X_PTP_TAG_INDICATION) {
 		lan937x_rcv_timestamp(skb, tag, dev, port);
@@ -421,11 +423,68 @@ static const struct dsa_device_ops lan937x_netdev_ops = {
 DSA_TAG_DRIVER(lan937x_netdev_ops);
 MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_LAN937X);
 
+static struct sk_buff *dual_t_xmit(struct sk_buff *skb,
+				    struct net_device *dev)
+{
+	struct dsa_port *dp = dsa_slave_to_port(dev);
+	struct lan937x_port_ptp_shared *port_ptp_shared = dp->priv;
+	struct ksz_device_ptp_shared *ptp_shared = port_ptp_shared->dev;
+	u16 queue_mapping = skb_get_queue_mapping(skb);
+	u8 prio = netdev_txq_to_tc(dev, queue_mapping);
+	const struct ethhdr *hdr = eth_hdr(skb);
+	__be32 *tag_32;
+	u32 val_32 = 0;
+	int cascade = 0;
+	bool is_cascaded = false;
+
+	is_cascaded = lan937x_is_cascaded(dp->ds);
+
+	if (skb->ip_summed == CHECKSUM_PARTIAL && skb_checksum_help(skb))
+		return NULL;
+
+	/* Tag encoding */
+	if (test_bit(LAN937X_HWTS_EN, &ptp_shared->state))
+		lan937x_xmit_timestamp(skb);
+
+	//if (is_cascaded)
+	tag_32 = skb_put(skb, LAN937X_CASCADE_TAG_LEN);
+
+	/* priority */
+	val_32 |= (prio<<8);
+
+	if (is_link_local_ether_addr(hdr->h_dest))
+		val_32 |= LAN937X_TAIL_TAG_BLOCKING_OVERRIDE;
+
+	/* Tail tag valid bit - This bit should always be set by the CPU */
+	val_32 |= LAN937X_TAIL_TAG_VALID;
+
+	cascade = lan937x_cascade_port(dp->ds);
+	val_32 = (val_32 << 8);
+	val_32 |= BIT((dp->index + (8 * dp->ds->index)));
+	//val_32 |= BIT(cascade) * dp->ds->index;
+	
+	put_unaligned_be24(val_32,tag_32);
+
+	return lan937x_defer_xmit(dp, skb);
+}
+
+static const struct dsa_device_ops dual_t_netdev_ops = {
+	.name	= "dualt",
+	.proto	= DSA_TAG_PROTO_DUAL_T,
+	.xmit	= dual_t_xmit,
+	.rcv	= lan937x_rcv,
+	.needed_tailroom = LAN937X_EGRESS_TAG_LEN + LAN937X_PTP_TAG_LEN,
+};
+
+DSA_TAG_DRIVER(dual_t_netdev_ops);
+MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_DUAL_T);
+
 static struct dsa_tag_driver *dsa_tag_driver_array[] = {
 	&DSA_TAG_DRIVER_NAME(ksz8795_netdev_ops),
 	&DSA_TAG_DRIVER_NAME(ksz9477_netdev_ops),
 	&DSA_TAG_DRIVER_NAME(ksz9893_netdev_ops),
 	&DSA_TAG_DRIVER_NAME(lan937x_netdev_ops),
+	&DSA_TAG_DRIVER_NAME(dual_t_netdev_ops),
 };
 
 module_dsa_tag_drivers(dsa_tag_driver_array);
