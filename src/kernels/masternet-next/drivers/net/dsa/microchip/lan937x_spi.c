@@ -97,8 +97,6 @@ static int lan937x_spi_probe(struct spi_device *spi)
 	if (!dev)
 		return -ENOMEM;
 
-	dev->ds->index = spi->chip_select;
-
 	for (i = 0; i < ARRAY_SIZE(lan937x_regmap_config); i++) {
 		rc = lan937x_regmap_config[i];
 		rc.lock_arg = &dev->regmap_mutex;

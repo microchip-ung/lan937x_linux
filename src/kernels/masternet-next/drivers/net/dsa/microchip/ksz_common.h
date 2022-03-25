@@ -90,6 +90,7 @@ struct ksz_device {
 	int cpu_port;			/* port connected to CPU */
 	int cpu_ports;			/* port bitmap can be cpu port */
 	int dsa_port;
+	int smi_index;
 	bool cascade_en;
 	int phy_port_cnt;
 	int port_cnt;

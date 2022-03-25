@@ -720,6 +720,7 @@ static int lan937x_sw_mdio_write(struct mii_bus *bus, int addr, int regnum,
 static int lan937x_mdio_register(struct dsa_switch *ds)
 {
 	struct device_node *mdio_np;
+	struct ksz_device *dev = ds->priv;
 	int ret;
 
 	mdio_np = of_get_child_by_name(ds->dev->of_node, "mdio");
@@ -736,7 +737,7 @@ static int lan937x_mdio_register(struct dsa_switch *ds)
 	ds->slave_mii_bus->read = lan937x_sw_mdio_read;
 	ds->slave_mii_bus->write = lan937x_sw_mdio_write;
 	ds->slave_mii_bus->name = "lan937x slave smi";
-	snprintf(ds->slave_mii_bus->id, MII_BUS_ID_SIZE, "SMI-%d", ds->index);
+	snprintf(ds->slave_mii_bus->id, MII_BUS_ID_SIZE, "SMI-%d", dev->smi_index);
 	ds->slave_mii_bus->parent = ds->dev;
 	ds->slave_mii_bus->phy_mask = ~ds->phys_mii_mask;
 

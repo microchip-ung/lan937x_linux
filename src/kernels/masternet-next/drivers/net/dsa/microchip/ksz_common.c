@@ -371,6 +371,7 @@ struct ksz_device *ksz_switch_alloc(struct device *base, void *priv)
 {
 	struct dsa_switch *ds;
 	struct ksz_device *swdev;
+	u32 m[2] = {0, 0};
 
 	ds = devm_kzalloc(base, sizeof(*ds), GFP_KERNEL);
 	if (!ds)
@@ -388,6 +389,9 @@ struct ksz_device *ksz_switch_alloc(struct device *base, void *priv)
 
 	swdev->ds = ds;
 	swdev->priv = priv;
+
+	of_property_read_variable_u32_array(base->of_node, "dsa,member", m, 2, 2);
+	swdev->smi_index = m[1];
 
 	return swdev;
 }
