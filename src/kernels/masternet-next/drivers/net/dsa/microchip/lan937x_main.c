@@ -1075,6 +1075,7 @@ static int lan937x_config_cpu_port(struct dsa_switch *ds)
 		}
 		if (dsa_is_dsa_port(ds, i)) {
 			ksz_write8(dev, 0x0033, i);
+			dev->cascade_en = true;
 			dev->dsa_port = i;
 			if (dev->ds->index == 1) {
 			        lan937x_port_cfg(dev, i, REG_PORT_CTRL_0,
@@ -1288,8 +1289,16 @@ static int lan937x_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
 
 	new_mtu += VLAN_ETH_HLEN + ETH_FCS_LEN;
 
-	if (dsa_is_cpu_port(ds, port))
+	if (dsa_is_cpu_port(ds, port)) {
 		new_mtu += LAN937X_TAG_LEN;
+		if (dev->cascade_en) {
+			new_mtu += 1;
+		}
+	}
+
+	if (dsa_is_dsa_port(ds, port)) {
+		new_mtu += 3;
+	}
 
 	if (new_mtu >= FR_MIN_SIZE)
 		ret = lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0,
