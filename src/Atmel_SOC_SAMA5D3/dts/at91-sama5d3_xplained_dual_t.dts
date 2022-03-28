@@ -172,7 +172,7 @@
 					interrupt-parent = <&pioB>;
 					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
 					resetb-gpios = <&pioD 18 GPIO_ACTIVE_LOW>;
-					led-t1-sel = <05324010000>;
+					led-t1-sel = <07324017777>;
 
 					dsa,member = <0 0>;
 					status = "okay";
@@ -270,7 +270,7 @@
 					interrupt-parent = <&pioB>;
 					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
 					resetb-gpios = <&pioD 18 GPIO_ACTIVE_LOW>;
-					led-t1-sel = <02345010000>;
+					led-t1-sel = <02347017777>;
 
 					dsa,member = <0 1>;
 					status = "okay";
