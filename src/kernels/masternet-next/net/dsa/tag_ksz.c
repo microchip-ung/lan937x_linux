@@ -312,19 +312,6 @@ static void lan937x_rcv_timestamp(struct sk_buff *skb, u8 *tag,
 	hwtstamps->hwtstamp = ksz_tstamp_reconstruct(port_ptp_shared->dev, tstamp);
 }
 
-static u8 lan937x_cascade_port(struct dsa_switch *ds)
-{
-	struct dsa_port *dp;
-	struct dsa_switch_tree *dst = ds->dst;
-
-	list_for_each_entry(dp, &dst->ports, list) {
-		if (dsa_port_is_dsa(dp))
-			return dp->index;
-	}
-
-	return 0;
-}
-
 static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 				    struct net_device *dev)
 {
