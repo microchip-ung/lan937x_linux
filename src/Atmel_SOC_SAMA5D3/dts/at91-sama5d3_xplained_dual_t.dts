@@ -360,7 +360,6 @@
 					};
 					};
 				};
-			
 			};
 
 			adc0: adc@f8018000 {
@@ -390,7 +389,7 @@
 				phy-mode = "rmii";
 				#address-cells = <1>;
 				#size-cells = <0>;
-				
+
 				status = "okay";
 				fixed-link {
 					speed = <100>;
@@ -483,12 +482,12 @@
 							label = "bootloader";
 							reg = <0x40000 0x80000>;
 						};
-						
+
 						bootloaderenv@c0000 {
 							label = "bootloader env";
 							reg = <0xc0000 0x40000>;
 						};
-				
+
 						bootloaderenvred@100000 {
 							label = "bootloader env redundant";
 							reg = <0x100000 0x40000>;
@@ -497,7 +496,7 @@
 							label = "spare";
 							reg = <0x140000 0x40000>;
 						};
-						
+
 
 						dtb@180000 {
 							label = "device tree";
@@ -548,7 +547,7 @@
 		regulator-max-microvolt = <3300000>;
 		regulator-always-on;
 	};
-	
+
 	gpio_keys {
 		compatible = "gpio-keys";
 

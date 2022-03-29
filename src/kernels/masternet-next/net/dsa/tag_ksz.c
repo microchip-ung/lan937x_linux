@@ -364,7 +364,7 @@ static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	if (tag[0] & LAN937X_CASCADE_CHIP)
-	  device = 1;
+		device = 1;
 
 	return ksz_common_rcv(skb, dev, port, len, device);
 }
@@ -412,7 +412,7 @@ static struct sk_buff *lan937x_cascade_xmit(struct sk_buff *skb,
 
 	val_32 = (val_32 << 8);
 	val_32 |= BIT((dp->index + (8 * dp->ds->index)));
-	
+
 	put_unaligned_be24(val_32,tag_32);
 
 	return lan937x_defer_xmit(dp, skb);

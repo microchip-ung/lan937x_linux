@@ -161,10 +161,9 @@
 
 
 			spi1: spi@f8008000 {
-				cs-gpios = <&pioC 25 0>, <0>, <0>, <&pioC 28 0>;
+				cs-gpios = <0>, <0>, <0>, <&pioC 28 0>;
 				id = <1>;
 				status = "okay";
-
 				lan9370: lan9370@3 {
 					compatible = "microchip,lan9370";
 					reg = <3>;
