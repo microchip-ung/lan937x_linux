@@ -125,9 +125,10 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
 	struct flow_dissector *dissector = rule->match.dissector;
 	struct lan937x_key *key = &filter->key;
-	u16 proto = ntohs(cls->common.protocol);
 	bool is_bcast_dmac = false;
-	bool match_proto = false;
+	u16 n_proto_mask = 0;
+	u16 n_proto_key = 0;
+	u16 addr_type = 0;
 
 	if (dissector->used_keys &
 	    ~(BIT(FLOW_DISSECTOR_KEY_BASIC) |
@@ -142,24 +143,39 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		return -EOPNOTSUPP;
 	}
 
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_CONTROL)) {
+		struct flow_match_control match;
+
+		flow_rule_match_control(rule, &match);
+		addr_type = match.key->addr_type;
+	}
+
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_BASIC)) {
 		struct flow_match_basic match;
 
 		flow_rule_match_basic(rule, &match);
-		if (ntohs(match.key->n_proto) == ETH_P_IP) {
+		n_proto_key = ntohs(match.key->n_proto);
+		n_proto_mask = ntohs(match.mask->n_proto);
+
+		if (n_proto_key == ETH_P_ALL) {
+			n_proto_key = 0;
+			n_proto_mask = 0;
+		}
+
+		key->ethtype.value = (n_proto_key);
+		key->ethtype.mask = (n_proto_mask);
+		key->acl_dissector_map |= ETHTYPE_DISSECTOR_PRESENT;
+
+		if (n_proto_key == ETH_P_IP) {
 			key->ipv4.proto.value = match.key->ip_proto;
 			key->ipv4.proto.mask = match.mask->ip_proto;
 			key->acl_dissector_map |= IPV4_PROTO_DISSECTOR_PRESENT;
-			match_proto = true;
 		}
-		if (ntohs(match.key->n_proto) == ETH_P_IPV6) {
+		if (n_proto_key == ETH_P_IPV6) {
 			key->ipv6.next_hdr.value = match.key->ip_proto;
 			key->ipv6.next_hdr.mask = match.mask->ip_proto;
 			key->acl_dissector_map |= IPV6_NXTHDR_DISSECTOR_PRESENT;
-			match_proto = true;
 		}
-		if ((proto != ETH_P_ALL) && (proto != ETH_P_8021Q) && (match_proto == false))
-			return -EOPNOTSUPP;
 	}
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ETH_ADDRS)) {
@@ -198,8 +214,7 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		}
 	}
 
-	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IPV4_ADDRS) &&
-	    proto == ETH_P_IP) {
+	if (addr_type == FLOW_DISSECTOR_KEY_IPV4_ADDRS) {
 		struct flow_match_ipv4_addrs match;
 		u8 *tmp;
 
@@ -221,8 +236,7 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 					   IPV4_DST_IP_DISSECTOR_PRESENT);
 	}
 
-	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IPV6_ADDRS) &&
-	    proto == ETH_P_IPV6) {
+	if (addr_type == FLOW_DISSECTOR_KEY_IPV6_ADDRS) {
 		struct flow_match_ipv6_addrs match;
 		u8 *tmp;
 
@@ -248,7 +262,7 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		struct flow_match_ip match;
 
 		flow_rule_match_ip(rule, &match);
-		if (proto == ETH_P_IP) {
+		if (n_proto_key == ETH_P_IP) {
 			key->ipv4.tos.value = match.key->tos;
 			key->ipv4.tos.mask = match.mask->tos;
 
@@ -259,7 +273,7 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 						   IPV4_TTL_DISSECTOR_PRESENT);
 		}
 
-		if (proto == ETH_P_IPV6) {
+		if (n_proto_key == ETH_P_IPV6) {
 			key->ipv6.tc.value = match.key->tos;
 			key->ipv6.tc.mask = match.mask->tos;
 
@@ -282,14 +296,6 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
 		key->dst_port.mask = ntohs(match.mask->dst);
 		key->acl_dissector_map |= (L4_SRC_PORT_DISSECTOR_PRESENT |
 					   L4_DST_PORT_DISSECTOR_PRESENT);
-	}
-
-	if (proto != ETH_P_ALL && match_proto) {
-		if (proto < ETH_P_802_3_MIN)
-			return -EOPNOTSUPP;
-		key->ethtype.value = (proto);
-		key->ethtype.mask = (0xffff);
-		key->acl_dissector_map |= ETHTYPE_DISSECTOR_PRESENT;
 	}
 
 	if (key->acl_dissector_map == DST_MAC_DISSECTOR_PRESENT &&
