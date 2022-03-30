@@ -1041,8 +1041,10 @@ static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
 static int lan937x_config_cpu_port(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
+	u32 cascade_cfg = 0;
 	struct ksz_port *p;
 	int i;
+
 	/* Moving cpu_port parameter into invalid value */
 	dev->cpu_port = 0xFF;
 	dev->dsa_port = 0xFF;
@@ -1074,7 +1076,10 @@ static int lan937x_config_cpu_port(struct dsa_switch *ds)
 			lan937x_port_setup(dev, i, true);
 		}
 		if (dsa_is_dsa_port(ds, i)) {
-			ksz_write8(dev, 0x0033, i);
+			ksz_read32(dev, REG_SW_CASCADE_MODE_CTL, &cascade_cfg);
+			cascade_cfg &= ~CASCADE_PORT_SEL;
+			cascade_cfg |= i;
+			ksz_write32(dev, REG_SW_CASCADE_MODE_CTL, cascade_cfg);
 			dev->cascade_en = true;
 			dev->dsa_port = i;
 			if (dev->ds->index == 1) {
@@ -1296,9 +1301,8 @@ static int lan937x_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
 		}
 	}
 
-	if (dsa_is_dsa_port(ds, port)) {
-		new_mtu += 3;
-	}
+	if (dsa_is_dsa_port(ds, port))
+		new_mtu += LAN937X_CASCADE_TAG_LEN;
 
 	if (new_mtu >= FR_MIN_SIZE)
 		ret = lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0,
