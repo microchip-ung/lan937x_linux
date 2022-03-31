@@ -401,10 +401,10 @@ int ksz_switch_register(struct ksz_device *dev,
 			const struct ksz_dev_ops *ops)
 {
 	struct device_node *port, *ports;
+	struct dsa_switch_tree *dst;
 	phy_interface_t interface;
 	unsigned int port_num;
 	int ret;
-	static bool sw0_reg = false;
 
 	if (dev->pdata)
 		dev->chip_id = dev->pdata->chip_id;
@@ -469,13 +469,12 @@ int ksz_switch_register(struct ksz_device *dev,
 		return ret;
 	}
 
-	if (dev->ds->index == 0) {
-		sw0_reg = true;
-	}
-
-	if (!sw0_reg) {
+	/*
+	 * This will prevent switch 2 reaching here until eth0 up.
+	 */
+	dst = dev->ds->dst;
+	if (!dst->setup)
 		return 0;
-	}
 
 	/* Read MIB counters every 30 seconds to avoid overflow. */
 	dev->mib_read_interval = msecs_to_jiffies(30000);
