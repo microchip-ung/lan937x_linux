@@ -1108,6 +1108,8 @@ static int lan937x_enable_rsvd__multicast(struct ksz_device *dev)
 static int lan937x_setup(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
+	u32 data32;
+	u8 data8;
 	int ret;
 
 	ret = ksz_read8(dev, REG_SW_LUE_CTRL_1, &data8);

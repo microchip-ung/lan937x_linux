@@ -76,7 +76,7 @@
 #define T1_DCQ_MSE_REG			0xC1
 #define T1_MSE_VLD_MSK			BIT(9)
 #define T1_DCQ_SQI_REG			0xC3
-#define T1_DCQ_SQI_MSK			GENMASK(3,1)
+#define T1_DCQ_SQI_MSK			GENMASK(3, 1)
 #define T1_MDIO_CONTROL2_REG		0x10
 #define T1_INTERRUPT_SOURCE_REG		0x18
 #define T1_INTERRUPT2_SOURCE_REG	0x08
@@ -93,8 +93,7 @@
 /* SQI defines */
 #define LAN87XX_MAX_SQI			0x07
 #define LAN87XX_SQI_ENTRY		200
-#define SQI_AVG_MIN			40
-#define SQI_AVG_MAX			160
+#define SQI_OUTLIERS_NUM		40
 
 #define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
 #define DRIVER_DESC	"Microchip LAN87XX/LAN937x T1 PHY driver"
@@ -754,15 +753,37 @@ static int lan87xx_config_aneg(struct phy_device *phydev)
 	return rc;
 }
 
-static int lan87xx_sqi_cmp(const void *a, const void *b)
-{
-	return *(u16 *)a - *(u16 *)b;
+static void sqi_discard_outliers(u8 sqi_value[], u8 arr_size) {
+	u8 count = 0;
+	u8 j = 0;
+	u8 i;
+
+	/* Discard Lower outliers */
+	i = SQI_OUTLIERS_NUM;
+	while(i > 0) {
+		count = min(sqi_value[j], i);
+		sqi_value[j] -= count;
+		i -= count;
+		j++;
+	}
+
+	/* Discard Upper outliers */
+	i = SQI_OUTLIERS_NUM;
+	j = arr_size;
+	while(i > 0) {
+		count = min(sqi_value[j], i);
+		sqi_value[j] -= count;
+		i -= count;
+		j--;
+	}
 }
+
 
 static int lan87xx_get_sqi(struct phy_device *phydev)
 {
-	u16 sqi_value[LAN87XX_SQI_ENTRY];
+	u16 sqi_value[LAN87XX_MAX_SQI+1];
 	u32 sqi_avg = 0;
+	u8 value;
 	int rc;
 	u8 i;
 
@@ -801,7 +822,6 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 	usleep_range(40, 50);
 
 	for (i = 0; i < LAN87XX_SQI_ENTRY; i++) {
-
 		rc = lan87xx_update_link(phydev);
 		if (rc < 0)
 			return rc;
@@ -820,7 +840,8 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 		if (rc < 0)
 			return rc;
 
-		sqi_value[i] = FIELD_GET(T1_DCQ_SQI_MSK, rc);
+		value = FIELD_GET(T1_DCQ_SQI_MSK, rc);
+		sqi_value[value]++;
 
 		rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
 				 PHYACC_ATTR_BANK_DSP, T1_DCQ_MSE_REG, 0x0);
@@ -845,21 +866,20 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 			if (rc < 0)
 				return rc;
 
-			sqi_value[i] = FIELD_GET(T1_DCQ_SQI_MSK, rc);
+			value = FIELD_GET(T1_DCQ_SQI_MSK, rc);
+			sqi_value[value]++;
 		}
 	}
 
-	/* Sorting SQI values */
-	sort(sqi_value, LAN87XX_SQI_ENTRY, sizeof(u16), lan87xx_sqi_cmp, NULL);
-
 	/* Discarding outliers */
-	for (i = 0; i < LAN87XX_SQI_ENTRY; i++) {
-		if (i >= SQI_AVG_MIN && i <= SQI_AVG_MAX)
-			sqi_avg += sqi_value[i];
-	}
+//	sqi_discard_outliers(sqi_value, ARRAY_SIZE(sqi_value));
 
 	/* Calculating SQI number */
-	sqi_avg = DIV_ROUND_UP(sqi_avg, (SQI_AVG_MAX - SQI_AVG_MIN + 1));
+	for (i = 1; i < ARRAY_SIZE(sqi_value); i++)
+		sqi_avg = i * sqi_value[i];
+
+	sqi_avg = DIV_ROUND_UP(sqi_avg,
+			       (LAN87XX_SQI_ENTRY - ( 2 * SQI_OUTLIERS_NUM)));
 
 	return sqi_avg;
 }

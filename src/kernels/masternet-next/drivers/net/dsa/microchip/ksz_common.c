@@ -146,14 +146,8 @@ void ksz_init_mib_timer(struct ksz_device *dev)
 
 	INIT_DELAYED_WORK(&dev->mib_read, ksz_mib_read_work);
 
-	for (i = 0; i < dev->port_cnt; i++) {
-		struct ksz_port_mib *mib = &dev->ports[i].mib;
-
+	for (i = 0; i < dev->port_cnt; i++)
 		dev->dev_ops->port_init_cnt(dev, i);
-
-		mib->cnt_ptr = 0;
-		memset(mib->counters, 0, dev->mib_cnt * sizeof(u64));
-	}
 }
 EXPORT_SYMBOL_GPL(ksz_init_mib_timer);
 
