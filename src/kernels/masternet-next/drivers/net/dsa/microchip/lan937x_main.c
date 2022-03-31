@@ -144,9 +144,7 @@ static int lan937x_read_table(struct ksz_device *dev, u32 *table)
 	if (ret < 0)
 		return ret;
 
-	ret = ksz_read32(dev, REG_SW_ALU_VAL_D, &table[3]);
-
-	return ret;
+	return ksz_read32(dev, REG_SW_ALU_VAL_D, &table[3]);
 }
 
 static int lan937x_write_table(struct ksz_device *dev, u32 *table)
@@ -166,9 +164,7 @@ static int lan937x_write_table(struct ksz_device *dev, u32 *table)
 	if (ret < 0)
 		return ret;
 
-	ret = ksz_write32(dev, REG_SW_ALU_VAL_D, table[3]);
-
-	return ret;
+	return ksz_write32(dev, REG_SW_ALU_VAL_D, table[3]);
 }
 
 static int lan937x_wait_alu_ready(int alu, struct ksz_device *dev)
@@ -216,7 +212,7 @@ static int lan937x_phy_write16(struct dsa_switch *ds, int addr, int reg,
 }
 
 static void lan937x_get_strings(struct dsa_switch *ds, int port, u32 stringset,
-				uint8_t *buf)
+				u8 *buf)
 {
 	struct ksz_device *dev = ds->priv;
 	int i;
@@ -224,10 +220,9 @@ static void lan937x_get_strings(struct dsa_switch *ds, int port, u32 stringset,
 	if (stringset != ETH_SS_STATS)
 		return;
 
-	for (i = 0; i < dev->mib_cnt; i++) {
+	for (i = 0; i < dev->mib_cnt; i++)
 		memcpy(buf + i * ETH_GSTRING_LEN, lan937x_mib_names[i].string,
 		       ETH_GSTRING_LEN);
-	}
 }
 
 static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
@@ -270,12 +265,12 @@ static int lan937x_port_vlan_filtering(struct dsa_switch *ds, int port,
 				       struct netlink_ext_ack *extack)
 {
 	struct ksz_device *dev = ds->priv;
-	int ret;
 
-	ret = lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_VLAN_ENABLE,
-			  flag);
-
-	return ret;
+	/* enable/disable VLAN mode, once enabled, look up process starts
+	 * and then forwarding and discarding are done based on port
+	 * membership of the VLAN table
+	 */
+	return lan937x_cfg(dev, REG_SW_LUE_CTRL_0, SW_VLAN_ENABLE, flag);
 }
 
 static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
@@ -326,25 +321,19 @@ static int lan937x_port_vlan_add(struct dsa_switch *ds, int port,
 static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 				 const struct switchdev_obj_port_vlan *vlan)
 {
-	bool untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
 	struct ksz_device *dev = ds->priv;
 	struct lan937x_vlan vlan_entry;
-	u16 pvid;
 	int ret;
-
-	lan937x_pread16(dev, port, REG_PORT_DEFAULT_VID, &pvid);
-	pvid &= 0xFFF;
 
 	ret = lan937x_get_vlan_table(dev, vlan->vid, &vlan_entry);
 	if (ret < 0) {
 		dev_err(dev->dev, "Failed to get vlan table\n");
 		return ret;
 	}
-	/* clear port fwd map */
-	vlan_entry.fwd_map &= ~BIT(port);
 
-	if (untagged)
-		vlan_entry.untag_prtmap &= ~BIT(port);
+	/* clear port fwd map & untag entries*/
+	vlan_entry.fwd_map &= ~BIT(port);
+	vlan_entry.untag_prtmap &= ~BIT(port);
 
 	ret = lan937x_set_vlan_table(dev, vlan->vid, &vlan_entry);
 	if (ret < 0) {
@@ -352,17 +341,12 @@ static int lan937x_port_vlan_del(struct dsa_switch *ds, int port,
 		return ret;
 	}
 
-	ret = lan937x_pwrite16(dev, port, REG_PORT_DEFAULT_VID, pvid);
-	if (ret < 0) {
-		dev_err(dev->dev, "Failed to set pvid\n");
-		return ret;
-	}
-
 	return 0;
 }
 
 static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
-				const unsigned char *addr, u16 vid)
+				const unsigned char *addr, u16 vid,
+				struct dsa_db db)
 {
 	struct ksz_device *dev = ds->priv;
 	u8 fid = lan937x_get_fid(vid);
@@ -468,7 +452,8 @@ static int lan937x_port_fdb_add(struct dsa_switch *ds, int port,
 }
 
 static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
-				const unsigned char *addr, u16 vid)
+				const unsigned char *addr, u16 vid,
+				struct dsa_db db)
 {
 	struct ksz_device *dev = ds->priv;
 	u8 fid = lan937x_get_fid(vid);
@@ -522,9 +507,8 @@ static int lan937x_port_fdb_del(struct dsa_switch *ds, int port,
 			alu_table[1] &= ~BIT(port);
 
 			/* if there is no port to forward, clear table */
-			if ((alu_table[1] & ALU_V_PORT_MAP) == 0) {
+			if ((alu_table[1] & ALU_V_PORT_MAP) == 0)
 				memset(&alu_table, 0, sizeof(alu_table));
-			}
 		} else {
 			memset(&alu_table, 0, sizeof(alu_table));
 		}
@@ -621,7 +605,7 @@ static int lan937x_port_fdb_dump(struct dsa_switch *ds, int port,
 
 			lan937x_convert_alu(&alu, alu_table);
 
-			if ((lan937x_data & ALU_VALID) && alu.port_forward & BIT(port)) {
+			if (alu.port_forward & BIT(port)) {
 				ret = cb(alu.mac, alu.fid, alu.is_static, data);
 				if (ret)
 					goto exit;
@@ -639,7 +623,8 @@ exit:
 }
 
 static int lan937x_port_mdb_add(struct dsa_switch *ds, int port,
-				const struct switchdev_obj_port_mdb *mdb)
+				const struct switchdev_obj_port_mdb *mdb,
+				struct dsa_db db)
 {
 	struct ksz_device *dev = ds->priv;
 	u8 fid = lan937x_get_fid(mdb->vid);
@@ -726,7 +711,8 @@ exit:
 }
 
 static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
-				const struct switchdev_obj_port_mdb *mdb)
+				const struct switchdev_obj_port_mdb *mdb,
+				struct dsa_db db)
 {
 	struct ksz_device *dev = ds->priv;
 	u8 fid = lan937x_get_fid(mdb->vid);
@@ -806,7 +792,7 @@ exit:
 
 static int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
 				   struct dsa_mall_mirror_tc_entry *mirror,
-				   bool ingress)
+				   bool ingress, struct netlink_ext_ack *extack)
 {
 	struct ksz_device *dev = ds->priv;
 	int ret, p;
@@ -826,9 +812,8 @@ static int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
 			return ret;
 
 		if (data & PORT_MIRROR_SNIFFER) {
-			dev_err(dev->dev,
-				"Delete existing rules towards %s & try\n",
-				dsa_to_port(ds, p)->name);
+			NL_SET_ERR_MSG_MOD(extack,
+					   "Sniffer port is already configured, delete existing rules & retry");
 			return -EBUSY;
 		}
 	}
@@ -842,7 +827,7 @@ static int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
 				       true);
 	if (ret < 0)
 		return ret;
-	
+
 	/* Configure sniffer port as other ports do not have
 	 * PORT_MIRROR_SNIFFER is set
 	 */
@@ -997,71 +982,16 @@ static void lan937x_port_policer_del(struct dsa_switch *ds, int port)
 		res->tc_policers_used[i] = false;
 }
 
-static phy_interface_t lan937x_get_interface(struct ksz_device *dev, int port)
-{
-	phy_interface_t interface;
-	u8 data8;
-	int ret;
-
-	if (lan937x_is_internal_phy_port(dev, port))
-		return PHY_INTERFACE_MODE_NA;
-
-	/* read interface from REG_PORT_XMII_CTRL_1 register */
-	ret = lan937x_pread8(dev, port, REG_PORT_XMII_CTRL_1, &data8);
-	if (ret < 0)
-		return PHY_INTERFACE_MODE_NA;
-
-	switch (data8 & PORT_MII_SEL_M) {
-	case PORT_RMII_SEL:
-		interface = PHY_INTERFACE_MODE_RMII;
-		break;
-	case PORT_RGMII_SEL:
-		interface = PHY_INTERFACE_MODE_RGMII;
-		if (data8 & PORT_RGMII_ID_EG_ENABLE)
-			interface = PHY_INTERFACE_MODE_RGMII_TXID;
-		if (data8 & PORT_RGMII_ID_IG_ENABLE) {
-			interface = PHY_INTERFACE_MODE_RGMII_RXID;
-			if (data8 & PORT_RGMII_ID_EG_ENABLE)
-				interface = PHY_INTERFACE_MODE_RGMII_ID;
-		}
-		break;
-	case PORT_MII_SEL:
-	default:
-		/* Interface is MII */
-		interface = PHY_INTERFACE_MODE_MII;
-		break;
-	}
-
-	return interface;
-}
-
-static int lan937x_config_cpu_port(struct dsa_switch *ds)
+static void lan937x_config_cpu_port(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
-	struct ksz_port *p;
 	int i;
 
 	ds->num_ports = dev->port_cnt;
 
 	for (i = 0; i < dev->port_cnt; i++) {
 		if (dsa_is_cpu_port(ds, i) && (dev->cpu_ports & (1 << i))) {
-			phy_interface_t interface;
-
 			dev->cpu_port = i;
-			p = &dev->ports[i];
-
-			/* Check if the device tree have specific interface
-			 * setting otherwise read & assign from XMII register
-			 * for host port interface
-			 */
-			interface = lan937x_get_interface(dev, i);
-			if (!p->interface)
-				p->interface = interface;
-
-			dev_info(dev->dev,
-				 "Port%d: using phy mode %s\n",
-				 i,
-				 phy_modes(p->interface));
 
 			/* enable cpu port */
 			lan937x_port_setup(dev, i, true);
@@ -1071,15 +1001,9 @@ static int lan937x_config_cpu_port(struct dsa_switch *ds)
 	for (i = 0; i < dev->port_cnt; i++) {
 		if (i == dev->cpu_port)
 			continue;
-		p = &dev->ports[i];
 
-		/* Initialize to non-zero so that lan937x_cfg_port_member() will
-		 * be called.
-		 */
 		lan937x_port_stp_state_set(ds, i, BR_STATE_DISABLED);
 	}
-
-	return 0;
 }
 
 static int lan937x_set_rgmii_delay(struct ksz_device *dev, int port,
@@ -1103,7 +1027,6 @@ static int lan937x_set_rgmii_delay(struct ksz_device *dev, int port,
 		p->rgmii_rx_val = val;
 
 	return 0;
-
 }
 
 static int lan937x_parse_dt_rgmii_delay(struct ksz_device *dev)
@@ -1114,7 +1037,7 @@ static int lan937x_parse_dt_rgmii_delay(struct ksz_device *dev)
 
 	ports = of_get_child_by_name(dev->dev->of_node, "ports");
 	if (!ports)
-		ports = of_get_child_by_name(dev->dev->of_node, 
+		ports = of_get_child_by_name(dev->dev->of_node,
 					     "ethernet-ports");
 	if (!ports) {
 		dev_err(dev->dev, "no ports child node found\n");
@@ -1124,8 +1047,7 @@ static int lan937x_parse_dt_rgmii_delay(struct ksz_device *dev)
 	for_each_available_child_of_node(ports, port) {
 		err = of_property_read_u32(port, "reg", &p);
 		if (err) {
-			dev_err(dev->dev, "Port number not defined in the"
-				" device tree, \"reg\" property\n");
+			dev_err(dev->dev, "Port num not defined in the DT, \"reg\" property\n");
 			of_node_put(ports);
 			of_node_put(port);
 			return err;
@@ -1135,19 +1057,23 @@ static int lan937x_parse_dt_rgmii_delay(struct ksz_device *dev)
 		if (lan937x_is_internal_phy_port(dev, p))
 			continue;
 
-		if (of_property_read_u32(port, "rx-internal-delay-ps", &val)) 
+		if (of_property_read_u32(port, "rx-internal-delay-ps", &val))
 			val = 0;
 
-		lan937x_set_rgmii_delay(dev, p, val, false);
+		err = lan937x_set_rgmii_delay(dev, p, val, false);
+		if (err)
+			break;
 
 		if (of_property_read_u32(port, "tx-internal-delay-ps", &val))
 			val = 0;
-				
-		lan937x_set_rgmii_delay(dev, p, val, true);
+
+		err = lan937x_set_rgmii_delay(dev, p, val, true);
+		if (err)
+			break;
 	}
 
 	of_node_put(ports);
-	return 0;
+	return err;
 }
 
 static int lan937x_enable_rsvd__multicast(struct ksz_device *dev)
@@ -1183,6 +1109,29 @@ static int lan937x_setup(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
 	int ret;
+
+	ret = ksz_read8(dev, REG_SW_LUE_CTRL_1, &data8);
+	if (ret < 0)
+		return ret;
+
+	/* Enable Auto Aging */
+	ret = ksz_write8(dev, REG_SW_LUE_CTRL_1, data8 | SW_LINK_AUTO_AGING);
+	if (ret < 0)
+		return ret;
+
+	/* disable interrupts */
+	ret = ksz_write32(dev, REG_SW_INT_MASK__4, SWITCH_INT_MASK);
+	if (ret < 0)
+		return ret;
+
+	ret = ksz_write32(dev, REG_SW_PORT_INT_MASK__4, 0xFF);
+	if (ret < 0)
+		return ret;
+
+	/* Read interrupt status register */
+	ret = ksz_read32(dev, REG_SW_PORT_INT_STATUS__4, &data32);
+	if (ret < 0)
+		return ret;
 
 	/* Apply rgmii internal delay for the mac based on device tree */
 	ret = lan937x_parse_dt_rgmii_delay(dev);
@@ -1320,7 +1269,7 @@ static void lan937x_phylink_mac_config(struct dsa_switch *ds, int port,
 		dev_err(ds->dev, "In-band AN not supported!\n");
 		return;
 	}
-	
+
 	lan937x_mac_config(dev, port, state->interface);
 }
 
@@ -1337,67 +1286,132 @@ static void lan937x_phylink_mac_link_up(struct dsa_switch *ds, int port,
 	if (lan937x_is_internal_phy_port(dev, port))
 		return;
 
-	if (phylink_autoneg_inband(mode)) {
-		dev_err(ds->dev, "In-band AN not supported!\n");
-		return;
-	}
 	lan937x_config_interface(dev, port, speed, duplex,
 				 tx_pause, rx_pause);
 }
 
-static void lan937x_phylink_validate(struct dsa_switch *ds, int port,
-				     unsigned long *supported,
-				     struct phylink_link_state *state)
+static void lan937x_phylink_get_caps(struct dsa_switch *ds, int port,
+				     struct phylink_config *config)
 {
 	struct ksz_device *dev = ds->priv;
-	__ETHTOOL_DECLARE_LINK_MODE_MASK(mask) = { 0, };
 
-	/* Check for unsupported interfaces */
-	if (!phy_interface_mode_is_rgmii(state->interface) &&
-	    state->interface != PHY_INTERFACE_MODE_RMII &&
-	    state->interface != PHY_INTERFACE_MODE_MII &&
-	    state->interface != PHY_INTERFACE_MODE_NA &&
-	    state->interface != PHY_INTERFACE_MODE_INTERNAL) {
-		bitmap_zero(supported, __ETHTOOL_LINK_MODE_MASK_NBITS);
-		dev_err(ds->dev, "Unsupported interface '%s' for port %d\n",
-			phy_modes(state->interface), port);
-		return;
+	/* non legacy driver */
+	config->legacy_pre_march2020 = false;
+
+	config->mac_capabilities = MAC_100FD;
+
+	/* internal T1 PHY */
+	if (lan937x_is_internal_base_t1_phy_port(dev, port)) {
+		__set_bit(PHY_INTERFACE_MODE_INTERNAL,
+				config->supported_interfaces);
+	} else if (lan937x_is_rgmii_port(dev, port)) {
+		/* MII/RMII/RGMII ports */
+		config->mac_capabilities |= MAC_ASYM_PAUSE | MAC_SYM_PAUSE |
+			MAC_100HD | MAC_10 | MAC_1000FD;
+		phy_interface_set_rgmii(config->supported_interfaces);
+
+		__set_bit(PHY_INTERFACE_MODE_MII,
+				config->supported_interfaces);
+		__set_bit(PHY_INTERFACE_MODE_RMII,
+				config->supported_interfaces);
+	}
+}
+
+static void lan937x_get_eth_phy_stats(struct dsa_switch *ds, int port,
+				      struct ethtool_eth_phy_stats *phy_stats)
+{
+	struct ksz_device *dev = ds->priv;
+	struct ksz_port_mib *mib = &dev->ports[port].mib;
+	u64 *cnt;
+
+	mutex_lock(&mib->cnt_mutex);
+
+	cnt = &mib->counters[lan937x_mib_rx_sym_err];
+	lan937x_r_mib_pkt(dev, port, lan937x_mib_rx_sym_err, NULL, cnt);
+
+	phy_stats->SymbolErrorDuringCarrier = *cnt;
+
+	mutex_unlock(&mib->cnt_mutex);
+}
+
+static void lan937x_get_eth_mac_stats(struct dsa_switch *ds, int port,
+                                     struct ethtool_eth_mac_stats *mac_stats)
+{
+	struct ksz_device *dev = ds->priv;
+	struct ksz_port_mib *mib = &dev->ports[port].mib;
+	u64 *ctr = mib->counters;
+
+	mutex_lock(&mib->cnt_mutex);
+
+	while (mib->cnt_ptr < dev->mib_cnt) {
+		lan937x_r_mib_pkt(dev, port, mib->cnt_ptr,
+				NULL, &mib->counters[mib->cnt_ptr]);
+		++mib->cnt_ptr;
 	}
 
-	/* For RGMII, RMII, MII and internal TX phy port and
-	 * as per phylink.h, when @state->interface is %PHY_INTERFACE_MODE_NA,
-	 * phylink expects the MAC driver to return all supported link modes.
-	 */
-	if (phy_interface_mode_is_rgmii(state->interface) ||
-	    state->interface == PHY_INTERFACE_MODE_RMII ||
-	    state->interface == PHY_INTERFACE_MODE_MII ||
-	    state->interface == PHY_INTERFACE_MODE_NA ||
-	    lan937x_is_internal_base_tx_phy_port(dev, port)) {
-		phylink_set(mask, 10baseT_Half);
-		phylink_set(mask, 10baseT_Full);
-		phylink_set(mask, 100baseT_Half);
-		phylink_set(mask, 100baseT_Full);
-		phylink_set(mask, Autoneg);
-		phylink_set_port_modes(mask);
-		phylink_set(mask, Pause);
-		phylink_set(mask, Asym_Pause);
-	}
+	mac_stats->FramesTransmittedOK = ctr[lan937x_mib_tx_mcast] +
+		ctr[lan937x_mib_tx_bcast] +
+		ctr[lan937x_mib_tx_ucast] +
+		ctr[lan937x_mib_tx_pause];
 
-	/* For RGMII interface */
-	if (phy_interface_mode_is_rgmii(state->interface) ||
-	    state->interface == PHY_INTERFACE_MODE_NA)
-		phylink_set(mask, 1000baseT_Full);
+	mac_stats->SingleCollisionFrames = ctr[lan937x_mib_tx_single_col];
+	mac_stats->MultipleCollisionFrames = ctr[lan937x_mib_tx_mult_col];
 
-	/* For T1 PHY */
-	if (lan937x_is_internal_base_t1_phy_port(dev, port) ||
-	    state->interface == PHY_INTERFACE_MODE_NA) {
-		phylink_set(mask, 100baseT1_Full);
-		phylink_set_port_modes(mask);
-	}
+	mac_stats->FramesReceivedOK = ctr[lan937x_mib_rx_mcast] +
+		ctr[lan937x_mib_rx_bcast] +
+		ctr[lan937x_mib_rx_ucast] +
+		ctr[lan937x_mib_rx_pause];
 
-	bitmap_and(supported, supported, mask, __ETHTOOL_LINK_MODE_MASK_NBITS);
-	bitmap_and(state->advertising, state->advertising, mask,
-		   __ETHTOOL_LINK_MODE_MASK_NBITS);
+	mac_stats->FrameCheckSequenceErrors = ctr[lan937x_mib_rx_crc_err];
+	mac_stats->AlignmentErrors = ctr[lan937x_mib_rx_align_err];
+	mac_stats->OctetsTransmittedOK = ctr[lan937x_mib_tx_total];
+	mac_stats->FramesWithDeferredXmissions = ctr[lan937x_mib_tx_deferred];
+	mac_stats->LateCollisions = ctr[lan937x_mib_tx_late_col];
+	mac_stats->FramesAbortedDueToXSColls = ctr[lan937x_mib_tx_exc_col];
+	mac_stats->FramesLostDueToIntMACXmitError = ctr[lan937x_mib_tx_discard];
+
+	mac_stats->OctetsReceivedOK = ctr[lan937x_mib_rx_total];
+	mac_stats->FramesLostDueToIntMACRcvError = ctr[lan937x_mib_rx_discard];
+	mac_stats->MulticastFramesXmittedOK = ctr[lan937x_mib_tx_mcast];
+	mac_stats->BroadcastFramesXmittedOK = ctr[lan937x_mib_tx_bcast];
+
+	mac_stats->MulticastFramesReceivedOK = ctr[lan937x_mib_rx_mcast];
+	mac_stats->BroadcastFramesReceivedOK = ctr[lan937x_mib_rx_bcast];
+	mac_stats->InRangeLengthErrors = ctr[lan937x_mib_rx_fragments];
+
+	mib->cnt_ptr = 0;
+	mutex_unlock(&mib->cnt_mutex);
+}
+
+static void lan937x_get_eth_ctrl_stats(struct dsa_switch *ds, int port,
+				       struct ethtool_eth_ctrl_stats *ctrl_sts)
+{
+	struct ksz_device *dev = ds->priv;
+	struct ksz_port_mib *mib = &dev->ports[port].mib;
+	u64 *cnt;
+
+	mutex_lock(&mib->cnt_mutex);
+
+	cnt = &mib->counters[lan937x_mib_rx_pause];
+	lan937x_r_mib_pkt(dev, port, lan937x_mib_rx_pause, NULL, cnt);
+	ctrl_sts->MACControlFramesReceived = *cnt;
+
+	cnt = &mib->counters[lan937x_mib_tx_pause];
+	lan937x_r_mib_pkt(dev, port, lan937x_mib_tx_pause, NULL, cnt);
+	ctrl_sts->MACControlFramesTransmitted = *cnt;
+
+	mutex_unlock(&mib->cnt_mutex);
+}
+
+static void lan937x_get_stats64(struct dsa_switch *ds, int port,
+				struct rtnl_link_stats64 *s)
+{
+	struct ksz_device *dev = ds->priv;
+	struct ksz_port_mib *mib = &dev->ports[port].mib;
+
+	spin_lock(&mib->stats64_lock);
+	memcpy(s, &mib->stats64, sizeof(*s));
+	spin_unlock(&mib->stats64_lock);
 }
 
 const struct dsa_switch_ops lan937x_switch_ops = {
@@ -1410,6 +1424,10 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.get_strings = lan937x_get_strings,
 	.get_ethtool_stats = ksz_get_ethtool_stats,
 	.get_sset_count = ksz_sset_count,
+	.get_eth_ctrl_stats = lan937x_get_eth_ctrl_stats,
+	.get_eth_mac_stats = lan937x_get_eth_mac_stats,
+	.get_eth_phy_stats = lan937x_get_eth_phy_stats,
+	.get_stats64 = lan937x_get_stats64,
 	.port_bridge_join = ksz_port_bridge_join,
 	.port_bridge_leave = ksz_port_bridge_leave,
 	.port_stp_state_set = lan937x_port_stp_state_set,
@@ -1426,7 +1444,7 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.port_mirror_del = lan937x_port_mirror_del,
 	.port_max_mtu = lan937x_get_max_mtu,
 	.port_change_mtu = lan937x_change_mtu,
-	.phylink_validate = lan937x_phylink_validate,
+	.phylink_get_caps = lan937x_phylink_get_caps,
 	.phylink_mac_link_down = ksz_mac_link_down,
 	.phylink_mac_config = lan937x_phylink_mac_config,
 	.phylink_mac_link_up = lan937x_phylink_mac_link_up,
