@@ -31,6 +31,7 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr,
 bool lan937x_is_internal_phy_port(struct ksz_device *dev, int port);
 bool lan937x_is_internal_base_tx_phy_port(struct ksz_device *dev, int port);
 bool lan937x_is_internal_base_t1_phy_port(struct ksz_device *dev, int port);
+bool lan937x_is_rgmii_port(struct ksz_device *dev, int port);
 int lan937x_reset_switch(struct ksz_device *dev);
 void lan937x_cfg_port_member(struct ksz_device *dev, int port,
 			     u8 member);
@@ -41,28 +42,69 @@ void lan937x_config_interface(struct ksz_device *dev, int port,
 			      bool tx_pause, bool rx_pause);
 void lan937x_mac_config(struct ksz_device *dev, int port,
 			phy_interface_t interface);
+void lan937x_r_mib_pkt(struct ksz_device *dev, int port, u16 addr,
+		       u64 *dropped, u64 *cnt);
 
 struct mib_names {
 	int index;
 	char string[ETH_GSTRING_LEN];
 };
 
+enum lan937x_mib_list {
+	lan937x_mib_rx_hi_pri_byte = 0,
+	lan937x_mib_rx_undersize,
+	lan937x_mib_rx_fragments,
+	lan937x_mib_rx_oversize,
+	lan937x_mib_rx_jabbers,
+	lan937x_mib_rx_sym_err,
+	lan937x_mib_rx_crc_err,
+	lan937x_mib_rx_align_err,
+	lan937x_mib_rx_mac_ctrl,
+	lan937x_mib_rx_pause,
+	lan937x_mib_rx_bcast,
+	lan937x_mib_rx_mcast,
+	lan937x_mib_rx_ucast,
+	lan937x_mib_rx_64_or_less,
+	lan937x_mib_rx_65_127,
+	lan937x_mib_rx_128_255,
+	lan937x_mib_rx_256_511,
+	lan937x_mib_rx_512_1023,
+	lan937x_mib_rx_1024_1522,
+	lan937x_mib_rx_1523_2000,
+	lan937x_mib_rx_2001,
+	lan937x_mib_tx_hi_pri_byte,
+	lan937x_mib_tx_late_col,
+	lan937x_mib_tx_pause,
+	lan937x_mib_tx_bcast,
+	lan937x_mib_tx_mcast,
+	lan937x_mib_tx_ucast,
+	lan937x_mib_tx_deferred,
+	lan937x_mib_tx_total_col,
+	lan937x_mib_tx_exc_col,
+	lan937x_mib_tx_single_col,
+	lan937x_mib_tx_mult_col,
+	lan937x_mib_rx_total,
+	lan937x_mib_tx_total,
+	lan937x_mib_rx_discard,
+	lan937x_mib_tx_discard,
+};
+
 struct lan_alu_struct {
 	/* entry 1 */
-	u8	is_static:1;
-	u8	is_src_filter:1;
-	u8	is_dst_filter:1;
-	u8	prio_age:3;
+	u32	is_static:1;
+	u32	is_src_filter:1;
+	u32	is_dst_filter:1;
+	u32	prio_age:3;
 	u32	_reserv_0_1:23;
-	u8	mstp:3;
+	u32	mstp:3;
 	/* entry 2 */
-	u8	is_override:1;
-	u8	is_use_fid:1;
+	u32	is_override:1;
+	u32	is_use_fid:1;
 	u32	_reserv_1_1:22;
-	u8	port_forward:8;
+	u32	port_forward:8;
 	/* entry 3 & 4*/
 	u32	_reserv_2_1:9;
-	u8	fid:7;
+	u32	fid:7;
 	u8	mac[ETH_ALEN];
 };
 

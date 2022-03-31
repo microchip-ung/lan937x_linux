@@ -177,22 +177,24 @@ int lan937x_check_device_id(struct ksz_device *dev)
 }
 EXPORT_SYMBOL(lan937x_check_device_id);
 
-static int lan937x_spi_remove(struct spi_device *spi)
+static void lan937x_spi_remove(struct spi_device *spi)
 {
 	struct ksz_device *dev = spi_get_drvdata(spi);
 
 	if (dev)
 		ksz_switch_remove(dev);
 
-	return 0;
+	spi_set_drvdata(spi, NULL);
 }
 
 static void lan937x_spi_shutdown(struct spi_device *spi)
 {
 	struct ksz_device *dev = spi_get_drvdata(spi);
 
-	if (dev && dev->dev_ops->shutdown)
-		dev->dev_ops->shutdown(dev);
+	if (dev)
+		dsa_switch_shutdown(dev->ds);
+
+	spi_set_drvdata(spi, NULL);
 }
 
 static const struct of_device_id lan937x_dt_ids[] = {
@@ -205,6 +207,16 @@ static const struct of_device_id lan937x_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, lan937x_dt_ids);
 
+static const struct spi_device_id lan937x_spi_ids[] = {
+	{ .name = "lan9370" },
+	{ .name = "lan9371" },
+	{ .name = "lan9372" },
+	{ .name = "lan9373" },
+	{ .name = "lan9374" },
+	{},
+};
+MODULE_DEVICE_TABLE(spi, lan937x_spi_ids);
+
 static struct spi_driver lan937x_spi_driver = {
 	.driver = {
 		.name	= "lan937x-switch",
@@ -214,6 +226,7 @@ static struct spi_driver lan937x_spi_driver = {
 	.probe	= lan937x_spi_probe,
 	.remove	= lan937x_spi_remove,
 	.shutdown = lan937x_spi_shutdown,
+	.id_table = lan937x_spi_ids,
 };
 
 module_spi_driver(lan937x_spi_driver);
