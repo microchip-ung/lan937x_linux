@@ -192,7 +192,7 @@ static enum dsa_tag_protocol lan937x_get_tag_protocol(struct dsa_switch *ds,
 						      enum dsa_tag_protocol mp)
 {
 	if (ds->dst->last_switch)
-		return DSA_TAG_PROTO_DUAL_T_VALUE;
+		return DSA_TAG_PROTO_LAN937X_CASCADE_VALUE;
 	else
 		return DSA_TAG_PROTO_LAN937X_VALUE;
 }

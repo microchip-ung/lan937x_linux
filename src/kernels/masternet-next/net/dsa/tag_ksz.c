@@ -19,7 +19,7 @@
 
 static struct sk_buff *ksz_common_rcv(struct sk_buff *skb,
 				      struct net_device *dev,
-				      unsigned int port, unsigned int len, int device)
+				      unsigned int port, unsigned int len, u8 device)
 {
 	skb->dev = dsa_master_find_slave(dev, device, port);
 	if (!skb->dev)
@@ -355,7 +355,7 @@ static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev)
 	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
 	unsigned int port = tag[0] & LAN937X_TAIL_TAG_PORT_MASK;
 	unsigned int len = KSZ_EGRESS_TAG_LEN;
-	int device = 0;
+	u8 device = 0;
 
 	/* Extra 4-bytes PTP timestamp */
 	if (tag[0] & LAN937X_PTP_TAG_INDICATION) {
@@ -419,15 +419,15 @@ static struct sk_buff *lan937x_cascade_xmit(struct sk_buff *skb,
 }
 
 static const struct dsa_device_ops cascade_netdev_ops = {
-	.name	= "dualt",
-	.proto	= DSA_TAG_PROTO_DUAL_T,
+	.name	= "lan937x_cascade",
+	.proto	= DSA_TAG_PROTO_LAN937X_CASCADE,
 	.xmit	= lan937x_cascade_xmit,
 	.rcv	= lan937x_rcv,
 	.needed_tailroom = LAN937X_CASCADE_TAG_LEN + LAN937X_PTP_TAG_LEN,
 };
 
 DSA_TAG_DRIVER(cascade_netdev_ops);
-MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_DUAL_T);
+MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_LAN937X_CASCADE);
 
 static struct dsa_tag_driver *dsa_tag_driver_array[] = {
 	&DSA_TAG_DRIVER_NAME(ksz8795_netdev_ops),
