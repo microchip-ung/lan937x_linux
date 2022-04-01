@@ -24,7 +24,7 @@ void ksz_update_port_member(struct ksz_device *dev, int port)
 {
 	struct ksz_port *p = &dev->ports[port];
 	struct dsa_switch *ds = dev->ds;
-	u8 port_member = 0, cpu_port;
+	u8 port_member = 0, cpu_port, dsa_port;
 	const struct dsa_port *dp;
 	int i, j;
 
@@ -33,6 +33,7 @@ void ksz_update_port_member(struct ksz_device *dev, int port)
 
 	dp = dsa_to_port(ds, port);
 	cpu_port = BIT(dsa_upstream_port(ds, port));
+	dsa_port = BIT(dev->dsa_port);
 
 	for (i = 0; i < ds->num_ports; i++) {
 		const struct dsa_port *other_dp = dsa_to_port(ds, i);
@@ -72,10 +73,10 @@ void ksz_update_port_member(struct ksz_device *dev, int port)
 				val |= BIT(j);
 		}
 
-		dev->dev_ops->cfg_port_member(dev, i, val | cpu_port);
+		dev->dev_ops->cfg_port_member(dev, i, val | cpu_port | dsa_port);
 	}
 
-	dev->dev_ops->cfg_port_member(dev, port, port_member | cpu_port);
+	dev->dev_ops->cfg_port_member(dev, port, port_member | cpu_port | dsa_port);
 }
 EXPORT_SYMBOL_GPL(ksz_update_port_member);
 
@@ -125,8 +126,9 @@ static void ksz_mib_read_work(struct work_struct *work)
 		if (!p->read) {
 			const struct dsa_port *dp = dsa_to_port(dev->ds, i);
 
-			if (!netif_carrier_ok(dp->slave))
-				mib->cnt_ptr = dev->reg_mib_cnt;
+			if (!(dsa_is_dsa_port(dev->ds, i)))
+				if (!netif_carrier_ok(dp->slave))
+					mib->cnt_ptr = dev->reg_mib_cnt;
 		}
 		port_r_cnt(dev, i);
 		p->read = false;
@@ -376,6 +378,7 @@ struct ksz_device *ksz_switch_alloc(struct device *base, void *priv)
 {
 	struct dsa_switch *ds;
 	struct ksz_device *swdev;
+	u32 sw_idx[2] = {0, 0};
 
 	ds = devm_kzalloc(base, sizeof(*ds), GFP_KERNEL);
 	if (!ds)
@@ -394,6 +397,9 @@ struct ksz_device *ksz_switch_alloc(struct device *base, void *priv)
 	swdev->ds = ds;
 	swdev->priv = priv;
 
+	of_property_read_variable_u32_array(base->of_node, "dsa,member", sw_idx, 2, 2);
+	swdev->smi_index = sw_idx[1];
+
 	return swdev;
 }
 EXPORT_SYMBOL(ksz_switch_alloc);
@@ -402,6 +408,7 @@ int ksz_switch_register(struct ksz_device *dev,
 			const struct ksz_dev_ops *ops)
 {
 	struct device_node *port, *ports;
+	struct dsa_switch_tree *dst;
 	phy_interface_t interface;
 	unsigned int port_num;
 	int ret;
@@ -474,6 +481,11 @@ int ksz_switch_register(struct ksz_device *dev,
 		dev->dev_ops->exit(dev);
 		return ret;
 	}
+
+	/* This will prevent switch 2 reaching here until eth0 up */
+	dst = dev->ds->dst;
+	if (!dst->setup)
+		return 0;
 
 	/* Read MIB counters every 30 seconds to avoid overflow. */
 	dev->mib_read_interval = msecs_to_jiffies(5000);

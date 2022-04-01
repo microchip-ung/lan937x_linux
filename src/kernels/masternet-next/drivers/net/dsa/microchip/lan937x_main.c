@@ -187,7 +187,10 @@ static enum dsa_tag_protocol lan937x_get_tag_protocol(struct dsa_switch *ds,
 						      int port,
 						      enum dsa_tag_protocol mp)
 {
-	return DSA_TAG_PROTO_LAN937X_VALUE;
+	if (ds->dst->last_switch)
+		return DSA_TAG_PROTO_LAN937X_CASCADE_VALUE;
+	else
+		return DSA_TAG_PROTO_LAN937X_VALUE;
 }
 
 static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
@@ -985,7 +988,13 @@ static void lan937x_port_policer_del(struct dsa_switch *ds, int port)
 static void lan937x_config_cpu_port(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
+	u32 cascade_cfg = 0;
 	int i;
+
+	/* Moving cpu_port parameter into invalid value */
+	dev->cpu_port = 0xFF;
+	dev->dsa_port = 0xFF;
+	dev->cascade_en = false;
 
 	ds->num_ports = dev->port_cnt;
 
@@ -995,6 +1004,18 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 
 			/* enable cpu port */
 			lan937x_port_setup(dev, i, true);
+		}
+		if (dsa_is_dsa_port(ds, i)) {
+			ksz_read32(dev, REG_SW_CASCADE_MODE_CTL, &cascade_cfg);
+			cascade_cfg &= ~CASCADE_PORT_SEL;
+			cascade_cfg |= i;
+			ksz_write32(dev, REG_SW_CASCADE_MODE_CTL, cascade_cfg);
+			dev->cascade_en = true;
+			dev->dsa_port = i;
+			if (dev->ds->index == 1) {
+			        lan937x_port_cfg(dev, i, REG_PORT_CTRL_0,
+				     PORT_TAIL_TAG_ENABLE, true);
+			}
 		}
 	}
 
@@ -1224,8 +1245,15 @@ static int lan937x_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
 
 	new_mtu += VLAN_ETH_HLEN + ETH_FCS_LEN;
 
-	if (dsa_is_cpu_port(ds, port))
+	if (dsa_is_cpu_port(ds, port)) {
 		new_mtu += LAN937X_TAG_LEN;
+		if (dev->cascade_en) {
+			new_mtu += 1;
+		}
+	}
+
+	if (dsa_is_dsa_port(ds, port))
+		new_mtu += LAN937X_CASCADE_TAG_LEN;
 
 	if (new_mtu >= FR_MIN_SIZE)
 		ret = lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0,

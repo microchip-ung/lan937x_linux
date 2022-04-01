@@ -19,9 +19,9 @@
 
 static struct sk_buff *ksz_common_rcv(struct sk_buff *skb,
 				      struct net_device *dev,
-				      unsigned int port, unsigned int len)
+				      unsigned int port, unsigned int len, u8 device)
 {
-	skb->dev = dsa_master_find_slave(dev, 0, port);
+	skb->dev = dsa_master_find_slave(dev, device, port);
 	if (!skb->dev)
 		return NULL;
 
@@ -74,7 +74,7 @@ static struct sk_buff *ksz8795_rcv(struct sk_buff *skb, struct net_device *dev)
 {
 	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
 
-	return ksz_common_rcv(skb, dev, tag[0] & 7, KSZ_EGRESS_TAG_LEN);
+	return ksz_common_rcv(skb, dev, tag[0] & 7, KSZ_EGRESS_TAG_LEN, 0);
 }
 
 static const struct dsa_device_ops ksz8795_netdev_ops = {
@@ -147,7 +147,7 @@ static struct sk_buff *ksz9477_rcv(struct sk_buff *skb, struct net_device *dev)
 	if (tag[0] & KSZ9477_PTP_TAG_INDICATION)
 		len += KSZ9477_PTP_TAG_LEN;
 
-	return ksz_common_rcv(skb, dev, port, len);
+	return ksz_common_rcv(skb, dev, port, len, 0);
 }
 
 static const struct dsa_device_ops ksz9477_netdev_ops = {
@@ -212,10 +212,12 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
  * tag0 : zero-based value represents port
  *	  (eg, 0x00=port1, 0x02=port3, 0x07=port8)
  */
+#define LAN937X_CASCADE_TAG_LEN		3
 #define LAN937X_EGRESS_TAG_LEN		2
 #define LAN937X_PTP_TAG_LEN		4
 
 #define LAN937X_PTP_TAG_INDICATION	BIT(7)
+#define LAN937X_CASCADE_CHIP            BIT(6)
 
 #define LAN937X_TAIL_TAG_BLOCKING_OVERRIDE	BIT(11)
 #define LAN937X_TAIL_TAG_LOOKUP			BIT(12)
@@ -353,6 +355,7 @@ static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev)
 	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
 	unsigned int port = tag[0] & LAN937X_TAIL_TAG_PORT_MASK;
 	unsigned int len = KSZ_EGRESS_TAG_LEN;
+	u8 device = 0;
 
 	/* Extra 4-bytes PTP timestamp */
 	if (tag[0] & LAN937X_PTP_TAG_INDICATION) {
@@ -360,7 +363,10 @@ static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev)
 		len += KSZ9477_PTP_TAG_LEN;
 	}
 
-	return ksz_common_rcv(skb, dev, port, len);
+	if (tag[0] & LAN937X_CASCADE_CHIP)
+		device = 1;
+
+	return ksz_common_rcv(skb, dev, port, len, device);
 }
 
 static const struct dsa_device_ops lan937x_netdev_ops = {
@@ -374,11 +380,61 @@ static const struct dsa_device_ops lan937x_netdev_ops = {
 DSA_TAG_DRIVER(lan937x_netdev_ops);
 MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_LAN937X);
 
+static struct sk_buff *lan937x_cascade_xmit(struct sk_buff *skb,
+				    struct net_device *dev)
+{
+	struct dsa_port *dp = dsa_slave_to_port(dev);
+	struct lan937x_port_ptp_shared *port_ptp_shared = dp->priv;
+	struct ksz_device_ptp_shared *ptp_shared = port_ptp_shared->dev;
+	u16 queue_mapping = skb_get_queue_mapping(skb);
+	u8 prio = netdev_txq_to_tc(dev, queue_mapping);
+	const struct ethhdr *hdr = eth_hdr(skb);
+	__be32 *tag_32;
+	u32 val_32 = 0;
+
+	if (skb->ip_summed == CHECKSUM_PARTIAL && skb_checksum_help(skb))
+		return NULL;
+
+	/* Tag encoding */
+	if (test_bit(LAN937X_HWTS_EN, &ptp_shared->state))
+		lan937x_xmit_timestamp(skb);
+
+	tag_32 = skb_put(skb, LAN937X_CASCADE_TAG_LEN);
+
+	/* priority */
+	val_32 |= (prio<<8);
+
+	if (is_link_local_ether_addr(hdr->h_dest))
+		val_32 |= LAN937X_TAIL_TAG_BLOCKING_OVERRIDE;
+
+	/* Tail tag valid bit - This bit should always be set by the CPU */
+	val_32 |= LAN937X_TAIL_TAG_VALID;
+
+	val_32 = (val_32 << 8);
+	val_32 |= BIT((dp->index + (8 * dp->ds->index)));
+
+	put_unaligned_be24(val_32,tag_32);
+
+	return lan937x_defer_xmit(dp, skb);
+}
+
+static const struct dsa_device_ops cascade_netdev_ops = {
+	.name	= "lan937x_cascade",
+	.proto	= DSA_TAG_PROTO_LAN937X_CASCADE,
+	.xmit	= lan937x_cascade_xmit,
+	.rcv	= lan937x_rcv,
+	.needed_tailroom = LAN937X_CASCADE_TAG_LEN + LAN937X_PTP_TAG_LEN,
+};
+
+DSA_TAG_DRIVER(cascade_netdev_ops);
+MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_LAN937X_CASCADE);
+
 static struct dsa_tag_driver *dsa_tag_driver_array[] = {
 	&DSA_TAG_DRIVER_NAME(ksz8795_netdev_ops),
 	&DSA_TAG_DRIVER_NAME(ksz9477_netdev_ops),
 	&DSA_TAG_DRIVER_NAME(ksz9893_netdev_ops),
 	&DSA_TAG_DRIVER_NAME(lan937x_netdev_ops),
+	&DSA_TAG_DRIVER_NAME(cascade_netdev_ops),
 };
 
 module_dsa_tag_drivers(dsa_tag_driver_array);

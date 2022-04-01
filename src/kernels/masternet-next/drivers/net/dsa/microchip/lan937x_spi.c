@@ -72,7 +72,7 @@ static const struct lan937x_chip_data lan937x_switch_chips[] = {
 		/* can be configured as cpu port */
 		.cpu_ports = 0x38,
 		/* total port count */
-		.port_cnt = 5,
+		.port_cnt = 8,
 	},
 	{
 		.chip_id = 0x00937410,

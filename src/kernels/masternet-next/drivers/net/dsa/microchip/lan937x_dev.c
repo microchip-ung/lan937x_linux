@@ -641,7 +641,7 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 				 true);
 
 	if (dsa_is_cpu_port(ds, port))
-		member = dsa_user_ports(ds);
+		member = (dsa_user_ports(ds) | BIT(dev->dsa_port));
 	else
 		member = BIT(dsa_upstream_port(ds, port));
 
@@ -779,7 +779,7 @@ static int lan937x_mdio_register(struct ksz_device *dev)
 	bus->read = lan937x_sw_mdio_read;
 	bus->write = lan937x_sw_mdio_write;
 	bus->name = "lan937x slave smi";
-	snprintf(bus->id, MII_BUS_ID_SIZE, "SMI-%d", ds->index);
+	snprintf(bus->id, MII_BUS_ID_SIZE, "SMI-%d", dev->smi_index);
 	bus->parent = ds->dev;
 	bus->phy_mask = ~ds->phys_mii_mask;
 
@@ -852,6 +852,7 @@ static int lan937x_switch_init(struct ksz_device *dev)
 			irqd_get_trigger_type(irq_get_irq_data(dev->irq));
 
 		irqflags |= IRQF_ONESHOT;
+		irqflags |= IRQF_SHARED;
 		ret = devm_request_threaded_irq(dev->dev, dev->irq, NULL,
 						lan937x_switch_irq_thread,
 						irqflags, dev_name(dev->dev),
