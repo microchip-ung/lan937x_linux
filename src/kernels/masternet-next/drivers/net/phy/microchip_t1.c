@@ -357,9 +357,20 @@ static int lan87xx_phy_init(struct phy_device *phydev)
 		  T1_TX_LPF_FIR_CFG_REG, 0x1011, 0 },
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
 		  T1_TX_LPF_FIR_CFG_REG, 0x1000, 0 },
+		/* Setup SQI measurement */
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
+		  T1_COEF_CLK_PWR_DN_CFG,	0x16d6, 0 },
 		/* SQI enable */
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
 		  T1_SQI_CONFIG_REG,		0x9572, 0 },
+		/* SQI select mode 5 */
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
+		  T1_SQI_CONFIG2_REG,		0x0001, 0 },
+		/* Throws the first SQI reading */
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
+		  T1_COEF_RW_CTL_CFG, 		0x0301, 0 },
+		{ PHYACC_ATTR_MODE_READ, PHYACC_ATTR_BANK_DSP,
+		  T1_DCQ_SQI_REG, 		0, 	0 },
 		/* Flag LPS and WUR as idle errors */
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI,
 		  T1_MDIO_CONTROL2_REG,		0x0014, 0 },
@@ -685,7 +696,7 @@ static int lan87xx_cable_test_get_status(struct phy_device *phydev,
 	return 0;
 }
 
-static int lan87xx_update_link(struct phy_device *phydev)
+static int lan87xx_read_status(struct phy_device *phydev)
 {
 	int rc = 0;
 
@@ -697,17 +708,6 @@ static int lan87xx_update_link(struct phy_device *phydev)
 		phydev->link = 1;
 	else
 		phydev->link = 0;
-
-	return rc;
-}
-
-static int lan87xx_read_status(struct phy_device *phydev)
-{
-	int rc = 0;
-
-	rc = lan87xx_update_link(phydev);
-	if (rc < 0)
-		return rc;
 
 	phydev->speed = SPEED_UNKNOWN;
 	phydev->duplex = DUPLEX_UNKNOWN;
@@ -728,7 +728,6 @@ static int lan87xx_read_status(struct phy_device *phydev)
 static int lan87xx_config_aneg(struct phy_device *phydev)
 {
 	u16 ctl = 0;
-	int rc;
 
 	switch (phydev->master_slave_set) {
 	case MASTER_SLAVE_CFG_MASTER_FORCE:
@@ -744,11 +743,7 @@ static int lan87xx_config_aneg(struct phy_device *phydev)
 		return -EOPNOTSUPP;
 	}
 
-	rc = phy_modify_changed(phydev, MII_CTRL1000, CTL1000_AS_MASTER, ctl);
-	if (rc == 1)
-		rc = genphy_soft_reset(phydev);
-
-	return rc;
+	return phy_modify_changed(phydev, MII_CTRL1000, CTL1000_AS_MASTER, ctl);
 }
 
 static int lan87xx_get_sqi(struct phy_device *phydev)
@@ -756,43 +751,8 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 	u8 sqi_value = 0;
 	int rc;
 
-	rc = lan87xx_update_link(phydev);
-	if (rc < 0)
-		return rc;
-
-	if (phydev->link == 0)
-		return sqi_value;
-
-	rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
-			 PHYACC_ATTR_BANK_DSP, T1_COEF_CLK_PWR_DN_CFG, 0x16d6);
-	if (rc < 0)
-		return rc;
-
-	/* Enable SQI measurement */
-	rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
-			 PHYACC_ATTR_BANK_DSP, T1_SQI_CONFIG_REG, 0x9572);
-	if (rc < 0)
-		return rc;
-
-	/* Enable SQI Method 5 */
-	rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
-			 PHYACC_ATTR_BANK_DSP, T1_SQI_CONFIG2_REG, 0x0001);
-	if (rc < 0)
-		return rc;
-
-	/* Below effectively throws away first reading
-	 * required delay before reading DSP.
-	 */
 	rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
 			 PHYACC_ATTR_BANK_DSP, T1_COEF_RW_CTL_CFG, 0x0301);
-	if (rc < 0)
-		return rc;
-
-	msleep(50);
-
-	rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
-			 PHYACC_ATTR_BANK_DSP,
-			 T1_COEF_RW_CTL_CFG, 0x0301);
 	if (rc < 0)
 		return rc;
 
@@ -802,32 +762,6 @@ static int lan87xx_get_sqi(struct phy_device *phydev)
 		return rc;
 
 	sqi_value = FIELD_GET(T1_DCQ_SQI_MSK, rc);
-
-	rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
-			 PHYACC_ATTR_BANK_DSP, T1_DCQ_MSE_REG, 0x0);
-	if (rc < 0)
-		return rc;
-
-	/* Check valid value. 0 - valid, 1 - Invalid
-	 * if invalid, re-read the value after 250ms
-	 */
-	if (FIELD_GET(T1_MSE_VLD_MSK, rc) == 1) {
-		rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
-				 PHYACC_ATTR_BANK_DSP,
-				 T1_COEF_RW_CTL_CFG, 0x0301);
-		if (rc < 0)
-			return rc;
-
-		msleep(250);
-
-		rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
-				 PHYACC_ATTR_BANK_DSP,
-				 T1_DCQ_SQI_REG, 0x0);
-		if (rc < 0)
-			return rc;
-
-		sqi_value = FIELD_GET(T1_DCQ_SQI_MSK, rc);
-	}
 
 	return sqi_value;
 }
