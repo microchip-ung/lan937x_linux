@@ -721,30 +721,6 @@ static irqreturn_t lan937x_switch_irq_thread(int irq, void *dev_id)
 	return result;
 }
 
-static int lan937x_enable_port_interrupts(struct ksz_device *dev, bool enable)
-{
-	u32 data, mask;
-	int ret;
-
-	ret = ksz_read32(dev, REG_SW_PORT_INT_MASK__4, &data);
-	if (ret)
-		return ret;
-
-	/* 0 means enabling the interrupts */
-	mask = ((1 << dev->port_cnt) - 1);
-
-	if (enable)
-		data &= ~mask;
-	else
-		data |= mask;
-
-	ret = ksz_write32(dev, REG_SW_PORT_INT_MASK__4, data);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
 static int lan937x_sw_mdio_write(struct mii_bus *bus, int addr, int regnum,
 				 u16 val)
 {
@@ -861,10 +837,6 @@ static int lan937x_switch_init(struct ksz_device *dev)
 			dev_err(dev->dev, "failed to request IRQ.\n");
 			return ret;
 		}
-
-		ret = lan937x_enable_port_interrupts(dev, true);
-		if (ret)
-			return ret;
 	}
 
 	return 0;

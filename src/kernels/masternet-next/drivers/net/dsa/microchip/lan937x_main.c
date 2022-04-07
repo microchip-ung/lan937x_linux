@@ -1125,6 +1125,29 @@ static int lan937x_enable_rsvd__multicast(struct ksz_device *dev)
 	return 0;
 }
 
+static int lan937x_enable_port_interrupts(struct ksz_device *dev, bool enable)
+{
+	u32 data, mask;
+	int ret;
+
+	ret = ksz_read32(dev, REG_SW_PORT_INT_MASK__4, &data);
+	if (ret)
+		return ret;
+
+	/* 0 means enabling the interrupts */
+	mask = ((1 << dev->port_cnt) - 1);
+
+	if (enable)
+		data &= ~mask;
+	else
+		data |= mask;
+
+	ret = ksz_write32(dev, REG_SW_PORT_INT_MASK__4, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
 
 static int lan937x_setup(struct dsa_switch *ds)
 {
@@ -1204,6 +1227,10 @@ static int lan937x_setup(struct dsa_switch *ds)
 				    be32_to_cpu(*val));
 		}
 	}
+
+	ret = lan937x_enable_port_interrupts(dev, true);
+	if (ret)
+		return ret;
 
 	ret = lan937x_ptp_init(dev);
 	if (ret)
