@@ -1,3 +1,0 @@
-[submodule "src/Atmel_SOC_SAMA5D3/buildroot_latest_load"]
-	path = src/Atmel_SOC_SAMA5D3/buildroot-sama5d3
-	url = git://git.buildroot.net/buildroot
