@@ -1122,6 +1122,27 @@ static int lan937x_enable_rsvd__multicast(struct ksz_device *dev)
 		return ret;
 	}
 
+	/* not setting cpu port for second switch */
+	if (dev->ds->index == 1)
+		return 0;
+
+	/* Changing cpu port to mcast table */
+	ret = ksz_write32(dev, REG_SW_ALU_VAL_B, 0x00000010);
+	if (ret < 0)
+		return ret;
+
+	ret = ksz_write32(dev, REG_SW_ALU_STAT_CTRL__4, 0x00000685);
+	if (ret < 0)
+		return ret;
+
+	/* wait to be finished */
+	ret = lan937x_wait_alu_sta_ready(dev);
+	if (ret < 0) {
+		dev_err(dev->dev, "Failed to update Reserved Multicast table\n");
+		return ret;
+	}
+	/* FIXME */
+
 	return 0;
 }
 
