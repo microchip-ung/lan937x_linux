@@ -1,1 +1,0 @@
-./flasher.sh ../ /dev/ttyACM0 sama5d3_xplained
