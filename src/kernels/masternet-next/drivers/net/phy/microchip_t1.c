@@ -9,7 +9,6 @@
 #include <linux/ethtool.h>
 #include <linux/ethtool_netlink.h>
 #include <linux/bitfield.h>
-#include <linux/sort.h>
 
 #define PHY_ID_LAN87XX				0x0007c150
 #define PHY_ID_LAN937X				0x0007c180
@@ -73,8 +72,6 @@
 #define T1_COEF_RW_CTL_CFG		0x0D
 #define T1_SQI_CONFIG_REG		0x2E
 #define T1_SQI_CONFIG2_REG		0x4A
-#define T1_DCQ_MSE_REG			0xC1
-#define T1_MSE_VLD_MSK			BIT(9)
 #define T1_DCQ_SQI_REG			0xC3
 #define T1_DCQ_SQI_MSK			GENMASK(3, 1)
 #define T1_MDIO_CONTROL2_REG		0x10
