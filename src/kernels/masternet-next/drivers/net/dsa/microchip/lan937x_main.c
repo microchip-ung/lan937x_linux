@@ -1099,6 +1099,7 @@ static int lan937x_parse_dt_rgmii_delay(struct ksz_device *dev)
 
 static int lan937x_enable_rsvd__multicast(struct ksz_device *dev)
 {
+	u32 fwd_port = BIT(dev->cpu_port);
 	int ret;
 
 	/* Enable Reserved multicast table */
@@ -1122,16 +1123,19 @@ static int lan937x_enable_rsvd__multicast(struct ksz_device *dev)
 		return ret;
 	}
 
-	/* not setting cpu port for second switch */
+	/* Change forwarding port for second switch */
 	if (dev->ds->index == 1)
-		return 0;
+		fwd_port = BIT(dev->dsa_port);
 
-	/* Changing cpu port to mcast table */
-	ret = ksz_write32(dev, REG_SW_ALU_VAL_B, 0x00000010);
+	/* Update Port to which mcast packets forwarded */
+	ret = ksz_write32(dev, REG_SW_ALU_VAL_B, fwd_port);
 	if (ret < 0)
 		return ret;
 
-	ret = ksz_write32(dev, REG_SW_ALU_STAT_CTRL__4, 0x00000685);
+	ret = ksz_write32(dev, REG_SW_ALU_STAT_CTRL__4, (6 << ALU_STAT_INDEX_S) |
+					ALU_RESV_MCAST_ADDR | ALU_STAT_WRITE |
+					ALU_STAT_START);
+
 	if (ret < 0)
 		return ret;
 
