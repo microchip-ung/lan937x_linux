@@ -994,7 +994,6 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 	/* Moving cpu_port parameter into invalid value */
 	dev->cpu_port = 0xFF;
 	dev->dsa_port = 0xFF;
-	dev->cascade_en = false;
 
 	ds->num_ports = dev->port_cnt;
 
@@ -1010,7 +1009,6 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 			cascade_cfg &= ~CASCADE_PORT_SEL;
 			cascade_cfg |= i;
 			ksz_write32(dev, REG_SW_CASCADE_MODE_CTL, cascade_cfg);
-			dev->cascade_en = true;
 			dev->dsa_port = i;
 			if (dev->ds->index == 1) {
 			        lan937x_port_cfg(dev, i, REG_PORT_CTRL_0,
@@ -1299,9 +1297,8 @@ static int lan937x_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
 
 	if (dsa_is_cpu_port(ds, port)) {
 		new_mtu += LAN937X_TAG_LEN;
-		if (dev->cascade_en) {
+		if (ds->dst->last_switch)
 			new_mtu += 1;
-		}
 	}
 
 	if (dsa_is_dsa_port(ds, port))
