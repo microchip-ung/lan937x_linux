@@ -1165,6 +1165,9 @@ static int lan937x_setup(struct dsa_switch *ds)
 	if (ret < 0)
 		return ret;
 
+	ds->ageing_time_min = 1000;
+	ds->ageing_time_max = 1048575000;
+
 	/* disable interrupts */
 	ret = ksz_write32(dev, REG_SW_INT_MASK__4, SWITCH_INT_MASK);
 	if (ret < 0)
@@ -1471,6 +1474,29 @@ static void lan937x_get_stats64(struct dsa_switch *ds, int port,
 	spin_unlock(&mib->stats64_lock);
 }
 
+static int lan937x_set_ageing_time(struct dsa_switch *ds,
+				   unsigned int msecs)
+{
+	struct ksz_device *dev = ds->priv;
+	u32 secs = msecs / 1000;
+	u32 value;
+	int ret;
+
+	value = FIELD_GET(SW_AGE_PERIOD_7_0_M, secs);
+
+	ret = ksz_write8(dev, REG_SW_AGE_PERIOD__1, value);
+	if (ret < 0)
+		return ret;
+
+	value = FIELD_GET(SW_AGE_PERIOD_19_8_M, secs);
+
+	ret = ksz_write16(dev, REG_SW_AGE_PERIOD__2, value);
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
 const struct dsa_switch_ops lan937x_switch_ops = {
 	.get_tag_protocol = lan937x_get_tag_protocol,
 	.setup = lan937x_setup,
@@ -1478,6 +1504,7 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.phy_read = lan937x_phy_read16,
 	.phy_write = lan937x_phy_write16,
 	.port_enable = ksz_enable_port,
+	.set_ageing_time = lan937x_set_ageing_time,
 	.get_strings = lan937x_get_strings,
 	.get_ethtool_stats = ksz_get_ethtool_stats,
 	.get_sset_count = ksz_sset_count,
