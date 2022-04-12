@@ -312,28 +312,19 @@ static void lan937x_rcv_timestamp(struct sk_buff *skb, u8 *tag,
 	hwtstamps->hwtstamp = ksz_tstamp_reconstruct(port_ptp_shared->dev, tstamp);
 }
 
-static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
-				    struct net_device *dev)
+static u16 lan937x_common_tt_fmt(struct net_device *dev, struct dsa_port *dp,
+								struct sk_buff *skb)
 {
-	struct dsa_port *dp = dsa_slave_to_port(dev);
 	struct lan937x_port_ptp_shared *port_ptp_shared = dp->priv;
 	struct ksz_device_ptp_shared *ptp_shared = port_ptp_shared->dev;
 	u16 queue_mapping = skb_get_queue_mapping(skb);
 	u8 prio = netdev_txq_to_tc(dev, queue_mapping);
 	const struct ethhdr *hdr = eth_hdr(skb);
-	__be16 *tag;
-	u16 val;
-
-	if (skb->ip_summed == CHECKSUM_PARTIAL && skb_checksum_help(skb))
-		return NULL;
+	u16 val = 0;
 
 	/* Tag encoding */
 	if (test_bit(LAN937X_HWTS_EN, &ptp_shared->state))
 		lan937x_xmit_timestamp(skb);
-
-	tag = skb_put(skb, LAN937X_EGRESS_TAG_LEN);
-
-	val = BIT(dp->index);
 
 	/* priority */
 	val |= (prio<<8);
@@ -343,6 +334,25 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 
 	/* Tail tag valid bit - This bit should always be set by the CPU */
 	val |= LAN937X_TAIL_TAG_VALID;
+
+	return val;
+}
+
+static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
+				    struct net_device *dev)
+{
+	struct dsa_port *dp = dsa_slave_to_port(dev);
+	__be16 *tag;
+	u16 val;
+
+	/* FIXME: confirm putting this first will not harm anyone */
+	if (skb->ip_summed == CHECKSUM_PARTIAL && skb_checksum_help(skb))
+		return NULL;
+
+	val = lan937x_common_tt_fmt(dev, dp, skb);
+	val |= BIT(dp->index);
+
+	tag = skb_put(skb, LAN937X_EGRESS_TAG_LEN);
 
 	put_unaligned_be16(val,tag);
 
@@ -384,33 +394,16 @@ static struct sk_buff *lan937x_cascade_xmit(struct sk_buff *skb,
 				    struct net_device *dev)
 {
 	struct dsa_port *dp = dsa_slave_to_port(dev);
-	struct lan937x_port_ptp_shared *port_ptp_shared = dp->priv;
-	struct ksz_device_ptp_shared *ptp_shared = port_ptp_shared->dev;
-	u16 queue_mapping = skb_get_queue_mapping(skb);
-	u8 prio = netdev_txq_to_tc(dev, queue_mapping);
-	const struct ethhdr *hdr = eth_hdr(skb);
 	__be32 *tag_32;
 	u32 val_32 = 0;
 
 	if (skb->ip_summed == CHECKSUM_PARTIAL && skb_checksum_help(skb))
 		return NULL;
 
-	/* Tag encoding */
-	if (test_bit(LAN937X_HWTS_EN, &ptp_shared->state))
-		lan937x_xmit_timestamp(skb);
-
 	tag_32 = skb_put(skb, LAN937X_CASCADE_TAG_LEN);
 
-	/* priority */
-	val_32 |= (prio<<8);
+	val_32 = (lan937x_common_tt_fmt(dev, dp, skb) << 8);
 
-	if (is_link_local_ether_addr(hdr->h_dest))
-		val_32 |= LAN937X_TAIL_TAG_BLOCKING_OVERRIDE;
-
-	/* Tail tag valid bit - This bit should always be set by the CPU */
-	val_32 |= LAN937X_TAIL_TAG_VALID;
-
-	val_32 = (val_32 << 8);
 	val_32 |= BIT((dp->index + (8 * dp->ds->index)));
 
 	put_unaligned_be24(val_32,tag_32);
