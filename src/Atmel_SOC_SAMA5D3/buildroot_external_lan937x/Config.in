@@ -1,0 +1,1 @@
+source "$BR2_EXTERNAL_LAN937x_PATH/package/lan937x_tc/Config.in"
