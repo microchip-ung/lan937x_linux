@@ -1072,8 +1072,8 @@ static int lan937x_parse_dt_rgmii_delay(struct ksz_device *dev)
 			return err;
 		}
 
-		/* skip for internal ports */
-		if (lan937x_is_internal_phy_port(dev, p))
+		/* Apply only for rgmii port */
+		if (!lan937x_is_rgmii_port(dev, p))
 			continue;
 
 		if (of_property_read_u32(port, "rx-internal-delay-ps", &val))
@@ -1383,7 +1383,7 @@ static void lan937x_phylink_get_caps(struct dsa_switch *ds, int port,
 	config->mac_capabilities = MAC_100FD;
 
 	/* internal T1 PHY */
-	if (lan937x_is_internal_base_t1_phy_port(dev, port)) {
+	if (lan937x_is_internal_phy_port(dev, port)) {
 		__set_bit(PHY_INTERFACE_MODE_INTERNAL,
 				config->supported_interfaces);
 	} else if (lan937x_is_rgmii_port(dev, port)) {

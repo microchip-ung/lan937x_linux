@@ -31,6 +31,33 @@ properties:
     description: Optional gpio specifier for a reset line
     maxItems: 1
 
+  mdio:
+    $ref: /schemas/net/mdio.yaml#
+    unevaluatedProperties: false
+
+patternProperties:
+  "^(ethernet-)?ports$":
+    patternProperties:
+      "^(ethernet-)?port@[0-9]+$":
+        allOf:
+          - if:
+              properties:
+                phy-mode:
+                  contains:
+                    enum:
+                      - rgmii
+                      - rgmii-rxid
+                      - rgmii-txid
+                      - rgmii-id
+            then:
+              properties:
+                rx-internal-delay-ps:
+                  enum: [0, 2000]
+                  default: 0
+                tx-internal-delay-ps:
+                  enum: [0, 2000]
+                  default: 0
+
 required:
   - compatible
   - reg
@@ -111,13 +138,13 @@ examples:
             reg = <6>;
             label = "lan5";
             phy-mode = "internal";
-            phy-handle = <&t1phy4>;
+            phy-handle = <&t1phy6>;
           };
           port@7 {
             reg = <7>;
             label = "lan3";
             phy-mode = "internal";
-            phy-handle = <&t1phy5>;
+            phy-handle = <&t1phy7>;
           };
         };
 
@@ -137,10 +164,10 @@ examples:
           t1phy3: ethernet-phy@3{
             reg = <0x3>;
           };
-          t1phy4: ethernet-phy@6{
+          t1phy6: ethernet-phy@6{
             reg = <0x6>;
           };
-          t1phy5: ethernet-phy@7{
+          t1phy7: ethernet-phy@7{
             reg = <0x7>;
           };
         };
