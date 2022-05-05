@@ -458,6 +458,46 @@ static irqreturn_t lan87xx_handle_interrupt(struct phy_device *phydev)
 	return IRQ_HANDLED;
 }
 
+static int lan937x_phy_config_intr(struct phy_device *phydev)
+{
+	int rc, val = 0;
+
+	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
+		/* unmask all source and clear them before enable */
+		rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_MISC,
+				 0x09, BIT(10));
+	} else {
+	rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_MISC,
+				 0x09, 0);
+		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, val);
+		if (rc)
+			return rc;
+
+		rc = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
+	}
+
+	return rc < 0 ? rc : 0;
+}
+
+static irqreturn_t lan937x_handle_interrupt(struct phy_device *phydev)
+{
+	int irq_status;
+
+	irq_status = access_ereg(phydev, PHYACC_ATTR_MODE_READ, PHYACC_ATTR_BANK_MISC,
+				 0x08, 0);
+	if (irq_status < 0) {
+		phy_error(phydev);
+		return IRQ_NONE;
+	}
+
+	if (irq_status == 0)
+		return IRQ_NONE;
+
+	phy_trigger_machine(phydev);
+
+	return IRQ_HANDLED;
+}
+
 static int lan87xx_config_init(struct phy_device *phydev)
 {
 	int rc = lan87xx_phy_init(phydev);
@@ -792,6 +832,8 @@ static struct phy_driver microchip_t1_phy_driver[] = {
 		.flags          = PHY_POLL_CABLE_TEST,
 		.features	= PHY_BASIC_T1_FEATURES,
 		.config_init	= lan87xx_config_init,
+		.config_intr    = lan937x_phy_config_intr,
+		.handle_interrupt = lan937x_handle_interrupt,
 		.suspend	= genphy_suspend,
 		.resume		= genphy_resume,
 		.config_aneg    = lan87xx_config_aneg,

@@ -985,6 +985,26 @@ static void lan937x_port_policer_del(struct dsa_switch *ds, int port)
 		res->tc_policers_used[i] = false;
 }
 
+static int lan937x_enable_phy_int(struct ksz_device *dev, int port,
+				  bool enable)
+{
+	u32 addr = PORT_CTRL_ADDR(port, REG_PORT_INT_MASK);
+	u8 data;
+	int ret;
+
+	ret = ksz_read8(dev, addr, &data);
+	if (ret)
+		return ret;
+
+	/* PORT_PTP_INT bit is active low */
+	if (enable)
+		data &= ~PORT_PHY_INT;
+	else
+		data |= PORT_PHY_INT;
+
+	return ksz_write8(dev, addr, data);
+}
+
 static void lan937x_config_cpu_port(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
@@ -1022,6 +1042,8 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 			continue;
 
 		lan937x_port_stp_state_set(ds, i, BR_STATE_DISABLED);
+
+		lan937x_enable_phy_int(dev, i, true);
 	}
 }
 

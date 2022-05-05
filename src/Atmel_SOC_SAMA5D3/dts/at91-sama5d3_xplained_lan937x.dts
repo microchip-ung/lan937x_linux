@@ -171,6 +171,7 @@
 					spi-max-frequency = <44000000>;
 					interrupt-parent = <&pioB>;
 					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;					
+					interrupt-controller;
 					led-t1-sel = <0731777704>; // this value is octal.  hex is <0x0767ffc4>
 					status = "okay";
 					ports {
@@ -217,15 +218,23 @@
 						compatible = "microchip,lan937x-mdio";
 						
 						t1phy0: ethernet-phy@0{
+							interrupt-parent = <&lan9370>;
+							interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
 							reg = <0x0>;
 						};
 						t1phy1: ethernet-phy@1{
+							interrupt-parent = <&lan9370>;
+							interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
 							reg = <0x1>;
 						};
 						t1phy2: ethernet-phy@2{
+							interrupt-parent = <&lan9370>;
+							interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
 							reg = <0x2>;
 						};
 						t1phy3: ethernet-phy@3{
+							interrupt-parent = <&lan9370>;
+							interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
 							reg = <0x3>;
 						};
 					};
