@@ -110,7 +110,7 @@ void lan937x_tc_queue_init(struct dsa_switch *ds)
 
 	ds->num_tx_queues = LAN937X_NUM_TC;
 
-	for (port = 0; port < dev->port_cnt; port++) {
+	for (port = 0; port < dev->info->port_cnt; port++) {
 		lan937x_port_cfg(dev, port, REG_PORT_CTRL_0,
 				 PORT_QUEUE_SPLIT_ENABLE, true);
 	}

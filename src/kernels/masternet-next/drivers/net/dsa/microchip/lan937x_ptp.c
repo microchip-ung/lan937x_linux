@@ -1095,7 +1095,7 @@ static int lan937x_ptp_ports_init(struct ksz_device *dev)
 	int port;
 	int ret;
 
-	for (port = 0; port < dev->port_cnt; port++) {
+	for (port = 0; port < dev->info->port_cnt; port++) {
 		ret = lan937x_ptp_port_init(dev, port);
 		if (ret)
 			goto error_deinit;
@@ -1113,7 +1113,7 @@ static void lan937x_ptp_ports_deinit(struct ksz_device *dev)
 {
 	int port;
 
-	for (port = 0; port < dev->port_cnt; port++)
+	for (port = 0; port < dev->info->port_cnt; port++)
 		lan937x_ptp_port_deinit(dev, port);
 }
 

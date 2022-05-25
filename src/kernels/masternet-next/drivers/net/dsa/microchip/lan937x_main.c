@@ -214,20 +214,6 @@ static int lan937x_phy_write16(struct dsa_switch *ds, int addr, int reg,
 	return lan937x_internal_phy_write(dev, addr, reg, val);
 }
 
-static void lan937x_get_strings(struct dsa_switch *ds, int port, u32 stringset,
-				u8 *buf)
-{
-	struct ksz_device *dev = ds->priv;
-	int i;
-
-	if (stringset != ETH_SS_STATS)
-		return;
-
-	for (i = 0; i < dev->mib_cnt; i++)
-		memcpy(buf + i * ETH_GSTRING_LEN, lan937x_mib_names[i].string,
-		       ETH_GSTRING_LEN);
-}
-
 static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
 				       u8 state)
 {
@@ -643,7 +629,7 @@ static int lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 	mutex_lock(&dev->alu_mutex);
 
 	/* Access the entries in the table */
-	for (index = 0; index < dev->num_statics; index++) {
+	for (index = 0; index < dev->info->num_statics; index++) {
 		/* find empty slot first */
 		data = (index << ALU_STAT_INDEX_S) |
 			ALU_STAT_READ | ALU_STAT_START;
@@ -679,7 +665,7 @@ static int lan937x_port_mdb_add(struct dsa_switch *ds, int port,
 	}
 
 	/* no available entry */
-	if (index == dev->num_statics) {
+	if (index == dev->info->num_statics) {
 		ret = -ENOSPC;
 		goto exit;
 	}
@@ -731,7 +717,7 @@ static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
 	mutex_lock(&dev->alu_mutex);
 
 	/* Access the entries in the table */
-	for (index = 0; index < dev->num_statics; index++) {
+	for (index = 0; index < dev->info->num_statics; index++) {
 		data = (index << ALU_STAT_INDEX_S) |
 			ALU_STAT_READ | ALU_STAT_START;
 		ret = ksz_write32(dev, REG_SW_ALU_STAT_CTRL__4, data);
@@ -762,7 +748,7 @@ static int lan937x_port_mdb_del(struct dsa_switch *ds, int port,
 	}
 
 	/* no available entry */
-	if (index == dev->num_statics)
+	if (index == dev->info->num_statics)
 		goto exit;
 
 	/* clear port based on port arg */
@@ -805,7 +791,7 @@ static int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
 	 * Check if any of the port is already set for sniffing
 	 * If yes, instruct the user to remove the previous entry & exit
 	 */
-	for (p = 0; p < dev->port_cnt; p++) {
+	for (p = 0; p < dev->info->port_cnt; p++) {
 		/* Skip the current sniffing port */
 		if (p == mirror->to_local_port)
 			continue;
@@ -859,7 +845,7 @@ static void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
 				 false);
 
 	/* Check if any of the port is still referring to sniffer port */
-	for (p = 0; p < dev->port_cnt; p++) {
+	for (p = 0; p < dev->info->port_cnt; p++) {
 		lan937x_pread8(dev, p, P_MIRROR_CTRL, &data);
 
 		if ((data & (PORT_MIRROR_RX | PORT_MIRROR_TX))) {
@@ -1015,10 +1001,10 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 	dev->cpu_port = 0xFF;
 	dev->dsa_port = 0xFF;
 
-	ds->num_ports = dev->port_cnt;
+	ds->num_ports = dev->info->port_cnt;
 
-	for (i = 0; i < dev->port_cnt; i++) {
-		if (dsa_is_cpu_port(ds, i) && (dev->cpu_ports & (1 << i))) {
+	for (i = 0; i < dev->info->port_cnt; i++) {
+		if (dsa_is_cpu_port(ds, i) && (dev->info->cpu_ports & (1 << i))) {
 			dev->cpu_port = i;
 
 			/* enable cpu port */
@@ -1037,7 +1023,7 @@ static void lan937x_config_cpu_port(struct dsa_switch *ds)
 		}
 	}
 
-	for (i = 0; i < dev->port_cnt; i++) {
+	for (i = 0; i < dev->info->port_cnt; i++) {
 		if (i == dev->cpu_port)
 			continue;
 
@@ -1180,7 +1166,7 @@ static int lan937x_enable_port_interrupts(struct ksz_device *dev, bool enable)
 		return ret;
 
 	/* 0 means enabling the interrupts */
-	mask = ((1 << dev->port_cnt) - 1);
+	mask = ((1 << dev->info->port_cnt) - 1);
 
 	if (enable)
 		data &= ~mask;
@@ -1447,7 +1433,7 @@ static void lan937x_get_eth_mac_stats(struct dsa_switch *ds, int port,
 
 	mutex_lock(&mib->cnt_mutex);
 
-	while (mib->cnt_ptr < dev->mib_cnt) {
+	while (mib->cnt_ptr < dev->info->mib_cnt) {
 		lan937x_r_mib_pkt(dev, port, mib->cnt_ptr,
 				NULL, &mib->counters[mib->cnt_ptr]);
 		++mib->cnt_ptr;
@@ -1549,7 +1535,7 @@ const struct dsa_switch_ops lan937x_switch_ops = {
 	.phy_write = lan937x_phy_write16,
 	.port_enable = ksz_enable_port,
 	.set_ageing_time = lan937x_set_ageing_time,
-	.get_strings = lan937x_get_strings,
+	.get_strings = ksz_get_strings,
 	.get_ethtool_stats = ksz_get_ethtool_stats,
 	.get_sset_count = ksz_sset_count,
 	.get_eth_ctrl_stats = lan937x_get_eth_ctrl_stats,

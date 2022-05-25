@@ -1133,7 +1133,7 @@ int lan937x_flower_setup(struct dsa_switch *ds)
 	struct ksz_device *dev = ds->priv;
 	int port, ret;
 
-	for (port = 0; port < dev->port_cnt; port++) {
+	for (port = 0; port < dev->info->port_cnt; port++) {
 		struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
 		struct lan937x_p_res *res = &blk->res;
 
