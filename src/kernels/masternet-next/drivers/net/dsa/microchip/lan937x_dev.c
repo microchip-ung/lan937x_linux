@@ -285,7 +285,7 @@ static int lan937x_switch_detect(struct ksz_device *dev)
 		return ret;
 
 	if (id32 != 0 && id32 != 0xffffffff) {
-		dev->chip_id = id32;
+		dev->chip_id = id32 & 0x00FFFF00;
 		dev_info(dev->dev, "Chip ID: 0x%x", id32);
 		ret = 0;
 	} else {
@@ -774,7 +774,7 @@ static int lan937x_mdio_register(struct ksz_device *dev)
 
 static int lan937x_switch_init(struct ksz_device *dev)
 {
-	int i, ret;
+	int ret;
 
 	dev->ds->ops = &lan937x_switch_ops;
 
@@ -785,16 +785,6 @@ static int lan937x_switch_init(struct ksz_device *dev)
 	}
 
 	dev->port_mask = (1 << dev->info->port_cnt) - 1;
-
-	for (i = 0; i < dev->info->port_cnt; i++) {
-		dev->ports[i].priv =
-			devm_kzalloc(dev->dev,
-				     sizeof(struct lan937x_flr_blk),
-				     GFP_KERNEL);
-
-		if (!dev->ports[i].priv)
-			return -ENOMEM;
-	}
 
 	if (dev->irq > 0) {
 		unsigned long irqflags =
