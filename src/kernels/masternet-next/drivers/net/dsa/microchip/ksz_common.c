@@ -20,7 +20,6 @@
 #include <net/switchdev.h>
 
 #include "ksz_common.h"
-#include "lan937x_flower.h"
 
 #define MIB_COUNTER_NUM 0x20
 
@@ -1021,14 +1020,6 @@ int ksz_switch_register(struct ksz_device *dev,
 				     sizeof(u64) * (dev->info->mib_cnt + 1),
 				     GFP_KERNEL);
 		if (!dev->ports[i].mib.counters)
-			return -ENOMEM;
-
-		dev->ports[i].priv =
-			devm_kzalloc(dev->dev,
-				     sizeof(struct lan937x_flr_blk),
-				     GFP_KERNEL);
-
-		if (!dev->ports[i].priv)
 			return -ENOMEM;
 	}
 

@@ -7,8 +7,6 @@
 #ifndef __KSZ_COMMON_H
 #define __KSZ_COMMON_H
 
-#include <linux/dsa/ksz_common.h>
-#include <linux/ptp_clock_kernel.h>
 #include <linux/etherdevice.h>
 #include <linux/kernel.h>
 #include <linux/mutex.h>
@@ -16,10 +14,6 @@
 #include <linux/regmap.h>
 #include <net/dsa.h>
 
-enum ksz_ptp_tou_mode {
-       KSZ_PTP_TOU_IDLE,
-       KSZ_PTP_TOU_PPS
-};
 #define KSZ_MAX_NUM_PORTS 8
 
 struct vlan_table {
@@ -74,22 +68,6 @@ struct ksz_port {
 	struct ksz_port_mib mib;
 	phy_interface_t interface;
 	u16 max_frame;
-
-       void * priv;
-
-#if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
-       bool hwts_tx_en;
-        struct lan937x_port_ptp_shared ptp_shared;
-        ktime_t tstamp_sync;
-       struct completion tstamp_sync_comp;
-        ktime_t tstamp_pdelayreq;
-       struct completion tstamp_pdelayreq_comp;
-        ktime_t tstamp_pdelayrsp;
-       struct completion tstamp_pdelayrsp_comp;
-#endif
-       u32 rgmii_tx_val;
-       u32 rgmii_rx_val;
-
 };
 
 struct ksz_device {
@@ -107,15 +85,12 @@ struct ksz_device {
 	struct regmap *regmap[3];
 
 	void *priv;
-	int irq;
 
 	struct gpio_desc *reset_gpio;	/* Optional reset GPIO */
 
 	/* chip specific data */
 	u32 chip_id;
 	int cpu_port;			/* port connected to CPU */
-	int dsa_port;
-	int smi_index;
 	int phy_port_cnt;
 	phy_interface_t compat_interface;
 	bool synclko_125;
@@ -130,17 +105,6 @@ struct ksz_device {
 	u16 mirror_tx;
 	u32 features;			/* chip specific features */
 	u16 port_mask;
-
-	u8 tas_port;
-       u16 cut_through_enable;
-#if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
-       struct ptp_clock_info ptp_caps;
-       struct ptp_clock *ptp_clock;
-       struct mutex ptp_mutex;  //to serialize the activity in the phc
-       struct ksz_device_ptp_shared ptp_shared;
-       enum ksz_ptp_tou_mode ptp_tou_mode;
-#endif
-
 };
 
 /* List of supported models */
@@ -230,9 +194,6 @@ void ksz_switch_remove(struct ksz_device *dev);
 
 int ksz8_switch_register(struct ksz_device *dev);
 int ksz9477_switch_register(struct ksz_device *dev);
-int lan937x_switch_register(struct ksz_device *dev);
-
-int lan937x_check_device_id(struct ksz_device *dev);
 
 void ksz_update_port_member(struct ksz_device *dev, int port);
 void ksz_init_mib_timer(struct ksz_device *dev);
@@ -338,13 +299,6 @@ static inline int ksz_write64(struct ksz_device *dev, u32 reg, u64 value)
 
 	return regmap_bulk_write(dev->regmap[2], reg, val, 2);
 }
-
-static inline int ksz_write8_bulk(struct ksz_device *dev, u32 reg, u8 *value,
-				  u8 n)
-{
-       return regmap_bulk_write(dev->regmap[0], reg, value, n);
-}
-
 
 static inline void ksz_pread8(struct ksz_device *dev, int port, int offset,
 			      u8 *data)
