@@ -186,11 +186,11 @@ bool sparx5_mact_getnext(struct sparx5 *sparx5,
 	return ret == 0;
 }
 
-static int sparx5_mact_lookup(struct sparx5 *sparx5,
-			      const unsigned char mac[ETH_ALEN],
-			      u16 vid)
+bool sparx5_mact_find(struct sparx5 *sparx5,
+		      const unsigned char mac[ETH_ALEN], u16 vid, u32 *pcfg2)
 {
 	int ret;
+	u32 cfg2;
 
 	mutex_lock(&sparx5->lock);
 
@@ -202,13 +202,14 @@ static int sparx5_mact_lookup(struct sparx5 *sparx5,
 		sparx5, LRN_COMMON_ACCESS_CTRL);
 
 	ret = sparx5_mact_wait_for_completion(sparx5);
-	if (ret)
-		goto out;
+	if (ret == 0) {
+		cfg2 = spx5_rd(sparx5, LRN_MAC_ACCESS_CFG_2);
+		if (LRN_MAC_ACCESS_CFG_2_MAC_ENTRY_VLD_GET(cfg2))
+			*pcfg2 = cfg2;
+		else
+			ret = -ENOENT;
+	}
 
-	ret = LRN_MAC_ACCESS_CFG_2_MAC_ENTRY_VLD_GET
-		(spx5_rd(sparx5, LRN_MAC_ACCESS_CFG_2));
-
-out:
 	mutex_unlock(&sparx5->lock);
 
 	return ret;
@@ -292,9 +293,10 @@ int sparx5_add_mact_entry(struct sparx5 *sparx5,
 {
 	struct sparx5_mact_entry *mact_entry;
 	int ret;
+	u32 cfg2;
 
-	ret = sparx5_mact_lookup(sparx5, addr, vid);
-	if (ret)
+	ret = sparx5_mact_find(sparx5, addr, vid, &cfg2);
+	if (!ret)
 		return 0;
 
 	/* In case the entry already exists, don't add it again to SW,

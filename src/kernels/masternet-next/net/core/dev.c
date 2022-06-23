@@ -681,11 +681,11 @@ int dev_fill_forward_path(const struct net_device *dev, const u8 *daddr,
 	const struct net_device *last_dev;
 	struct net_device_path_ctx ctx = {
 		.dev	= dev,
-		.daddr	= daddr,
 	};
 	struct net_device_path *path;
 	int ret = 0;
 
+	memcpy(ctx.daddr, daddr, sizeof(ctx.daddr));
 	stack->num_paths = 0;
 	while (ctx.dev && ctx.dev->netdev_ops->ndo_fill_forward_path) {
 		last_dev = ctx.dev;
@@ -4277,7 +4277,6 @@ static inline void ____napi_schedule(struct softnet_data *sd,
 {
 	struct task_struct *thread;
 
-	lockdep_assert_softirq_will_run();
 	lockdep_assert_irqs_disabled();
 
 	if (test_bit(NAPI_STATE_THREADED, &napi->state)) {
@@ -4887,7 +4886,7 @@ int __netif_rx(struct sk_buff *skb)
 {
 	int ret;
 
-	lockdep_assert_softirq_will_run();
+	lockdep_assert_once(hardirq_count() | softirq_count());
 
 	trace_netif_rx_entry(skb);
 	ret = netif_rx_internal(skb);
@@ -7193,6 +7192,16 @@ static int __netdev_update_upper_level(struct net_device *dev,
 	dev->upper_level = __netdev_upper_depth(dev) + 1;
 	return 0;
 }
+
+#ifdef CONFIG_LOCKDEP
+static LIST_HEAD(net_unlink_list);
+
+static void net_unlink_todo(struct net_device *dev)
+{
+	if (list_empty(&dev->unlink_list))
+		list_add_tail(&dev->unlink_list, &net_unlink_list);
+}
+#endif
 
 static int __netdev_update_lower_level(struct net_device *dev,
 				       struct netdev_nested_priv *priv)
@@ -10295,7 +10304,7 @@ void netdev_stats_to_stats64(struct rtnl_link_stats64 *stats64,
 }
 EXPORT_SYMBOL(netdev_stats_to_stats64);
 
-struct net_device_core_stats *netdev_core_stats_alloc(struct net_device *dev)
+struct net_device_core_stats __percpu *netdev_core_stats_alloc(struct net_device *dev)
 {
 	struct net_device_core_stats __percpu *p;
 
@@ -10306,11 +10315,7 @@ struct net_device_core_stats *netdev_core_stats_alloc(struct net_device *dev)
 		free_percpu(p);
 
 	/* This READ_ONCE() pairs with the cmpxchg() above */
-	p = READ_ONCE(dev->core_stats);
-	if (!p)
-		return NULL;
-
-	return this_cpu_ptr(p);
+	return READ_ONCE(dev->core_stats);
 }
 EXPORT_SYMBOL(netdev_core_stats_alloc);
 
@@ -10347,9 +10352,9 @@ struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
 
 		for_each_possible_cpu(i) {
 			core_stats = per_cpu_ptr(p, i);
-			storage->rx_dropped += local_read(&core_stats->rx_dropped);
-			storage->tx_dropped += local_read(&core_stats->tx_dropped);
-			storage->rx_nohandler += local_read(&core_stats->rx_nohandler);
+			storage->rx_dropped += READ_ONCE(core_stats->rx_dropped);
+			storage->tx_dropped += READ_ONCE(core_stats->tx_dropped);
+			storage->rx_nohandler += READ_ONCE(core_stats->rx_nohandler);
 		}
 	}
 	return storage;
