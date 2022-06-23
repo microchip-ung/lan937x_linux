@@ -4913,10 +4913,15 @@ static int macb_probe(struct platform_device *pdev)
 
 	/* MTU range: 68 - 1500 or 10240 */
 	dev->min_mtu = GEM_MTU_MIN_SIZE;
+	/* Commenting following code as a workaround for fixing
+	 *  MTU issue.
+	 */
+#if 0
 	if (bp->caps & MACB_CAPS_JUMBO)
 		dev->max_mtu = gem_readl(bp, JML) - ETH_HLEN - ETH_FCS_LEN;
 	else
-		dev->max_mtu = ETH_DATA_LEN;
+#endif
+		dev->max_mtu = ETH_DATA_LEN + 7;
 
 	if (bp->caps & MACB_CAPS_BD_RD_PREFETCH) {
 		val = GEM_BFEXT(RXBD_RDBUFF, gem_readl(bp, DCFG10));

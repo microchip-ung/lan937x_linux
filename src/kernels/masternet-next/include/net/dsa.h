@@ -53,6 +53,8 @@ struct phylink_link_state;
 #define DSA_TAG_PROTO_SJA1110_VALUE		23
 #define DSA_TAG_PROTO_RTL8_4_VALUE		24
 #define DSA_TAG_PROTO_RTL8_4T_VALUE		25
+#define DSA_TAG_PROTO_LAN937X_VALUE		26
+#define DSA_TAG_PROTO_LAN937X_CASCADE_VALUE	27
 
 enum dsa_tag_protocol {
 	DSA_TAG_PROTO_NONE		= DSA_TAG_PROTO_NONE_VALUE,
@@ -81,6 +83,8 @@ enum dsa_tag_protocol {
 	DSA_TAG_PROTO_SJA1110		= DSA_TAG_PROTO_SJA1110_VALUE,
 	DSA_TAG_PROTO_RTL8_4		= DSA_TAG_PROTO_RTL8_4_VALUE,
 	DSA_TAG_PROTO_RTL8_4T		= DSA_TAG_PROTO_RTL8_4T_VALUE,
+	DSA_TAG_PROTO_LAN937X		= DSA_TAG_PROTO_LAN937X_VALUE,
+	DSA_TAG_PROTO_LAN937X_CASCADE	= DSA_TAG_PROTO_LAN937X_CASCADE_VALUE,
 };
 
 struct dsa_switch;
@@ -278,6 +282,8 @@ struct dsa_port {
 	u8			mac[ETH_ALEN];
 
 	u8			stp_state;
+
+	void *priv;
 
 	/* Warning: the following bit fields are not atomic, and updating them
 	 * can only be done from code paths where concurrency is not possible
