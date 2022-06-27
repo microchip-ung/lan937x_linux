@@ -1,0 +1,47 @@
+From f1410ad347a62648af53c8b05be87d9758a0764e Mon Sep 17 00:00:00 2001
+From: Rakesh <rakesh.sankaranarayanan@microchip.com>
+Date: Mon, 27 Jun 2022 14:20:01 +0530
+Subject: [PATCH 1/2] 5.19-rc2 macb and debugfs updates
+
+---
+ drivers/base/regmap/regmap-debugfs.c     |  1 +
+ drivers/net/ethernet/cadence/macb_main.c | 11 +++++++----
+ 2 files changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/base/regmap/regmap-debugfs.c b/drivers/base/regmap/regmap-debugfs.c
+index 817eda2075aa..2f2b381db84d 100644
+--- a/drivers/base/regmap/regmap-debugfs.c
++++ b/drivers/base/regmap/regmap-debugfs.c
+@@ -291,6 +291,7 @@ static ssize_t regmap_map_read_file(struct file *file, char __user *user_buf,
+ }
+ 
+ #undef REGMAP_ALLOW_WRITE_DEBUGFS
++#define REGMAP_ALLOW_WRITE_DEBUGFS
+ #ifdef REGMAP_ALLOW_WRITE_DEBUGFS
+ /*
+  * This can be dangerous especially when we have clients such as
+diff --git a/drivers/net/ethernet/cadence/macb_main.c b/drivers/net/ethernet/cadence/macb_main.c
+index d89098f4ede8..3c8675cb2f60 100644
+--- a/drivers/net/ethernet/cadence/macb_main.c
++++ b/drivers/net/ethernet/cadence/macb_main.c
+@@ -4913,10 +4913,13 @@ static int macb_probe(struct platform_device *pdev)
+ 
+ 	/* MTU range: 68 - 1500 or 10240 */
+ 	dev->min_mtu = GEM_MTU_MIN_SIZE;
+-	if (bp->caps & MACB_CAPS_JUMBO)
+-		dev->max_mtu = gem_readl(bp, JML) - ETH_HLEN - ETH_FCS_LEN;
+-	else
+-		dev->max_mtu = ETH_DATA_LEN;
++	/* Commenting following code as a workaround for fixing
++	 *  MTU issue.
++	 */
++	/* if (bp->caps & MACB_CAPS_JUMBO) */
++	/*         dev->max_mtu = gem_readl(bp, JML) - ETH_HLEN - ETH_FCS_LEN; */
++	/* else */
++	dev->max_mtu = ETH_DATA_LEN + 7;
+ 
+ 	if (bp->caps & MACB_CAPS_BD_RD_PREFETCH) {
+ 		val = GEM_BFEXT(RXBD_RDBUFF, gem_readl(bp, DCFG10));
+-- 
+2.34.1
+
