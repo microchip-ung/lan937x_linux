@@ -1,7 +1,7 @@
 From f1410ad347a62648af53c8b05be87d9758a0764e Mon Sep 17 00:00:00 2001
 From: Rakesh <rakesh.sankaranarayanan@microchip.com>
 Date: Mon, 27 Jun 2022 14:20:01 +0530
-Subject: [PATCH 1/2] 5.19-rc2 macb and debugfs updates
+Subject: [PATCH 1/5] 5.19-rc2 macb and debugfs updates
 
 ---
  drivers/base/regmap/regmap-debugfs.c     |  1 +

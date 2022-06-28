@@ -1,7 +1,7 @@
 From d7834407c3c9130f11b8989bc6efa8adcabe133e Mon Sep 17 00:00:00 2001
 From: Rakesh <rakesh.sankaranarayanan@microchip.com>
 Date: Mon, 27 Jun 2022 16:25:03 +0530
-Subject: [PATCH 2/2] sync dsa v3.4.1
+Subject: [PATCH 2/5] sync dsa v3.4.1
 
 ---
  drivers/net/dsa/microchip/Kconfig           |   30 +
