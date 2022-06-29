@@ -1,0 +1,75 @@
+LAN937x Linux DSA Driver
+=========================
+
+Table of Contents:
+--------------------
+        1. Device support
+        2. Software description
+        3. Directory structure
+        4. Release History
+
+1. Device support
+-----------------
+        LAN9370, LAN9371, LAN9372, LAN9373, LAN9374
+
+2. Software description
+-----------------------
+        The pacakge contains the following,
+                - buildroot package
+                - Linux Kernel
+                - DTS files
+
+3. Directory structure
+--------------------
+        lan937x_linux
+                |-docs 
+                |       |-build_instructions.txt
+                |       |-LinuxCommands_supported.txt
+                |-Atmel_SOC_SAMA5D3
+                |       |-buildroot-at91
+                |       |-dts
+                |       |-patches
+                |-kernels/masternet-next 
+                |-ReleaseNotes.txt
+
+3. Release History
+------------------
+
+v3.4.0 : 4/01/2022
+------------------
+	Updated to the Linux (5.17.0-rc8) Kernel version.
+
+	Features added
+	--------------
+		1. Cascading support for Dual-T board
+
+V2.1.1 : 14/06/2021
+-------------------
+        Initial version of Linux DSA driver
+
+	Images.zip and Images_slv.zip are same except that all T1 phy in Image.zip
+	are configured in master mode and T1 phy in Imagex_slv.zip are configured in 
+	slave mode.
+
+        New Features added
+        -----------------
+                1. Linux (5.12.0-rc7) DSA driver with following features,
+                        * VLAN, FDB, MDB, Statistics, Port Mirroring
+                        * gPTP, CBS
+
+        Known Limitations:
+        ------------------
+                1. Flow control is not configured correctly.
+                2. lan937x_get_max_mtu returns wrong MTU, this would be changed in the next version.
+                3. lan937x_port_bridge_flags hooks to be removed
+                4. mdiobus_unregister to be added in spi_remove function
+                5. There can be two bridges at the same time, One Vlan aware and VLAN unware. 
+                   Appropriate code handling to be added in the next version
+                6. sama5d3_xplained_ksz9897 is reused for lan937x, this is to be removed in next revision
+        
+        Bug Fixes:
+        ---------
+                None
+
+
+

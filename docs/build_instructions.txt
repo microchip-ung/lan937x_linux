@@ -1,0 +1,84 @@
+Build the Source
+================
+The buildroot source can be built for NAND flash or SD card configuration. 
+
+	* Navigate to "lan937x_linux"
+	* Execute "export SRC_HOME=$PWD"
+	* then Navigate to "Atmel_SOC_SAMA5D3/buildroot-at91"
+	* Execute following make commands based on the image.
+
+	
+Generating NAND Flash Image
+---------------------------
+	* make atmel_sama5d3_xplained_lan937x_defconfig
+	* make
+	
+Generating SD Card Image
+------------------------
+	* make atmel_sama5d3_xplained_lan937x_mmc_defconfig
+	* make
+	
+
+Switching between Configs
+-------------------------
+	If we need to switch between NAND flash image and SD card image generation, use
+	the following steps 
+
+	1. make atmel_sama5d3_xplained_lan937x_mmc_defconfig
+			or
+	   make atmel_sama5d3_xplained_lan937x_defconfig
+
+	2.  rm -rf output/build/uboot-linux4sam_5.3/
+
+	3. make uboot-rebuild
+
+	4. make at91bootstrap3-rebuild
+
+	5. make linux-rebuild
+
+	6. make
+
+If the above procedure has any problem, use the below one (it will build fully).
+
+	1. make clean
+
+	2. make atmel_sama5d3_xplained_lan937x_mmc_defconfig
+				or
+	   make atmel_sama5d3_xplained_lan937x_defconfig
+	
+	3. make
+
+
+output/images will have the following file
+==========================================
+
+|----------------------------------------------------------------------------------------|
+|at91bootstrap.bin	       	| Atmel SAM A5D3 Bootstrap binary -at91bootstrap3-v3.8.5 |
+|----------------------------------------------------------------------------------------| 
+|u-boot.bin 			| Atmel SAM A5D3 Uboot binary – linux4sam_5.3		 |	
+|----------------------------------------------------------------------------------------|
+|zImage				| Linux image and rootfs files for Nand Flash		 |	
+|rootfs.tar			|							 |							
+|rootfs.ubi			|							 |							
+|rootfs.ubifs			|							 |							
+|----------------------------------------------------------------------------------------|
+|ubootEnvtFileNandFlash.bin 	| uBoot Environment configuration binary for Nand flash  |
+|----------------------------------------------------------------------------------------|
+|sdcard.img 			|  SD card image										
+|----------------------------------------------------------------------------------------|
+
+How to generate ubootEnvtFileNandFlash.bin?
+and
+How to program NAND flash right after "make"
+-------------------------------------------
+	1. Navigate to Atmel_SOC_SAMA5D3/buildroot-at91/board/atmel/sama5d3_xplained_ksz9897/post-image.sh
+	2. Uncomment any one of the line based on architecture.
+	   #./board/atmel/linux/flasher_x64.sh ./output/ /dev/ttyACM0 sama5d3_xplained
+
+	   or
+
+	   #./board/atmel/linux/flasher.sh ./output/ /dev/ttyACM0 sama5d3_xplained
+	3. Execute "make"
+	   It requires SAMA5D3 board to be connected to the Linux machine
+	4. ubootEnvtFileNandFlash.bin in the "output/images" directory and NAND flash will be
+	   programmed.

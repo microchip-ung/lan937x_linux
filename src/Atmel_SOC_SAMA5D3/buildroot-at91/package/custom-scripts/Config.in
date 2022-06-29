@@ -1,6 +1,0 @@
-config BR2_PACKAGE_CUSTOM_SCRIPTS
-	bool "custom-scripts"
-	default "y"
-	help
-	  import custom test scripts to target directory
-
