@@ -165,14 +165,10 @@
 				id = <1>;
 				status = "okay";
 				
-				lan9370: lan9370@3 {
-					compatible = "microchip,lan9370";
+				lan9321: lan9321@3 {
+					compatible = "microchip,lan9321";
 					reg = <3>;
 					spi-max-frequency = <44000000>;
-					interrupt-parent = <&pioB>;
-					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;					
-					interrupt-controller;
-					led-t1-sel = <0731777704>; // this value is octal.  hex is <0x0767ffc4>
 					status = "okay";
 					ports {
 						#address-cells = <1>;
@@ -189,20 +185,8 @@
 							phy-mode = "internal";
 							label = "lan2";
 						};
-						port@2 {
-							reg = <0x2>;
-							phy-handle = <&t1phy2>;
-							phy-mode = "internal";
-							label = "lan3";
-						};
 						port@3 {
 							reg = <0x3>;
-							phy-handle = <&t1phy3>;
-							phy-mode = "internal";
-							label = "lan4";
-						};
-						port@4 {
-							reg = <4>;
 							phy-mode = "rmii";
 							label = "cpu";
 							ethernet = <&macb1>;
@@ -218,28 +202,13 @@
 						compatible = "microchip,lan937x-mdio";
 						
 						t1phy0: ethernet-phy@0{
-							interrupt-parent = <&lan9370>;
-							interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
 							reg = <0x0>;
 						};
 						t1phy1: ethernet-phy@1{
-							interrupt-parent = <&lan9370>;
-							interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
 							reg = <0x1>;
-						};
-						t1phy2: ethernet-phy@2{
-							interrupt-parent = <&lan9370>;
-							interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
-							reg = <0x2>;
-						};
-						t1phy3: ethernet-phy@3{
-							interrupt-parent = <&lan9370>;
-							interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
-							reg = <0x3>;
 						};
 					};
 				};
-
 			};
 
 			adc0: adc@f8018000 {

@@ -1,0 +1,550 @@
+From 79bf7514809eee47203109eb4dc7363b9579f5c6 Mon Sep 17 00:00:00 2001
+From: Rakesh <rakesh.sankaranarayanan@microchip.com>
+Date: Tue, 28 Jun 2022 19:40:40 +0530
+Subject: [PATCH 5/5] added lan932x initial changes
+
+---
+ drivers/net/dsa/microchip/ksz_common.c   | 122 ++++++++++++++++++++---
+ drivers/net/dsa/microchip/ksz_common.h   |  16 +++
+ drivers/net/dsa/microchip/lan937x_dev.c  |  99 ++++++++++++++++--
+ drivers/net/dsa/microchip/lan937x_dev.h  |   4 +-
+ drivers/net/dsa/microchip/lan937x_main.c |   4 +-
+ drivers/net/dsa/microchip/lan937x_reg.h  |   3 +
+ drivers/net/dsa/microchip/lan937x_spi.c  |  18 +++-
+ 7 files changed, 240 insertions(+), 26 deletions(-)
+
+diff --git a/drivers/net/dsa/microchip/ksz_common.c b/drivers/net/dsa/microchip/ksz_common.c
+index adb53ff70ff6..62a74147f627 100644
+--- a/drivers/net/dsa/microchip/ksz_common.c
++++ b/drivers/net/dsa/microchip/ksz_common.c
+@@ -137,6 +137,26 @@ static const struct ksz_mib_names ksz9477_mib_names[] = {
+ 	{ 0x81, "tx_total" },
+ 	{ 0x82, "rx_discards" },
+ 	{ 0x83, "tx_discards" },
++	/* Counters specific for 937x */
++	{ 0x84, "rx_bad_byte_cnt" },
++	{ 0x85, "tx_pkt_lnkerr_cnt" },
++	/* Debug counters for 932x */
++	{ 0x00, "fr_cnt_que0" },
++	{ 0x04, "fr_cnt_que1" },
++	{ 0x08, "fr_cnt_que2" },
++	{ 0x0C, "fr_cnt_que3" },
++	{ 0x10, "fr_cnt_que4" },
++	{ 0x14, "fr_cnt_que5" },
++	{ 0x18, "fr_cnt_que6" },
++	{ 0x1C, "fr_cnt_que7" },
++	{ 0x20, "byte_cnt_que0" },
++	{ 0x24, "byte_cnt_que1" },
++	{ 0x28, "byte_cnt_que2" },
++	{ 0x3C, "byte_cnt_que3" },
++	{ 0x30, "byte_cnt_que4" },
++	{ 0x34, "byte_cnt_que5" },
++	{ 0x38, "byte_cnt_que6" },
++	{ 0x3C, "byte_cnt_que7" },
+ };
+ 
+ const struct ksz_chip_data ksz_switch_chips[] = {
+@@ -150,7 +170,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.port_cnt = 5,		/* total cpu and user ports */
+ 		.ksz87xx_eee_link_erratum = true,
+ 		.mib_names = ksz9477_mib_names,
+-		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
++		.mib_cnt = 36,
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+ 		.supports_mii = {false, false, false, false, true},
+ 		.supports_rmii = {false, false, false, false, true},
+@@ -182,7 +202,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.port_cnt = 5,		/* total cpu and user ports */
+ 		.ksz87xx_eee_link_erratum = true,
+ 		.mib_names = ksz9477_mib_names,
+-		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
++		.mib_cnt = 36,
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+ 		.supports_mii = {false, false, false, false, true},
+ 		.supports_rmii = {false, false, false, false, true},
+@@ -200,7 +220,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.port_cnt = 5,		/* total cpu and user ports */
+ 		.ksz87xx_eee_link_erratum = true,
+ 		.mib_names = ksz9477_mib_names,
+-		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
++		.mib_cnt = 36,
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+ 		.supports_mii = {false, false, false, false, true},
+ 		.supports_rmii = {false, false, false, false, true},
+@@ -217,7 +237,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.cpu_ports = 0x4,	/* can be configured as cpu port */
+ 		.port_cnt = 3,
+ 		.mib_names = ksz88xx_mib_names,
+-		.mib_cnt = ARRAY_SIZE(ksz88xx_mib_names),
++		.mib_cnt = 36,
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+ 		.supports_mii = {false, false, true},
+ 		.supports_rmii = {false, false, true},
+@@ -234,7 +254,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.port_cnt = 7,		/* total physical port count */
+ 		.phy_errata_9477 = true,
+ 		.mib_names = ksz9477_mib_names,
+-		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
++		.mib_cnt = 36,
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+ 		.supports_mii	= {false, false, false, false,
+ 				   false, true, false},
+@@ -256,7 +276,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.port_cnt = 7,		/* total physical port count */
+ 		.phy_errata_9477 = true,
+ 		.mib_names = ksz9477_mib_names,
+-		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
++		.mib_cnt = 36,
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+ 		.supports_mii	= {false, false, false, false,
+ 				   false, true, true},
+@@ -277,7 +297,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.cpu_ports = 0x07,	/* can be configured as cpu port */
+ 		.port_cnt = 3,		/* total port count */
+ 		.mib_names = ksz9477_mib_names,
+-		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
++		.mib_cnt = 36,
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+ 		.supports_mii = {false, false, true},
+ 		.supports_rmii = {false, false, true},
+@@ -295,7 +315,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.port_cnt = 7,		/* total physical port count */
+ 		.phy_errata_9477 = true,
+ 		.mib_names = ksz9477_mib_names,
+-		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
++		.mib_cnt = 36,
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+ 		.supports_mii	= {false, false, false, false,
+ 				   false, true, true},
+@@ -316,7 +336,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.cpu_ports = 0x10,	/* can be configured as cpu port */
+ 		.port_cnt = 5,		/* total physical port count */
+ 		.mib_names = ksz9477_mib_names,
+-		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
++		.mib_cnt = 38,
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+ 		.supports_mii = {false, false, false, false, true},
+ 		.supports_rmii = {false, false, false, false, true},
+@@ -333,7 +353,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.cpu_ports = 0x30,	/* can be configured as cpu port */
+ 		.port_cnt = 6,		/* total physical port count */
+ 		.mib_names = ksz9477_mib_names,
+-		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
++		.mib_cnt = 38,
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+ 		.supports_mii = {false, false, false, false, true, true},
+ 		.supports_rmii = {false, false, false, false, true, true},
+@@ -350,7 +370,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.cpu_ports = 0x30,	/* can be configured as cpu port */
+ 		.port_cnt = 8,		/* total physical port count */
+ 		.mib_names = ksz9477_mib_names,
+-		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
++		.mib_cnt = 38,
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+ 		.supports_mii	= {false, false, false, false,
+ 				   true, true, false, false},
+@@ -371,7 +391,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.cpu_ports = 0x38,	/* can be configured as cpu port */
+ 		.port_cnt = 5,		/* total physical port count */
+ 		.mib_names = ksz9477_mib_names,
+-		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
++		.mib_cnt = 38,
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+ 		.supports_mii	= {false, false, false, false,
+ 				   true, true, false, false},
+@@ -392,7 +412,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.cpu_ports = 0x30,	/* can be configured as cpu port */
+ 		.port_cnt = 8,		/* total physical port count */
+ 		.mib_names = ksz9477_mib_names,
+-		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
++		.mib_cnt = 38,
+ 		.reg_mib_cnt = MIB_COUNTER_NUM,
+ 		.supports_mii	= {false, false, false, false,
+ 				   true, true, false, false},
+@@ -403,6 +423,82 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.internal_phy	= {true, true, true, true,
+ 				   false, false, true, true},
+ 	},
++
++	[LAN9321] = {
++		.chip_id = LAN9321_CHIP_ID,
++		.dev_name = "LAN9321",
++		.num_vlans = 4096,
++		.num_alus = 1024,
++		.num_statics = 256,
++		.cpu_ports = 0x08,	/* can be configured as cpu port */
++		.port_cnt = 5,		/* total physical port count */
++		.mib_names = ksz9477_mib_names,
++		.mib_cnt = 54,
++		.reg_mib_cnt = MIB_COUNTER_NUM,
++		.supports_mii	= {false, false, false, true, true},
++		.supports_rmii	= {false, false, true, true, true},
++		.supports_rgmii = {false, false, false, true, true},
++		.internal_phy	= {true, true, false, false, false},
++	},
++
++	[LAN9322] = {
++		.chip_id = LAN9322_CHIP_ID,
++		.dev_name = "LAN9322",
++		.num_vlans = 4096,
++		.num_alus = 1024,
++		.num_statics = 256,
++		.cpu_ports = 0x08,	/* can be configured as cpu port */
++		.port_cnt = 5,		/* total physical port count */
++		.mib_names = ksz9477_mib_names,
++		.mib_cnt = 54,
++		.reg_mib_cnt = MIB_COUNTER_NUM,
++		.supports_mii	= {false, false, false, true, true},
++		.supports_rmii	= {false, false, false, true, true},
++		.supports_rgmii = {false, false, false, true, true},
++		.internal_phy	= {false, false, false, false, false},
++	},
++
++	[LAN9325] = {
++		.chip_id = LAN9325_CHIP_ID,
++		.dev_name = "LAN9325",
++		.num_vlans = 4096,
++		.num_alus = 1024,
++		.num_statics = 256,
++		.cpu_ports = 0x80,	/* can be configured as cpu port */
++		.port_cnt = 8,		/* total physical port count */
++		.mib_names = ksz9477_mib_names,
++		.mib_cnt = 54,
++		.reg_mib_cnt = MIB_COUNTER_NUM,
++		.supports_mii	= {false, false, false, true,
++				   true, false, true, true},
++		.supports_rmii	= {false, false, true, true,
++				   true, false, true, true},
++		.supports_rgmii = {false, false, false, true,
++				   true, false, true, true},
++		.internal_phy	= {true, true, false, false,
++				   false, false, false, false},
++	},
++
++	[LAN9326] = {
++		.chip_id = LAN9326_CHIP_ID,
++		.dev_name = "LAN9326",
++		.num_vlans = 4096,
++		.num_alus = 1024,
++		.num_statics = 256,
++		.cpu_ports = 0x80,	/* can be configured as cpu port */
++		.port_cnt = 8,		/* total physical port count */
++		.mib_names = ksz9477_mib_names,
++		.mib_cnt = 54,
++		.reg_mib_cnt = MIB_COUNTER_NUM,
++		.supports_mii	= {false, false, false, true,
++				   true, false, true, true},
++		.supports_rmii	= {false, false, false, true,
++				   true, true, true, true},
++		.supports_rgmii = {false, false, false, true,
++				   true, false, true, true},
++		.internal_phy	= {false, false, false, false,
++				   false, false, false, false},
++	},
+ };
+ EXPORT_SYMBOL_GPL(ksz_switch_chips);
+ 
+diff --git a/drivers/net/dsa/microchip/ksz_common.h b/drivers/net/dsa/microchip/ksz_common.h
+index 36de77fa64a5..eb45dec995b5 100644
+--- a/drivers/net/dsa/microchip/ksz_common.h
++++ b/drivers/net/dsa/microchip/ksz_common.h
+@@ -158,6 +158,10 @@ enum ksz_model {
+ 	LAN9372,
+ 	LAN9373,
+ 	LAN9374,
++	LAN9321,
++	LAN9322,
++	LAN9325,
++	LAN9326,
+ };
+ 
+ enum ksz_chip_id {
+@@ -174,6 +178,10 @@ enum ksz_chip_id {
+ 	LAN9372_CHIP_ID = 0x00937200,
+ 	LAN9373_CHIP_ID = 0x00937300,
+ 	LAN9374_CHIP_ID = 0x00937400,
++	LAN9321_CHIP_ID = 0x00932100,
++	LAN9322_CHIP_ID = 0x00932200,
++	LAN9325_CHIP_ID = 0x00932500,
++	LAN9326_CHIP_ID = 0x00932600,
+ };
+ 
+ struct alu_struct {
+@@ -394,6 +402,14 @@ static inline void ksz_regmap_unlock(void *__mtx)
+ 	mutex_unlock(mtx);
+ }
+ 
++static inline bool is_lan932x(struct ksz_device *dev)
++{
++	return dev->chip_id == LAN9321_CHIP_ID ||
++	  dev->chip_id == LAN9322_CHIP_ID ||
++	  dev->chip_id == LAN9325_CHIP_ID ||
++	  dev->chip_id == LAN9326_CHIP_ID;
++}
++
+ /* STP State Defines */
+ #define PORT_TX_ENABLE			BIT(2)
+ #define PORT_RX_ENABLE			BIT(1)
+diff --git a/drivers/net/dsa/microchip/lan937x_dev.c b/drivers/net/dsa/microchip/lan937x_dev.c
+index 1574d38c8d49..24ede253ed4d 100644
+--- a/drivers/net/dsa/microchip/lan937x_dev.c
++++ b/drivers/net/dsa/microchip/lan937x_dev.c
+@@ -18,6 +18,8 @@
+ #include "lan937x_ptp.h"
+ #include "lan937x_flower.h"
+ 
++#define LAN937x_MIB_CNT 38
++
+ const struct mib_names lan937x_mib_names[] = {
+ 	{ 0x00, "rx_hi" },
+ 	{ 0x01, "rx_undersize" },
+@@ -55,6 +57,25 @@ const struct mib_names lan937x_mib_names[] = {
+ 	{ 0x81, "tx_total" },
+ 	{ 0x82, "rx_discards" },
+ 	{ 0x83, "tx_discards" },
++	{ 0x84, "rx_bad_byte_cnt" },
++	{ 0x85, "tx_pkt_lnkerr_cnt" },
++	/* Port Queue Statistics */
++	{ 0x00, "fr_cnt_que0" },
++	{ 0x04, "fr_cnt_que1" },
++	{ 0x08, "fr_cnt_que2" },
++	{ 0x0C, "fr_cnt_que3" },
++	{ 0x10, "fr_cnt_que4" },
++	{ 0x14, "fr_cnt_que5" },
++	{ 0x18, "fr_cnt_que6" },
++	{ 0x1C, "fr_cnt_que7" },
++	{ 0x20, "byte_cnt_que0" },
++	{ 0x24, "byte_cnt_que1" },
++	{ 0x28, "byte_cnt_que2" },
++	{ 0x3C, "byte_cnt_que3" },
++	{ 0x30, "byte_cnt_que4" },
++	{ 0x34, "byte_cnt_que5" },
++	{ 0x38, "byte_cnt_que6" },
++	{ 0x3C, "byte_cnt_que7" },
+ };
+ 
+ int lan937x_cfg(struct ksz_device *dev, u32 addr, u8 bits, bool set)
+@@ -172,11 +193,27 @@ static void lan937x_r_mib_cnt(struct ksz_device *dev, int port, u16 addr,
+ 	*cnt += data;
+ }
+ 
++static void lan937x_r_que_cnt(struct ksz_device *dev, int port, u16 addr,
++			      u64 *cnt)
++{
++	u32 data;
++
++	if (!is_lan932x(dev))
++		return;
++
++	lan937x_pread32(dev, port, (REG_PORT_QUEUE_COUNTER + addr), &data);
++	*cnt += data;
++}
++
+ void lan937x_r_mib_pkt(struct ksz_device *dev, int port, u16 addr,
+ 		       u64 *dropped, u64 *cnt)
+ {
++	u16 index = addr;
+ 	addr = lan937x_mib_names[addr].index;
+-	lan937x_r_mib_cnt(dev, port, addr, cnt);
++	if (index < LAN937x_MIB_CNT)
++		lan937x_r_mib_cnt(dev, port, addr, cnt);
++	else
++		lan937x_r_que_cnt(dev, port, addr, cnt);
+ }
+ 
+ static void lan937x_r_mib_stats64(struct ksz_device *dev, int port)
+@@ -389,8 +426,8 @@ static int lan937x_vphy_ind_addr_wr(struct ksz_device *dev, int addr, int reg)
+ 	return ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
+ }
+ 
+-int lan937x_internal_phy_write(struct ksz_device *dev, int addr, int reg,
+-			       u16 val)
++static int lan937x_internal_phy_write(struct ksz_device *dev, int addr, int reg,
++				      u16 val)
+ {
+ 	unsigned int value;
+ 	int ret;
+@@ -425,8 +462,33 @@ int lan937x_internal_phy_write(struct ksz_device *dev, int addr, int reg,
+ 	return 0;
+ }
+ 
+-int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
+-			      u16 *val)
++static int lan932x_internal_phy_write(struct ksz_device *dev, int addr, int reg,
++				      u16 val)
++{
++	int ret = 0;
++
++	ret = lan937x_pwrite16(dev, addr, reg, val);
++	if (ret < 0)
++		return ret;
++
++	return ret;
++}
++
++int lan93xx_internal_phy_write(struct ksz_device *dev, int addr, int reg,
++			       u16 val)
++{
++	int ret;
++
++	if (is_lan932x(dev))
++		ret = lan932x_internal_phy_write(dev, addr, reg, val);
++	else
++		ret = lan937x_internal_phy_write(dev, addr, reg, val);
++
++	return ret;
++}
++
++static int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
++				     u16 *val)
+ {
+ 	unsigned int value;
+ 	int ret;
+@@ -456,6 +518,31 @@ int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
+ 	return ksz_read16(dev, REG_VPHY_IND_DATA__2, val);
+ }
+ 
++static int lan932x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
++				     u16 *val)
++{
++	int ret = 0;
++
++	ret = lan937x_pread16(dev, addr, reg, val);
++	if (ret < 0)
++		return ret;
++
++	return ret;
++}
++
++int lan93xx_internal_phy_read(struct ksz_device *dev, int addr, int reg,
++			      u16 *val)
++{
++	int ret;
++
++	if (is_lan932x(dev))
++		ret = lan932x_internal_phy_read(dev, addr, reg, val);
++	else
++		ret = lan937x_internal_phy_read(dev, addr, reg, val);
++
++	return ret;
++}
++
+ static void lan937x_config_gbit(struct ksz_device *dev, bool gbit, u8 *data)
+ {
+ 	if (gbit)
+@@ -657,7 +744,7 @@ static int lan937x_sw_mdio_read(struct mii_bus *bus, int addr, int regnum)
+ 	if (regnum & MII_ADDR_C45)
+ 		return -EOPNOTSUPP;
+ 
+-	ret = lan937x_internal_phy_read(dev, addr, regnum, &val);
++	ret = lan93xx_internal_phy_read(dev, addr, regnum, &val);
+ 	if (ret < 0)
+ 		return ret;
+ 
+diff --git a/drivers/net/dsa/microchip/lan937x_dev.h b/drivers/net/dsa/microchip/lan937x_dev.h
+index 28bed3395ad9..b6425a67dcf1 100644
+--- a/drivers/net/dsa/microchip/lan937x_dev.h
++++ b/drivers/net/dsa/microchip/lan937x_dev.h
+@@ -24,9 +24,9 @@ int lan937x_pwrite32(struct ksz_device *dev, int port,
+ 		     int offset, u32 data);
+ int lan937x_pwrite8_bulk(struct ksz_device *dev, int port, int offset,
+ 			 u8 *data, u8 n);
+-int lan937x_internal_phy_write(struct ksz_device *dev, int addr,
++int lan93xx_internal_phy_write(struct ksz_device *dev, int addr,
+ 			       int reg, u16 val);
+-int lan937x_internal_phy_read(struct ksz_device *dev, int addr,
++int lan93xx_internal_phy_read(struct ksz_device *dev, int addr,
+ 			      int reg, u16 *val);
+ bool lan937x_is_internal_phy_port(struct ksz_device *dev, int port);
+ bool lan937x_is_internal_base_tx_phy_port(struct ksz_device *dev, int port);
+diff --git a/drivers/net/dsa/microchip/lan937x_main.c b/drivers/net/dsa/microchip/lan937x_main.c
+index d641b9d41676..5af39df6cdd7 100644
+--- a/drivers/net/dsa/microchip/lan937x_main.c
++++ b/drivers/net/dsa/microchip/lan937x_main.c
+@@ -199,7 +199,7 @@ static int lan937x_phy_read16(struct dsa_switch *ds, int addr, int reg)
+ 	u16 val;
+ 	int ret;
+ 
+-	ret = lan937x_internal_phy_read(dev, addr, reg, &val);
++	ret = lan93xx_internal_phy_read(dev, addr, reg, &val);
+ 	if (ret < 0)
+ 		return ret;
+ 
+@@ -211,7 +211,7 @@ static int lan937x_phy_write16(struct dsa_switch *ds, int addr, int reg,
+ {
+ 	struct ksz_device *dev = ds->priv;
+ 
+-	return lan937x_internal_phy_write(dev, addr, reg, val);
++	return lan93xx_internal_phy_write(dev, addr, reg, val);
+ }
+ 
+ static void lan937x_port_stp_state_set(struct dsa_switch *ds, int port,
+diff --git a/drivers/net/dsa/microchip/lan937x_reg.h b/drivers/net/dsa/microchip/lan937x_reg.h
+index 7edad9c5be93..278465061f72 100644
+--- a/drivers/net/dsa/microchip/lan937x_reg.h
++++ b/drivers/net/dsa/microchip/lan937x_reg.h
+@@ -979,6 +979,9 @@
+ 
+ #define REG_PTP_PORT_LINK_DELAY__4	0x0C18
+ 
++/* D - QUEUE COUNTERS */
++#define REG_PORT_QUEUE_COUNTER          0x0D00
++
+ /* Port Switch Ingress Control Memory Map*/
+ #define REG_PORT_RX_MIRROR_CTL			0x0800
+ #define REG_PORT_RX_PRI_CTL			0x0801
+diff --git a/drivers/net/dsa/microchip/lan937x_spi.c b/drivers/net/dsa/microchip/lan937x_spi.c
+index 17afa9b09ecb..96e5c85bf0c4 100644
+--- a/drivers/net/dsa/microchip/lan937x_spi.c
++++ b/drivers/net/dsa/microchip/lan937x_spi.c
+@@ -76,7 +76,7 @@ static void lan937x_spi_shutdown(struct spi_device *spi)
+ 	spi_set_drvdata(spi, NULL);
+ }
+ 
+-static const struct of_device_id lan937x_dt_ids[] = {
++static const struct of_device_id lan93xx_dt_ids[] = {
+ 	{ .compatible = "microchip,lan9370",
+ 		.data = &ksz_switch_chips[LAN9370] },
+ 	{ .compatible = "microchip,lan9371",
+@@ -87,9 +87,17 @@ static const struct of_device_id lan937x_dt_ids[] = {
+ 		.data = &ksz_switch_chips[LAN9373] },
+ 	{ .compatible = "microchip,lan9374",
+ 		.data = &ksz_switch_chips[LAN9374] },
++	{ .compatible = "microchip,lan9321",
++		.data = &ksz_switch_chips[LAN9321] },
++	{ .compatible = "microchip,lan9322",
++		.data = &ksz_switch_chips[LAN9322] },
++	{ .compatible = "microchip,lan9325",
++		.data = &ksz_switch_chips[LAN9325] },
++	{ .compatible = "microchip,lan9326",
++		.data = &ksz_switch_chips[LAN9326] },
+ 	{},
+ };
+-MODULE_DEVICE_TABLE(of, lan937x_dt_ids);
++MODULE_DEVICE_TABLE(of, lan93xx_dt_ids);
+ 
+ static const struct spi_device_id lan937x_spi_ids[] = {
+ 	{ .name = "lan9370" },
+@@ -97,6 +105,10 @@ static const struct spi_device_id lan937x_spi_ids[] = {
+ 	{ .name = "lan9372" },
+ 	{ .name = "lan9373" },
+ 	{ .name = "lan9374" },
++	{ .name = "lan9321" },
++	{ .name = "lan9322" },
++	{ .name = "lan9325" },
++	{ .name = "lan9326" },
+ 	{},
+ };
+ MODULE_DEVICE_TABLE(spi, lan937x_spi_ids);
+@@ -105,7 +117,7 @@ static struct spi_driver lan937x_spi_driver = {
+ 	.driver = {
+ 		.name	= "lan937x-switch",
+ 		.owner	= THIS_MODULE,
+-		.of_match_table = of_match_ptr(lan937x_dt_ids),
++		.of_match_table = of_match_ptr(lan93xx_dt_ids),
+ 	},
+ 	.probe	= lan937x_spi_probe,
+ 	.remove	= lan937x_spi_remove,
+-- 
+2.34.1
+
