@@ -19,10 +19,10 @@ Table of Contents:
                 - Linux Kernel
                 - DTS files
 
-3. Directory structure
---------------------
+3.a. Directory structure
+------------------------
         lan937x_linux
-                |-docs 
+                |-docs
                 |       |-build_instructions.txt
                 |       |-LinuxCommands_supported.txt
                 |-Atmel_SOC_SAMA5D3
@@ -32,8 +32,38 @@ Table of Contents:
                 |-kernels/masternet-next 
                 |-ReleaseNotes.txt
 
-3. Release History
+3.b. Directory structure (From DSA v4.0.0)
+------------------------------------------
+        lan937x_linux
+                |-docs
+                |       |-build_instructions.txt
+                |       |-LinuxCommands_supported.txt
+                |-Atmel_SOC_SAMA5D3
+                |       |-buildroot-at91
+                |       |-buildroot_external_lan937x
+                |       |       |-board
+                |       |       |       |-atmel
+                |       |       |       |       |-sama5d3_xplained_lan937x
+                |       |       |       |       |       |-patches
+                |       |       |       |       |       |       |-linux
+                |       |       |       |       |       |       |       |-5.19-rc2
+                |       |-dts
+                |       |-patches
+                |-ReleaseNotes.txt
+
+4. Release History
 ------------------
+
+v4.0.0 : 01/06/2022
+------------------
+	Updated to the Linux (5.19.0-rc2) Kernel version.
+
+	kernel/masternet-next removed and added DSA changes as patches in external
+	buildroot path.
+
+	Features added
+	--------------
+	None
 
 v3.4.0 : 4/01/2022
 ------------------
