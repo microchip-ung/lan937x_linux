@@ -6,48 +6,38 @@ The buildroot source can be built for NAND flash or SD card configuration.
 	* Execute "export SRC_HOME=$PWD"
 	* then Navigate to "Atmel_SOC_SAMA5D3/buildroot-at91"
 	* Execute following make commands based on the image.
+	* For DSA v4.0.0 or greater, buildroot has been separated from repository
+	  and loaded as submodule.
 
+Buildroot as a submodule (For DSA v4.0.0 or greater):
+-------------------------
+	* git submodule init
+	* git submodule update
 	
 Generating NAND Flash Image
 ---------------------------
 	* make atmel_sama5d3_xplained_lan937x_defconfig
 	* make
-	
-Generating SD Card Image
-------------------------
-	* make atmel_sama5d3_xplained_lan937x_mmc_defconfig
+
+	For DSA v4.0.0 or greater,
+	* make BR2_EXTERNAL=../buildroot_external_lan937x/ atmel_sama5d3_xplained_lan937x_defconfig
 	* make
 	
+Generating SD Card Image as out of tree Build
+---------------------------------------------
+SD card image can be generated using out of tree build without the need for configuration interchange
+and clean build of the source.
 
-Switching between Configs
--------------------------
-	If we need to switch between NAND flash image and SD card image generation, use
-	the following steps 
+	* mkdir ../mmc_build
+	* make O=../mmc_build/ atmel_sama5d3_xplained_lan937x_mmc_defconfig
+	* cd ../mmc_build
+	* make
 
-	1. make atmel_sama5d3_xplained_lan937x_mmc_defconfig
-			or
-	   make atmel_sama5d3_xplained_lan937x_defconfig
-
-	2.  rm -rf output/build/uboot-linux4sam_5.3/
-
-	3. make uboot-rebuild
-
-	4. make at91bootstrap3-rebuild
-
-	5. make linux-rebuild
-
-	6. make
-
-If the above procedure has any problem, use the below one (it will build fully).
-
-	1. make clean
-
-	2. make atmel_sama5d3_xplained_lan937x_mmc_defconfig
-				or
-	   make atmel_sama5d3_xplained_lan937x_defconfig
-	
-	3. make
-
+	For DSA v4.0.0 or greater,
+	* mkdir ../mmc_build
+	* make O=../mmc_build/ BR2_EXTERNAL=../buildroot_external_lan937x/ atmel_sama5d3_xplained_lan937x_mmc_defconfig
+	* cd ../mmc_build
+	* make
 
 output/images will have the following file
 ==========================================
