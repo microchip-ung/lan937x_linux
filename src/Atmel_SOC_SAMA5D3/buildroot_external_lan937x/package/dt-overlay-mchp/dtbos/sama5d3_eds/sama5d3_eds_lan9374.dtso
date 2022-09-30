@@ -42,10 +42,10 @@
 		pinctrl-0 = <&pinctrl_rgmii_rstn>;
 		pinctrl-1 = <&pinctrl_spi_irqn>;
 
-		#interrupt-cells = <2>;
 		interrupt-parent = <&pioB>;
 		interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
 		interrupt-controller;
+		#interrupt-cells = <2>;
 
 		resetb-gpios = <&pioD 18 GPIO_ACTIVE_LOW>;
 		spi-max-frequency = <44000000>;

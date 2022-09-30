@@ -36,10 +36,10 @@
 		reg = <3>;
 		spi-max-frequency = <44000000>;
 
-		#interrupt-cells = <2>;
 		interrupt-parent = <&pioB>;
 		interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
 		interrupt-controller;
+		#interrupt-cells = <2>;
 
 		pinctrl-0 = <&pinctrl_spi_irqn>;
 		led-t1-sel = <0731777704>;    /* Note this value is octal. */
