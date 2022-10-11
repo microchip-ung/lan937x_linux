@@ -46,13 +46,48 @@ Table of Contents:
                 |       |       |       |       |-sama5d3_xplained_lan937x
                 |       |       |       |       |       |-patches
                 |       |       |       |       |       |       |-linux
-                |       |       |       |       |       |       |       |-5.19-rc2
+                |       |       |       |       |       |       |       |-6.0-rc4
+                |       |-dts
+                |       |-patches
+                |-ReleaseNotes.txt
+
+3.c. Directory structure (From DSA v4.1.0)
+------------------------------------------
+        lan937x_linux
+                |-docs
+                |       |-build_instructions.txt
+                |       |-LinuxCommands_supported.txt
+                |-Atmel_SOC_SAMA5D3
+                |       |-buildroot-at91
+                |       |-buildroot_external_lan937x
+                |       |       |-board
+                |       |       |       |-atmel
+                |       |       |       |       |-sama5d3_xplained_lan937x
+                |       |       |       |       |       |-patches
+                |       |       |       |       |       |       |-linux
+                |       |       |       |       |       |       |       |-6.0-rc4
+                |       |       |-packages
+                |       |       |       |-dt-overlay-mchp
                 |       |-dts
                 |       |-patches
                 |-ReleaseNotes.txt
 
 4. Release History
 ------------------
+
+v4.1.0 : 11/10/2022
+------------------
+	Linux net-next updated to 6.0-rc4 version with latest driver/net/microchip
+	changes.
+
+	buildroot upgraded to 2022.08 version.
+
+	Added device tree overlay support, and enabled sku selection in boot menu
+	instead of selecting separate dtb files during flash.
+
+	Features added
+	--------------
+	None
 
 v4.0.0 : 01/06/2022
 ------------------
