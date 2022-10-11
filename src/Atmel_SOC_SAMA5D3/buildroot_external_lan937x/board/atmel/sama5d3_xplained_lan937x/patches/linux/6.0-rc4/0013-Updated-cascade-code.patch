@@ -1,0 +1,99 @@
+From b81cf174874f16ff5ef179695fc64d3f0638fdb5 Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Thu, 29 Sep 2022 16:49:26 +0530
+Subject: [PATCH 13/15] Updated cascade code
+
+Added port membership for cascading.
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/dsa/microchip/ksz9477.c      | 27 ++++++++++++++++++++----
+ drivers/net/dsa/microchip/ksz9477_reg.h  |  2 ++
+ drivers/net/dsa/microchip/lan937x_main.c |  6 +++++-
+ 3 files changed, 30 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/net/dsa/microchip/ksz9477.c b/drivers/net/dsa/microchip/ksz9477.c
+index 9e5ae3904311..4fda96a7f970 100644
+--- a/drivers/net/dsa/microchip/ksz9477.c
++++ b/drivers/net/dsa/microchip/ksz9477.c
+@@ -1113,10 +1113,6 @@ int ksz9477_enable_stp_addr(struct ksz_device *dev)
+ 
+ 	masks = dev->info->masks;
+ 
+-	/* Change forwarding port for second switch */
+-	if (dev->ds->index == 1)
+-		fwd_port = BIT(dev->dsa_port);
+-
+ 	/* Enable Reserved multicast table */
+ 	ksz_cfg(dev, REG_SW_LUE_CTRL_0, SW_RESV_MCAST_ENABLE, true);
+ 
+@@ -1139,6 +1135,29 @@ int ksz9477_enable_stp_addr(struct ksz_device *dev)
+ 		return ret;
+ 	}
+ 
++	/* Change forwarding port for second switch */
++	if (dev->ds->index == 1)
++		fwd_port = BIT(dev->dsa_port);
++
++	/* Update Port to which mcast packets forwarded */
++	ret = ksz_write32(dev, REG_SW_ALU_VAL_B, fwd_port);
++	if (ret < 0)
++		return ret;
++
++	ret = ksz_write32(dev, REG_SW_ALU_STAT_CTRL__4, (6 << ALU_STAT_INDEX_S) |
++					ALU_RESV_MCAST_ADDR | ALU_STAT_WRITE |
++					ALU_STAT_START);
++
++	if (ret < 0)
++		return ret;
++
++	/* wait to be finished */
++	ret = ksz9477_wait_alu_sta_ready(dev);
++	if (ret < 0) {
++		dev_err(dev->dev, "Failed to update Reserved Multicast table\n");
++		return ret;
++	}
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/net/dsa/microchip/ksz9477_reg.h b/drivers/net/dsa/microchip/ksz9477_reg.h
+index 53c68d286dd3..caf846dc50c3 100644
+--- a/drivers/net/dsa/microchip/ksz9477_reg.h
++++ b/drivers/net/dsa/microchip/ksz9477_reg.h
+@@ -422,6 +422,8 @@
+ #define REG_SW_ALU_STAT_CTRL__4		0x041C
+ 
+ #define ALU_RESV_MCAST_INDEX_M		(BIT(6) - 1)
++#define ALU_STAT_INDEX_M		(BIT(8) - 1)
++#define ALU_STAT_INDEX_S		8
+ #define ALU_STAT_START			BIT(7)
+ #define ALU_RESV_MCAST_ADDR		BIT(1)
+ 
+diff --git a/drivers/net/dsa/microchip/lan937x_main.c b/drivers/net/dsa/microchip/lan937x_main.c
+index d4e1b8281f2b..c826384bc0bb 100644
+--- a/drivers/net/dsa/microchip/lan937x_main.c
++++ b/drivers/net/dsa/microchip/lan937x_main.c
+@@ -584,7 +584,7 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
+ 				 true);
+ 
+ 	if (cpu_port)
+-		member = dsa_user_ports(ds);
++		member = (dsa_user_ports(ds) | BIT(dev->dsa_port));
+ 	else
+ 		member = BIT(dsa_upstream_port(ds, port));
+ 
+@@ -598,6 +598,10 @@ void lan937x_config_cpu_port(struct dsa_switch *ds)
+ 	u32 cascade_cfg = 0;
+ 	int i;
+ 
++	/* Moving cpu_port parameter into invalid value */
++	dev->cpu_port = 0xFF;
++	dev->dsa_port = 0xFF;
++
+ 	dsa_switch_for_each_cpu_port(dp, ds) {
+ 		if (dev->info->cpu_ports & (1 << dp->index)) {
+ 			dev->cpu_port = dp->index;
+-- 
+2.34.1
+

@@ -1,0 +1,148 @@
+From 978180428da0cd7f97b4ece0e988c4e4efaa8695 Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Fri, 23 Sep 2022 12:30:38 +0530
+Subject: [PATCH 07/15] PHY simulation
+
+PHY simulation added for lan9374 external phy link detection
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/dsa/microchip/lan937x_main.c | 93 +++++++++++++++++++++++-
+ drivers/net/dsa/microchip/lan937x_reg.h  |  3 +
+ 2 files changed, 92 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/net/dsa/microchip/lan937x_main.c b/drivers/net/dsa/microchip/lan937x_main.c
+index 436f3adeb303..4d219e1d5ccf 100644
+--- a/drivers/net/dsa/microchip/lan937x_main.c
++++ b/drivers/net/dsa/microchip/lan937x_main.c
+@@ -75,8 +75,8 @@ static int lan937x_vphy_ind_addr_wr(struct ksz_device *dev, int addr, int reg)
+ 	return ksz_write16(dev, REG_VPHY_IND_ADDR__2, temp);
+ }
+ 
+-static int lan937x_internal_phy_write(struct ksz_device *dev, int addr, int reg,
+-				      u16 val)
++static int _lan937x_internal_phy_write(struct ksz_device *dev, int addr, int reg,
++				       u16 val)
+ {
+ 	unsigned int value;
+ 	int ret;
+@@ -111,8 +111,19 @@ static int lan937x_internal_phy_write(struct ksz_device *dev, int addr, int reg,
+ 	return 0;
+ }
+ 
+-static int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
+-				     u16 *val)
++static int lan937x_internal_phy_write(struct ksz_device *dev, int addr, int reg,
++				      u16 val)
++{
++	if (dev->chip_id == LAN9374_CHIP_ID &&
++	    addr == LAN937X_RGMII_2_PORT) {
++		return 0;
++	} else {
++		return _lan937x_internal_phy_write(dev, addr, reg, val);
++	}
++}
++
++static int _lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
++				      u16 *val)
+ {
+ 	unsigned int value;
+ 	int ret;
+@@ -142,6 +153,80 @@ static int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
+ 	return ksz_read16(dev, REG_VPHY_IND_DATA__2, val);
+ }
+ 
++static int lan9374_external_phy_read(struct ksz_device *dev, int addr, int reg,
++				     u16 *val)
++{
++	int data1 = 0;
++	u8 data8 = 0;
++
++	switch (reg) {
++	case MII_BMCR:
++		data1 = BMCR_SPEED1000 |
++			BMCR_FULLDPLX |
++			BMCR_ANENABLE;
++
++		break;
++	case MII_BMSR:
++		data1 = BMSR_100FULL |
++			BMSR_100HALF |
++			BMSR_10FULL |
++			BMSR_10HALF |
++			BMSR_ANEGCAPABLE |
++			BMSR_ANEGCOMPLETE;
++
++		ksz_pread8(dev, addr, REG_PORT_XMII_CTRL_3, &data8);
++		if (data8 & PORT_LINK_STATUS)
++			data1 |= BMSR_LSTATUS;
++
++		break;
++	case MII_PHYSID1:
++		data1 = 0x0022;
++		break;
++	case MII_PHYSID2:
++		data1 = 0x1640;
++		break;
++	case MII_ADVERTISE:
++		data1 = ADVERTISE_CSMA |
++			ADVERTISE_1000XFULL |
++			ADVERTISE_1000XHALF |
++			ADVERTISE_1000XPAUSE |
++			ADVERTISE_1000XPSE_ASYM |
++			ADVERTISE_PAUSE_CAP;
++		break;
++	case MII_LPA:
++		data1 = LPA_1000XFULL |
++			LPA_1000XHALF |
++			LPA_1000XPAUSE |
++			LPA_1000XPAUSE_ASYM |
++			LPA_PAUSE_CAP |
++			LPA_PAUSE_ASYM;
++		break;
++	case MII_CTRL1000:
++		data1 = ADVERTISE_1000FULL |
++			ADVERTISE_1000HALF;
++		break;
++	case MII_STAT1000:
++		data1 = LPA_1000LOCALRXOK |
++			LPA_1000REMRXOK |
++			LPA_1000FULL;
++		break;
++	}
++	*val = data1;
++
++	return 0;
++}
++
++static int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
++				     u16 *val)
++{
++	if (dev->chip_id == LAN9374_CHIP_ID &&
++	    addr == LAN937X_RGMII_2_PORT) {
++		return lan9374_external_phy_read(dev, addr, reg, val);
++	} else {
++		return _lan937x_internal_phy_read(dev, addr, reg, val);
++	}
++}
++
+ int lan937x_r_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 *data)
+ {
+ 	return lan937x_internal_phy_read(dev, addr, reg, data);
+diff --git a/drivers/net/dsa/microchip/lan937x_reg.h b/drivers/net/dsa/microchip/lan937x_reg.h
+index b227ad010daf..9ae07af6616e 100644
+--- a/drivers/net/dsa/microchip/lan937x_reg.h
++++ b/drivers/net/dsa/microchip/lan937x_reg.h
+@@ -376,6 +376,9 @@
+ 
+ #define PORT_MII_SEL_EDGE		BIT(5)
+ 
++#define REG_PORT_XMII_CTRL_3		0x0303
++#define PORT_LINK_STATUS                BIT(0)
++
+ #define REG_PORT_XMII_CTRL_4		0x0304
+ #define REG_PORT_XMII_CTRL_5		0x0306
+ 
+-- 
+2.34.1
+

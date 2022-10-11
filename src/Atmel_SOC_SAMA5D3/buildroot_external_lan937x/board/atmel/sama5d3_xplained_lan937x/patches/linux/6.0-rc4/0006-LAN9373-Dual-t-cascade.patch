@@ -1,0 +1,248 @@
+From 79e7a8ec46585a4ee2971068274bb57199a8e1ae Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Fri, 23 Sep 2022 09:42:16 +0530
+Subject: [PATCH 06/15] LAN9373 Dual-t cascade
+
+Integrated source files required for lan9373 dual-t cascade mode.
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/dsa/microchip/ksz9477.c      |  7 ++++-
+ drivers/net/dsa/microchip/ksz_common.c   | 33 ++++++++++++++++++------
+ drivers/net/dsa/microchip/lan937x_main.c | 28 +++++++++++++++++---
+ drivers/net/dsa/microchip/lan937x_reg.h  |  4 +++
+ 4 files changed, 60 insertions(+), 12 deletions(-)
+
+diff --git a/drivers/net/dsa/microchip/ksz9477.c b/drivers/net/dsa/microchip/ksz9477.c
+index a6a0321a8931..9e5ae3904311 100644
+--- a/drivers/net/dsa/microchip/ksz9477.c
++++ b/drivers/net/dsa/microchip/ksz9477.c
+@@ -1106,18 +1106,23 @@ void ksz9477_config_cpu_port(struct dsa_switch *ds)
+ 
+ int ksz9477_enable_stp_addr(struct ksz_device *dev)
+ {
++	u32 fwd_port = BIT(dev->cpu_port);
+ 	const u32 *masks;
+ 	u32 data;
+ 	int ret;
+ 
+ 	masks = dev->info->masks;
+ 
++	/* Change forwarding port for second switch */
++	if (dev->ds->index == 1)
++		fwd_port = BIT(dev->dsa_port);
++
+ 	/* Enable Reserved multicast table */
+ 	ksz_cfg(dev, REG_SW_LUE_CTRL_0, SW_RESV_MCAST_ENABLE, true);
+ 
+ 	/* Set the Override bit for forwarding BPDU packet to CPU */
+ 	ret = ksz_write32(dev, REG_SW_ALU_VAL_B,
+-			  ALU_V_OVERRIDE | BIT(dev->cpu_port));
++			  ALU_V_OVERRIDE | fwd_port);
+ 	if (ret < 0)
+ 		return ret;
+ 
+diff --git a/drivers/net/dsa/microchip/ksz_common.c b/drivers/net/dsa/microchip/ksz_common.c
+index d0cf43222bd1..2445718b1d86 100644
+--- a/drivers/net/dsa/microchip/ksz_common.c
++++ b/drivers/net/dsa/microchip/ksz_common.c
+@@ -1388,7 +1388,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.num_alus = 1024,
+ 		.num_statics = 256,
+ 		.cpu_ports = 0x38,	/* can be configured as cpu port */
+-		.port_cnt = 5,		/* total physical port count */
++		.port_cnt = 8,		/* total physical port count */
+ 		.ops = &lan937x_dev_ops,
+ 		.mib_names = ksz9477_mib_names,
+ 		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
+@@ -1677,9 +1677,9 @@ static void ksz_get_strings(struct dsa_switch *ds, int port,
+ 
+ static void ksz_update_port_member(struct ksz_device *dev, int port)
+ {
++	u8 port_member = 0, cpu_port, dsa_port;
+ 	struct ksz_port *p = &dev->ports[port];
+ 	struct dsa_switch *ds = dev->ds;
+-	u8 port_member = 0, cpu_port;
+ 	const struct dsa_port *dp;
+ 	int i, j;
+ 
+@@ -1688,6 +1688,7 @@ static void ksz_update_port_member(struct ksz_device *dev, int port)
+ 
+ 	dp = dsa_to_port(ds, port);
+ 	cpu_port = BIT(dsa_upstream_port(ds, port));
++	dsa_port = BIT(dev->dsa_port);
+ 
+ 	for (i = 0; i < ds->num_ports; i++) {
+ 		const struct dsa_port *other_dp = dsa_to_port(ds, i);
+@@ -1727,10 +1728,10 @@ static void ksz_update_port_member(struct ksz_device *dev, int port)
+ 				val |= BIT(j);
+ 		}
+ 
+-		dev->dev_ops->cfg_port_member(dev, i, val | cpu_port);
++		dev->dev_ops->cfg_port_member(dev, i, (val | cpu_port | dsa_port));
+ 	}
+ 
+-	dev->dev_ops->cfg_port_member(dev, port, port_member | cpu_port);
++	dev->dev_ops->cfg_port_member(dev, port, (port_member | cpu_port | dsa_port));
+ }
+ 
+ static int ksz_setup(struct dsa_switch *ds)
+@@ -1845,8 +1846,10 @@ static void ksz_mib_read_work(struct work_struct *work)
+ 		if (!p->read) {
+ 			const struct dsa_port *dp = dsa_to_port(dev->ds, i);
+ 
+-			if (!netif_carrier_ok(dp->slave))
+-				mib->cnt_ptr = dev->info->reg_mib_cnt;
++			if (!(dsa_is_dsa_port(dev->ds, i))) {
++				if (!netif_carrier_ok(dp->slave))
++					mib->cnt_ptr = dev->info->reg_mib_cnt;
++			}
+ 		}
+ 		port_r_cnt(dev, i);
+ 		p->read = false;
+@@ -2168,8 +2171,12 @@ static enum dsa_tag_protocol ksz_get_tag_protocol(struct dsa_switch *ds,
+ 	    dev->chip_id == KSZ9567_CHIP_ID)
+ 		proto = DSA_TAG_PROTO_KSZ9477;
+ 
+-	if (is_lan937x(dev))
+-		proto = DSA_TAG_PROTO_LAN937X_VALUE;
++	if (is_lan937x(dev)) {
++		if (ds->dst->last_switch)
++			proto = DSA_TAG_PROTO_LAN937X_CASCADE_VALUE;
++		else
++			proto = DSA_TAG_PROTO_LAN937X_VALUE;
++	}
+ 
+ 	return proto;
+ }
+@@ -2621,6 +2628,7 @@ struct ksz_device *ksz_switch_alloc(struct device *base, void *priv)
+ {
+ 	struct dsa_switch *ds;
+ 	struct ksz_device *swdev;
++	u32 sw_idx[2] = {0, 0};
+ 
+ 	ds = devm_kzalloc(base, sizeof(*ds), GFP_KERNEL);
+ 	if (!ds)
+@@ -2640,6 +2648,9 @@ struct ksz_device *ksz_switch_alloc(struct device *base, void *priv)
+ 	swdev->ds = ds;
+ 	swdev->priv = priv;
+ 
++	of_property_read_variable_u32_array(base->of_node, "dsa,member", sw_idx, 2, 2);
++	swdev->smi_index = sw_idx[1];
++
+ 	return swdev;
+ }
+ EXPORT_SYMBOL(ksz_switch_alloc);
+@@ -2685,6 +2696,7 @@ int ksz_switch_register(struct ksz_device *dev)
+ {
+ 	const struct ksz_chip_data *info;
+ 	struct device_node *port, *ports;
++	struct dsa_switch_tree *dst;
+ 	phy_interface_t interface;
+ 	unsigned int port_num;
+ 	int ret;
+@@ -2810,6 +2822,11 @@ int ksz_switch_register(struct ksz_device *dev)
+ 		return ret;
+ 	}
+ 
++	/* This will prevent switch 2 reaching here until eth0 up */
++	dst = dev->ds->dst;
++	if (!dst->setup)
++		return 0;
++
+ 	/* Read MIB counters every 30 seconds to avoid overflow. */
+ 	dev->mib_read_interval = msecs_to_jiffies(5000);
+ 
+diff --git a/drivers/net/dsa/microchip/lan937x_main.c b/drivers/net/dsa/microchip/lan937x_main.c
+index 038ccd454999..436f3adeb303 100644
+--- a/drivers/net/dsa/microchip/lan937x_main.c
++++ b/drivers/net/dsa/microchip/lan937x_main.c
+@@ -241,7 +241,7 @@ static int lan937x_mdio_register(struct ksz_device *dev)
+ 	bus->read = lan937x_sw_mdio_read;
+ 	bus->write = lan937x_sw_mdio_write;
+ 	bus->name = "lan937x slave smi";
+-	snprintf(bus->id, MII_BUS_ID_SIZE, "SMI-%d", ds->index);
++	snprintf(bus->id, MII_BUS_ID_SIZE, "SMI-%d", dev->smi_index);
+ 	bus->parent = ds->dev;
+ 	bus->phy_mask = ~ds->phys_mii_mask;
+ 
+@@ -333,6 +333,8 @@ void lan937x_config_cpu_port(struct dsa_switch *ds)
+ {
+ 	struct ksz_device *dev = ds->priv;
+ 	struct dsa_port *dp;
++	u32 cascade_cfg = 0;
++	int i;
+ 
+ 	dsa_switch_for_each_cpu_port(dp, ds) {
+ 		if (dev->info->cpu_ports & (1 << dp->index)) {
+@@ -343,6 +345,20 @@ void lan937x_config_cpu_port(struct dsa_switch *ds)
+ 		}
+ 	}
+ 
++	for (i = 0; i < dev->info->port_cnt; i++) {
++		if (dsa_is_dsa_port(ds, i)) {
++			ksz_read32(dev, REG_SW_CASCADE_MODE_CTL, &cascade_cfg);
++			cascade_cfg &= ~CASCADE_PORT_SEL;
++			cascade_cfg |= i;
++			ksz_write32(dev, REG_SW_CASCADE_MODE_CTL, cascade_cfg);
++			dev->dsa_port = i;
++			if (dev->ds->index == 1) {
++				lan937x_port_cfg(dev, i, REG_PORT_CTRL_0,
++						 PORT_TAIL_TAG_ENABLE, true);
++			}
++		}
++	}
++
+ 	dsa_switch_for_each_user_port(dp, ds) {
+ 		ksz_port_stp_state_set(ds, dp->index, BR_STATE_DISABLED);
+ 	}
+@@ -355,8 +371,14 @@ int lan937x_change_mtu(struct ksz_device *dev, int port, int new_mtu)
+ 
+ 	new_mtu += VLAN_ETH_HLEN + ETH_FCS_LEN;
+ 
+-	if (dsa_is_cpu_port(ds, port))
++	if (dsa_is_cpu_port(ds, port)) {
+ 		new_mtu += LAN937X_TAG_LEN;
++		if (ds->dst->last_switch)
++			new_mtu += 1;
++	}
++
++	if (dsa_is_dsa_port(ds, port))
++		new_mtu += LAN937X_CASCADE_TAG_LEN;
+ 
+ 	if (new_mtu >= FR_MIN_SIZE)
+ 		ret = lan937x_port_cfg(dev, port, REG_PORT_MAC_CTRL_0,
+@@ -583,7 +605,7 @@ static int lan937x_girq_setup(struct ksz_device *dev)
+ 	dev->girq.masked = ~0;
+ 
+ 	ret = request_threaded_irq(dev->irq, NULL, lan937x_girq_thread_fn,
+-				   IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
++				   IRQF_ONESHOT | IRQF_SHARED | IRQF_TRIGGER_FALLING,
+ 				   dev_name(dev->dev), dev);
+ 	if (ret)
+ 		goto out;
+diff --git a/drivers/net/dsa/microchip/lan937x_reg.h b/drivers/net/dsa/microchip/lan937x_reg.h
+index 478b4e57d08e..b227ad010daf 100644
+--- a/drivers/net/dsa/microchip/lan937x_reg.h
++++ b/drivers/net/dsa/microchip/lan937x_reg.h
+@@ -32,6 +32,9 @@
+ #define REG_SW_PORT_INT_STATUS__4	0x0018
+ #define REG_SW_PORT_INT_MASK__4		0x001C
+ 
++#define REG_SW_CASCADE_MODE_CTL		0x0030
++#define CASCADE_PORT_SEL		7
++
+ /* 1 - Global */
+ #define REG_SW_GLOBAL_OUTPUT_CTRL__1	0x0103
+ #define SW_CLK125_ENB			BIT(1)
+@@ -455,6 +458,7 @@
+ #define RGMII_2_RX_DELAY_2NS		0x14
+ 
+ #define LAN937X_TAG_LEN			2
++#define LAN937X_CASCADE_TAG_LEN		3
+ 
+ /* 8 - Classification and Policing */
+ #define REG_PORT_MRI_MIRROR_CTRL        0x0800
+-- 
+2.34.1
+

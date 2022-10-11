@@ -1,0 +1,175 @@
+From 4ff83263bdb8ae13512e9444513773557c8cd41c Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Mon, 26 Sep 2022 16:21:10 +0530
+Subject: [PATCH 10/15] ACL irq implementation
+
+Added acl irq based on updated trafford implementation.
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/dsa/microchip/ksz_common.h     | 11 ++--
+ drivers/net/dsa/microchip/lan937x_flower.c |  5 ++
+ drivers/net/dsa/microchip/lan937x_main.c   | 63 ++++++++++++++++++++++
+ drivers/net/dsa/microchip/lan937x_reg.h    |  1 +
+ 4 files changed, 75 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/net/dsa/microchip/ksz_common.h b/drivers/net/dsa/microchip/ksz_common.h
+index ab2e6e5cc498..704a6a6f2969 100644
+--- a/drivers/net/dsa/microchip/ksz_common.h
++++ b/drivers/net/dsa/microchip/ksz_common.h
+@@ -105,17 +105,17 @@ struct ksz_port {
+ 	u8 num;
+ 
+ 	void * priv;
+-
++	char acl_dev_name[16];
+ #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
+ 	char ptp_dev_name[16];
+-       bool hwts_tx_en;
++	bool hwts_tx_en;
+         struct lan937x_port_ptp_shared ptp_shared;
+         ktime_t tstamp_sync;
+-       struct completion tstamp_sync_comp;
++	struct completion tstamp_sync_comp;
+         ktime_t tstamp_pdelayreq;
+-       struct completion tstamp_pdelayreq_comp;
++	struct completion tstamp_pdelayreq_comp;
+         ktime_t tstamp_pdelayrsp;
+-       struct completion tstamp_pdelayrsp_comp;
++	struct completion tstamp_pdelayrsp_comp;
+ #endif
+ };
+ 
+@@ -161,6 +161,7 @@ struct ksz_device {
+ 	struct ksz_irq girq;
+ 	u16 cut_through_enable;
+ 	int ptp_irq[PHY_MAX_ADDR];
++	int acl_irq[PHY_MAX_ADDR];
+ #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
+        struct ptp_clock_info ptp_caps;
+        struct ptp_clock *ptp_clock;
+diff --git a/drivers/net/dsa/microchip/lan937x_flower.c b/drivers/net/dsa/microchip/lan937x_flower.c
+index 47d54801328b..3437d72a28ce 100644
+--- a/drivers/net/dsa/microchip/lan937x_flower.c
++++ b/drivers/net/dsa/microchip/lan937x_flower.c
+@@ -1094,12 +1094,15 @@ static int lan937x_enable_interrupts(struct ksz_device *dev, int port)
+ int lan937x_flower_setup(struct dsa_switch *ds)
+ {
+ 	struct ksz_device *dev = ds->priv;
++	struct ksz_port *prt;
+ 	int port, ret;
+ 
+ 	for (port = 0; port < dev->info->port_cnt; port++) {
+ 		struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
+ 		struct lan937x_p_res *res = &blk->res;
+ 
++		prt = &dev->ports[port];
++
+ 		ret = lan937x_init_acl_parsers(dev, port);
+ 		if (ret)
+ 			return ret;
+@@ -1125,6 +1128,8 @@ int lan937x_flower_setup(struct dsa_switch *ds)
+ 		memset(res->tc_policers_used, false, LAN937X_NUM_TC);
+ 
+ 		res->broadcast_pol_used = false;
++
++		snprintf(prt->acl_dev_name, sizeof(prt->acl_dev_name), "ACL-%d", port);
+ 	}
+ 
+ 	return 0;
+diff --git a/drivers/net/dsa/microchip/lan937x_main.c b/drivers/net/dsa/microchip/lan937x_main.c
+index 3643c7930078..ca7a82469273 100644
+--- a/drivers/net/dsa/microchip/lan937x_main.c
++++ b/drivers/net/dsa/microchip/lan937x_main.c
+@@ -264,6 +264,65 @@ static int lan937x_sw_mdio_write(struct mii_bus *bus, int addr, int regnum,
+ 	return lan937x_internal_phy_write(dev, addr, regnum, val);
+ }
+ 
++static irqreturn_t lan937x_acl_thread_fn(int irq, void *dev_id)
++{
++	struct ksz_port *port = dev_id;
++	irqreturn_t ret = IRQ_NONE;
++	struct ksz_device *dev;
++
++	dev = port->ksz_dev;
++
++	if (lan937x_acl_isr(dev, port->num) != IRQ_NONE)
++		ret = IRQ_HANDLED;
++
++	return ret;
++}
++
++static void lan937x_irq_acl_free(struct ksz_device *dev, int cnt)
++{
++	struct dsa_switch *ds = dev->ds;
++	int acl;
++
++	for (acl = 0; acl < cnt; acl++)
++		if (BIT(acl) & ds->phys_mii_mask)
++			irq_dispose_mapping(dev->acl_irq[acl]);
++}
++
++static int lan937x_irq_acl_setup(struct ksz_device *dev)
++{
++	struct dsa_switch *ds = dev->ds;
++	struct ksz_port *port;
++	int ret = 0;
++	int acl;
++	int irq;
++
++	for (acl = 0; acl < KSZ_MAX_NUM_PORTS; acl++) {
++		if (BIT(acl) & ds->phys_mii_mask) {
++			irq = irq_find_mapping(dev->ports[acl].pirq.domain,
++					       PORT_SRC_ACL_INT);
++			if (irq < 0)
++				goto out;
++
++			dev->ptp_irq[acl] = irq;
++			port = &dev->ports[acl];
++
++			ret = request_threaded_irq(irq, NULL, lan937x_acl_thread_fn,
++						   IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
++						   port->acl_dev_name, port);
++			if (ret)
++				goto out;
++		}
++	}
++
++	return ret;
++
++out:
++	ret = irq;
++	lan937x_irq_acl_free(dev, acl);
++
++	return ret;
++}
++
+ static irqreturn_t lan937x_ptp_thread_fn(int irq, void *dev_id)
+ {
+ 	struct ksz_port *port = dev_id;
+@@ -990,6 +1049,10 @@ int lan937x_setup(struct dsa_switch *ds)
+ 	if (ret)
+ 		return ret;
+ 
++	ret = lan937x_irq_acl_setup(dev);
++	if (ret)
++		return ret;
++
+ 	return 0;
+ 
+ out_pirq:
+diff --git a/drivers/net/dsa/microchip/lan937x_reg.h b/drivers/net/dsa/microchip/lan937x_reg.h
+index 5eb8825e0af4..bb01e7ec3d36 100644
+--- a/drivers/net/dsa/microchip/lan937x_reg.h
++++ b/drivers/net/dsa/microchip/lan937x_reg.h
+@@ -358,6 +358,7 @@
+ #define PORT_PHY_INT			BIT(1)
+ #define PORT_ACL_INT			BIT(0)
+ 
++#define PORT_SRC_ACL_INT		0
+ #define PORT_SRC_PHY_INT		1
+ #define PORT_SRC_PTP_INT		2
+ 
+-- 
+2.34.1
+
