@@ -1,0 +1,34 @@
+From c8332346f488c6434a0a63705a516da6e01587dd Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Sat, 17 Sep 2022 11:00:05 +0530
+Subject: [PATCH 02/15] macb update for mtu
+
+mtu fix on lan9374 done.
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/ethernet/cadence/macb_main.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/net/ethernet/cadence/macb_main.c b/drivers/net/ethernet/cadence/macb_main.c
+index 66c7d08d376a..fe311f7b63e0 100644
+--- a/drivers/net/ethernet/cadence/macb_main.c
++++ b/drivers/net/ethernet/cadence/macb_main.c
+@@ -4930,10 +4930,10 @@ static int macb_probe(struct platform_device *pdev)
+ 
+ 	/* MTU range: 68 - 1500 or 10240 */
+ 	dev->min_mtu = GEM_MTU_MIN_SIZE;
+-	if ((bp->caps & MACB_CAPS_JUMBO) && bp->jumbo_max_len)
+-		dev->max_mtu = bp->jumbo_max_len - ETH_HLEN - ETH_FCS_LEN;
+-	else
+-		dev->max_mtu = ETH_DATA_LEN;
++	/* if ((bp->caps & MACB_CAPS_JUMBO) && bp->jumbo_max_len) */
++	/* 	dev->max_mtu = bp->jumbo_max_len - ETH_HLEN - ETH_FCS_LEN; */
++	/* else */
++	dev->max_mtu = ETH_DATA_LEN + 7;
+ 
+ 	if (bp->caps & MACB_CAPS_BD_RD_PREFETCH) {
+ 		val = GEM_BFEXT(RXBD_RDBUFF, gem_readl(bp, DCFG10));
+-- 
+2.34.1
+

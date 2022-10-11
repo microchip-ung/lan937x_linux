@@ -1,0 +1,237 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * sama5d3_eds_lan9373_dual.dtso - Device Tree file for SAMA5D3 EDS board
+ * overlay blob for the LAN9370 RMII addon board.
+ *
+ * Copyright (C) 2022 Microchip Technology, Inc. and its subsidiaries
+ * Author:	 2022 Rakesh S <rakesh.sankaranarayanan@microchip.com>
+ *
+ * 16-Port 100BASE-T1 Gigabit Ethernet Switch
+ * https://www.microchip.com/en-us/development-tool/EV64C55A
+ *
+ */
+/dts-v1/;
+/plugin/;
+
+#include "dt-bindings/interrupt-controller/irq.h"
+#include "dt-bindings/pinctrl/at91.h"
+
+&macb0 {
+	status = "disabled";
+};
+
+&macb1 {
+	phy-mode = "rmii";
+	status = "okay";
+
+	fixed-link {
+		speed = <100>;
+		full-duplex;
+	};
+};
+
+&spi1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	switch0: switch0@3 {
+		compatible = "microchip,lan9373";
+		reg = <3>;
+		spi-max-frequency = <44000000>;
+		//interrupt-parent = <&pioB>;
+		//interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
+
+		led-t1-sel = <07324017777>;
+
+		dsa,member = <0 0>;
+		status = "okay";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			port@0 {
+				reg = <0>;
+				phy-handle = <&s0phy0>;
+				phy-mode = "internal";
+				label = "lan1";
+			};
+			port@1 {
+				reg = <1>;
+				phy-handle = <&s0phy1>;
+				phy-mode = "internal";
+				label = "lan2";
+			};
+			port@2 {
+				reg = <2>;
+				phy-handle = <&s0phy3>;
+				phy-mode = "internal";
+				label = "lan4";
+			};
+			switch0port2:port@3 {
+				reg = <3>;
+				phy-mode = "sgmii";
+				label = "dsa";
+				link = <&switch1port2>;
+				fixed-link {
+					speed = <100>;
+					full-duplex;
+				};
+			};
+			port@4 {
+				reg = <4>;
+				label = "cpu";
+				ethernet = <&macb1>;
+				phy-mode = "rmii";
+				fixed-link {
+					speed = <100>;
+					full-duplex;
+				};
+			};
+			port@5 {
+				reg = <5>;
+				phy-mode = "mii";
+				label = "lan6";
+				fixed-link {
+					speed = <1000>;
+					full-duplex;
+				};
+			};
+			port@6 {
+				reg = <6>;
+				phy-handle = <&s0phy4>;
+				phy-mode = "internal";
+				label = "lan5";
+			};
+			port@7 {
+				reg = <7>;
+				phy-handle = <&s0phy2>;
+				phy-mode = "internal";
+				label = "lan3";
+			};
+		};
+		mdio {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "microchip,lan937x-mdio";
+
+			s0phy0: ethernet-phy@0{
+				reg = <0x0>;
+			};
+			s0phy1: ethernet-phy@1{
+				reg = <0x1>;
+			};
+			s0phy2: ethernet-phy@7{
+				reg = <0x7>;
+			};
+			s0phy3: ethernet-phy@2{
+				reg = <0x2>;
+			};
+			s0phy4: ethernet-phy@6{
+				reg = <0x6>;
+			};
+		};
+	};
+
+	switch1: switch1@0 {
+		compatible = "microchip,lan9373";
+		reg = <0>;
+		spi-max-frequency = <44000000>;
+		//interrupt-parent = <&pioB>;
+		//interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
+
+		led-t1-sel = <02347017777>;
+
+		dsa,member = <0 1>;
+		status = "okay";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			port@0 {
+				reg = <0>;
+				phy-handle = <&s1phy0>;
+				phy-mode = "internal";
+				label = "lan7";
+			};
+			port@1 {
+				reg = <1>;
+				phy-handle = <&s1phy1>;
+				phy-mode = "internal";
+				label = "lan8";
+			};
+			port@2 {
+				reg = <2>;
+				phy-handle = <&s1phy3>;
+				phy-mode = "internal";
+				label = "lan10";
+			};
+			switch1port2:port@3 {
+				reg = <3>;
+				phy-mode = "sgmii";
+				label = "dsa";
+				link = <&switch0port2>;
+				fixed-link {
+					speed = <100>;
+					full-duplex;
+				};
+			};
+			port@4 {
+				reg = <4>;
+				phy-mode = "rmii";
+				label = "lan12";
+				status = "okay";
+				fixed-link {
+					speed = <1000>;
+					full-duplex;
+				};
+			};
+			port@5 {
+				reg = <5>;
+				phy-mode = "rgmii-id";
+				label = "lan13";
+				fixed-link {
+					speed = <1000>;
+					full-duplex;
+				};
+			};
+			port@6 {
+				reg = <6>;
+				phy-handle = <&s1phy4>;
+				phy-mode = "internal";
+				label = "lan11";
+			};
+			port@7 {
+				reg = <7>;
+				phy-handle=<&s1phy2>;
+				phy-mode = "internal";
+				label = "lan9";
+			};
+		};
+		mdio {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "microchip,lan937x-mdio";
+
+			s1phy0: ethernet-phy@0{
+				reg = <0x0>;
+			};
+			s1phy1: ethernet-phy@1{
+				reg = <0x1>;
+			};
+			s1phy2: ethernet-phy@7{
+				reg = <0x7>;
+			};
+			s1phy3: ethernet-phy@2{
+				reg = <0x2>;
+			};
+			s1phy4: ethernet-phy@6{
+				reg = <0x6>;
+			};
+		};
+	};
+};
+
+&{/} {
+	model = "SAMA5D3-EDS: LAN9373-Dual";
+};

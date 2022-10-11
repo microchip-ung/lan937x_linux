@@ -235,7 +235,7 @@ if {! [info exists boardFamily]} {
 
    set bootstrapFile   "$env(O)/at91bootstrap.bin"
    set ubootFile       "$env(O)/u-boot.bin"
-   set kernelFile      "$env(O)/zImage"
+   set kernelFile      "$env(O)/sama5d3_eds.itb"
    set rootfsFile      "$env(O)/rootfs.ubi"
    set ubootEnvFile	  "$env(O)/ubootEnvtFileNandFlash.bin"
    
@@ -294,8 +294,8 @@ if {! [file exists $rootfsFile]} {
 set bootStrapAddr	0x00000000
 set ubootAddr		0x00040000
 set ubootEnvAddr	0x00100000
-set dtbAddr		0x00180000
-set kernelAddr		0x00200000
+#set dtbAddr		0x00180000
+set kernelAddr		0x00180000
 set rootfsAddr		0x00800000
 
 ## u-boot variable
@@ -305,8 +305,9 @@ set dtbLoadAddr	[get_dtb_load_addr $boardFamily]
 ## NandFlash Mapping
 set kernelSize	[format "0x%08X" [expr (([file size $kernelFile] + 1023) / 1024) * 1024]]
 set dtbSize	[format "0x%08X" [expr (([file size $dtbFile] + 1023) / 1024) * 1024]]
-set loadDts "load_dts=nand read $dtbLoadAddr $dtbAddr $dtbSize; bootz $kernelLoadAddr - $dtbLoadAddr"
-set bootCmd "bootcmd=nand read $kernelLoadAddr $kernelAddr $kernelSize; run prep_boot; run load_dts"
+#set loadDts "load_dts=nand read $dtbLoadAddr $dtbAddr $dtbSize; bootz $kernelLoadAddr - $dtbLoadAddr"
+set loadDts "load_dts=nand read 0x21000000 0x00180000 0x680000; bootm 0x21000000#kernel_dtb#lan9370";
+set bootCmd "bootcmd=run prep_boot; run load_dts"
 set rootfsSize	[format "0x%08X" [file size $rootfsFile]]
 
 lappend u_boot_variables \

@@ -1,0 +1,71 @@
+From bc8dc6e991ed431704c237fa30bba0ae17823fa3 Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Fri, 30 Sep 2022 12:22:19 +0530
+Subject: [PATCH 14/15] [bug-fix] cascade mode not receiving packets from
+ switch 1 to cpu
+
+dev->dsa_port in port_setup was not ready by-the time of cpu port
+membership assignment. check for dsa port is not possible in port_setup
+since it is not invoked for dsa ports, so added a new helper api
+similar to dsa interface and used in port_setup. This is method can
+be modified later with any other simple/efficient methods if found.
+
+not merging with previous patches intentionally. Need to be identified
+easily later.
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/dsa/microchip/lan937x_main.c | 19 ++++++++++++++++++-
+ 1 file changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/dsa/microchip/lan937x_main.c b/drivers/net/dsa/microchip/lan937x_main.c
+index c826384bc0bb..705cb4105b39 100644
+--- a/drivers/net/dsa/microchip/lan937x_main.c
++++ b/drivers/net/dsa/microchip/lan937x_main.c
+@@ -558,6 +558,18 @@ int lan937x_reset_switch(struct ksz_device *dev)
+ 	return ksz_read32(dev, REG_SW_PORT_INT_STATUS__4, &data32);
+ }
+ 
++static u32 dsa_cascade_ports(struct dsa_switch *ds)
++{
++	u32 mask = 0;
++	int p;
++
++	for (p = 0; p < ds->num_ports; p++)
++		if (dsa_is_dsa_port(ds, p))
++			mask |= BIT(p);
++
++	return mask;
++}
++
+ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
+ {
+ 	const u32 *masks = dev->info->masks;
+@@ -584,7 +596,7 @@ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port)
+ 				 true);
+ 
+ 	if (cpu_port)
+-		member = (dsa_user_ports(ds) | BIT(dev->dsa_port));
++		member = (dsa_user_ports(ds) | dsa_cascade_ports(ds));
+ 	else
+ 		member = BIT(dsa_upstream_port(ds, port));
+ 
+@@ -618,10 +630,15 @@ void lan937x_config_cpu_port(struct dsa_switch *ds)
+ 			cascade_cfg |= i;
+ 			ksz_write32(dev, REG_SW_CASCADE_MODE_CTL, cascade_cfg);
+ 			dev->dsa_port = i;
++
+ 			if (dev->ds->index == 1) {
+ 				lan937x_port_cfg(dev, i, REG_PORT_CTRL_0,
+ 						 PORT_TAIL_TAG_ENABLE, true);
+ 			}
++
++			/* Frame check length should be disabled for cascaded ports */
++			lan937x_port_cfg(dev, i, REG_PORT_MAC_CTRL_0, PORT_CHECK_LENGTH,
++					 false);
+ 		}
+ 	}
+ 
+-- 
+2.34.1
+

@@ -1,0 +1,39 @@
+From d7c6062cfef0091d4145d0ffc367ff869322f4ca Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Thu, 6 Oct 2022 15:18:34 +0530
+Subject: [PATCH 15/15] [bug-fix] tc-policing returns invalid arguments
+
+Return variable in lan937x_cfg_strm_policer_hw is left un-initialised, hence
+it returns always invalid status. Change injected with latest ksz upgrade,
+earlier versions contained return status for regmap access api's. Current
+structure replaced these api's with void functions.
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/dsa/microchip/lan937x_flower.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/drivers/net/dsa/microchip/lan937x_flower.c b/drivers/net/dsa/microchip/lan937x_flower.c
+index b97241318dcc..c616d22d1985 100644
+--- a/drivers/net/dsa/microchip/lan937x_flower.c
++++ b/drivers/net/dsa/microchip/lan937x_flower.c
+@@ -811,7 +811,6 @@ static int lan937x_cfg_strm_policer_hw(struct ksz_device *dev, int port,
+ 	u8 index;
+ 	u16 cir;
+ 	u32 val;
+-	int ret;
+ 
+ 	if (!resrc->type.strm_flt.en)
+ 		return -EINVAL;
+@@ -847,7 +846,7 @@ static int lan937x_cfg_strm_policer_hw(struct ksz_device *dev, int port,
+ 
+ 	res->stream_filters_used[index] = true;
+ 
+-	return ret;
++	return 0;
+ }
+ 
+ static int lan937x_flower_configure_hw(struct ksz_device *dev, int port,
+-- 
+2.34.1
+

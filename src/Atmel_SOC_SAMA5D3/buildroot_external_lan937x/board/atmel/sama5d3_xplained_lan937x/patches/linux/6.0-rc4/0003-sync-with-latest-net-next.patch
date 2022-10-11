@@ -1,0 +1,2465 @@
+From 357f27b8219acd29a608303e98b815c532ad3c1d Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Wed, 21 Sep 2022 10:07:08 +0530
+Subject: [PATCH 03/15] sync with latest net-next
+
+copied drivers/net/dsa/microchip and drivers/net/phy/microchip_t1.c into
+current driver.
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/dsa/microchip/ksz8.h         |   4 +-
+ drivers/net/dsa/microchip/ksz8795.c      | 111 +++-
+ drivers/net/dsa/microchip/ksz9477.c      | 110 ++--
+ drivers/net/dsa/microchip/ksz9477.h      |   5 +-
+ drivers/net/dsa/microchip/ksz9477_i2c.c  |   4 +
+ drivers/net/dsa/microchip/ksz9477_reg.h  |   4 +-
+ drivers/net/dsa/microchip/ksz_common.c   | 753 ++++++++++++++++++++++-
+ drivers/net/dsa/microchip/ksz_common.h   | 123 +++-
+ drivers/net/dsa/microchip/ksz_spi.c      |  13 +-
+ drivers/net/dsa/microchip/lan937x.h      |   6 +-
+ drivers/net/dsa/microchip/lan937x_main.c | 395 +++++++++++-
+ drivers/net/dsa/microchip/lan937x_reg.h  |  18 +
+ drivers/net/phy/microchip_t1.c           |  58 +-
+ 13 files changed, 1467 insertions(+), 137 deletions(-)
+
+diff --git a/drivers/net/dsa/microchip/ksz8.h b/drivers/net/dsa/microchip/ksz8.h
+index 42c50cc4d853..8582b4b67d98 100644
+--- a/drivers/net/dsa/microchip/ksz8.h
++++ b/drivers/net/dsa/microchip/ksz8.h
+@@ -17,8 +17,8 @@ u32 ksz8_get_port_addr(int port, int offset);
+ void ksz8_cfg_port_member(struct ksz_device *dev, int port, u8 member);
+ void ksz8_flush_dyn_mac_table(struct ksz_device *dev, int port);
+ void ksz8_port_setup(struct ksz_device *dev, int port, bool cpu_port);
+-void ksz8_r_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 *val);
+-void ksz8_w_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 val);
++int ksz8_r_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 *val);
++int ksz8_w_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 val);
+ int ksz8_r_dyn_mac_table(struct ksz_device *dev, u16 addr, u8 *mac_addr,
+ 			 u8 *fid, u8 *src_port, u8 *timestamp, u16 *entries);
+ int ksz8_r_sta_mac_table(struct ksz_device *dev, u16 addr,
+diff --git a/drivers/net/dsa/microchip/ksz8795.c b/drivers/net/dsa/microchip/ksz8795.c
+index c79a5128235f..bd3b133e7085 100644
+--- a/drivers/net/dsa/microchip/ksz8795.c
++++ b/drivers/net/dsa/microchip/ksz8795.c
+@@ -552,7 +552,7 @@ static void ksz8_w_vlan_table(struct ksz_device *dev, u16 vid, u16 vlan)
+ 	ksz8_w_table(dev, TABLE_VLAN, addr, buf);
+ }
+ 
+-void ksz8_r_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 *val)
++int ksz8_r_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 *val)
+ {
+ 	u8 restart, speed, ctrl, link;
+ 	int processed = true;
+@@ -560,14 +560,24 @@ void ksz8_r_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 *val)
+ 	u8 val1, val2;
+ 	u16 data = 0;
+ 	u8 p = phy;
++	int ret;
+ 
+ 	regs = dev->info->regs;
+ 
+ 	switch (reg) {
+ 	case MII_BMCR:
+-		ksz_pread8(dev, p, regs[P_NEG_RESTART_CTRL], &restart);
+-		ksz_pread8(dev, p, regs[P_SPEED_STATUS], &speed);
+-		ksz_pread8(dev, p, regs[P_FORCE_CTRL], &ctrl);
++		ret = ksz_pread8(dev, p, regs[P_NEG_RESTART_CTRL], &restart);
++		if (ret)
++			return ret;
++
++		ret = ksz_pread8(dev, p, regs[P_SPEED_STATUS], &speed);
++		if (ret)
++			return ret;
++
++		ret = ksz_pread8(dev, p, regs[P_FORCE_CTRL], &ctrl);
++		if (ret)
++			return ret;
++
+ 		if (restart & PORT_PHY_LOOPBACK)
+ 			data |= BMCR_LOOPBACK;
+ 		if (ctrl & PORT_FORCE_100_MBIT)
+@@ -597,7 +607,10 @@ void ksz8_r_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 *val)
+ 			data |= KSZ886X_BMCR_DISABLE_LED;
+ 		break;
+ 	case MII_BMSR:
+-		ksz_pread8(dev, p, regs[P_LINK_STATUS], &link);
++		ret = ksz_pread8(dev, p, regs[P_LINK_STATUS], &link);
++		if (ret)
++			return ret;
++
+ 		data = BMSR_100FULL |
+ 		       BMSR_100HALF |
+ 		       BMSR_10FULL |
+@@ -618,7 +631,10 @@ void ksz8_r_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 *val)
+ 			data = KSZ8795_ID_LO;
+ 		break;
+ 	case MII_ADVERTISE:
+-		ksz_pread8(dev, p, regs[P_LOCAL_CTRL], &ctrl);
++		ret = ksz_pread8(dev, p, regs[P_LOCAL_CTRL], &ctrl);
++		if (ret)
++			return ret;
++
+ 		data = ADVERTISE_CSMA;
+ 		if (ctrl & PORT_AUTO_NEG_SYM_PAUSE)
+ 			data |= ADVERTISE_PAUSE_CAP;
+@@ -632,7 +648,10 @@ void ksz8_r_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 *val)
+ 			data |= ADVERTISE_10HALF;
+ 		break;
+ 	case MII_LPA:
+-		ksz_pread8(dev, p, regs[P_REMOTE_STATUS], &link);
++		ret = ksz_pread8(dev, p, regs[P_REMOTE_STATUS], &link);
++		if (ret)
++			return ret;
++
+ 		data = LPA_SLCT;
+ 		if (link & PORT_REMOTE_SYM_PAUSE)
+ 			data |= LPA_PAUSE_CAP;
+@@ -648,8 +667,14 @@ void ksz8_r_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 *val)
+ 			data |= LPA_LPACK;
+ 		break;
+ 	case PHY_REG_LINK_MD:
+-		ksz_pread8(dev, p, REG_PORT_LINK_MD_CTRL, &val1);
+-		ksz_pread8(dev, p, REG_PORT_LINK_MD_RESULT, &val2);
++		ret = ksz_pread8(dev, p, REG_PORT_LINK_MD_CTRL, &val1);
++		if (ret)
++			return ret;
++
++		ret = ksz_pread8(dev, p, REG_PORT_LINK_MD_RESULT, &val2);
++		if (ret)
++			return ret;
++
+ 		if (val1 & PORT_START_CABLE_DIAG)
+ 			data |= PHY_START_CABLE_DIAG;
+ 
+@@ -664,7 +689,10 @@ void ksz8_r_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 *val)
+ 				FIELD_GET(PORT_CABLE_FAULT_COUNTER_L, val2));
+ 		break;
+ 	case PHY_REG_PHY_CTRL:
+-		ksz_pread8(dev, p, regs[P_LINK_STATUS], &link);
++		ret = ksz_pread8(dev, p, regs[P_LINK_STATUS], &link);
++		if (ret)
++			return ret;
++
+ 		if (link & PORT_MDIX_STATUS)
+ 			data |= KSZ886X_CTRL_MDIX_STAT;
+ 		break;
+@@ -674,13 +702,16 @@ void ksz8_r_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 *val)
+ 	}
+ 	if (processed)
+ 		*val = data;
++
++	return 0;
+ }
+ 
+-void ksz8_w_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 val)
++int ksz8_w_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 val)
+ {
+ 	u8 restart, speed, ctrl, data;
+ 	const u16 *regs;
+ 	u8 p = phy;
++	int ret;
+ 
+ 	regs = dev->info->regs;
+ 
+@@ -690,15 +721,26 @@ void ksz8_w_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 val)
+ 		/* Do not support PHY reset function. */
+ 		if (val & BMCR_RESET)
+ 			break;
+-		ksz_pread8(dev, p, regs[P_SPEED_STATUS], &speed);
++		ret = ksz_pread8(dev, p, regs[P_SPEED_STATUS], &speed);
++		if (ret)
++			return ret;
++
+ 		data = speed;
+ 		if (val & KSZ886X_BMCR_HP_MDIX)
+ 			data |= PORT_HP_MDIX;
+ 		else
+ 			data &= ~PORT_HP_MDIX;
+-		if (data != speed)
+-			ksz_pwrite8(dev, p, regs[P_SPEED_STATUS], data);
+-		ksz_pread8(dev, p, regs[P_FORCE_CTRL], &ctrl);
++
++		if (data != speed) {
++			ret = ksz_pwrite8(dev, p, regs[P_SPEED_STATUS], data);
++			if (ret)
++				return ret;
++		}
++
++		ret = ksz_pread8(dev, p, regs[P_FORCE_CTRL], &ctrl);
++		if (ret)
++			return ret;
++
+ 		data = ctrl;
+ 		if (ksz_is_ksz88x3(dev)) {
+ 			if ((val & BMCR_ANENABLE))
+@@ -724,9 +766,17 @@ void ksz8_w_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 val)
+ 			data |= PORT_FORCE_FULL_DUPLEX;
+ 		else
+ 			data &= ~PORT_FORCE_FULL_DUPLEX;
+-		if (data != ctrl)
+-			ksz_pwrite8(dev, p, regs[P_FORCE_CTRL], data);
+-		ksz_pread8(dev, p, regs[P_NEG_RESTART_CTRL], &restart);
++
++		if (data != ctrl) {
++			ret = ksz_pwrite8(dev, p, regs[P_FORCE_CTRL], data);
++			if (ret)
++				return ret;
++		}
++
++		ret = ksz_pread8(dev, p, regs[P_NEG_RESTART_CTRL], &restart);
++		if (ret)
++			return ret;
++
+ 		data = restart;
+ 		if (val & KSZ886X_BMCR_DISABLE_LED)
+ 			data |= PORT_LED_OFF;
+@@ -756,11 +806,19 @@ void ksz8_w_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 val)
+ 			data |= PORT_PHY_LOOPBACK;
+ 		else
+ 			data &= ~PORT_PHY_LOOPBACK;
+-		if (data != restart)
+-			ksz_pwrite8(dev, p, regs[P_NEG_RESTART_CTRL], data);
++
++		if (data != restart) {
++			ret = ksz_pwrite8(dev, p, regs[P_NEG_RESTART_CTRL],
++					  data);
++			if (ret)
++				return ret;
++		}
+ 		break;
+ 	case MII_ADVERTISE:
+-		ksz_pread8(dev, p, regs[P_LOCAL_CTRL], &ctrl);
++		ret = ksz_pread8(dev, p, regs[P_LOCAL_CTRL], &ctrl);
++		if (ret)
++			return ret;
++
+ 		data = ctrl;
+ 		data &= ~(PORT_AUTO_NEG_SYM_PAUSE |
+ 			  PORT_AUTO_NEG_100BTX_FD |
+@@ -777,8 +835,12 @@ void ksz8_w_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 val)
+ 			data |= PORT_AUTO_NEG_10BT_FD;
+ 		if (val & ADVERTISE_10HALF)
+ 			data |= PORT_AUTO_NEG_10BT;
+-		if (data != ctrl)
+-			ksz_pwrite8(dev, p, regs[P_LOCAL_CTRL], data);
++
++		if (data != ctrl) {
++			ret = ksz_pwrite8(dev, p, regs[P_LOCAL_CTRL], data);
++			if (ret)
++				return ret;
++		}
+ 		break;
+ 	case PHY_REG_LINK_MD:
+ 		if (val & PHY_START_CABLE_DIAG)
+@@ -787,6 +849,8 @@ void ksz8_w_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 val)
+ 	default:
+ 		break;
+ 	}
++
++	return 0;
+ }
+ 
+ void ksz8_cfg_port_member(struct ksz_device *dev, int port, u8 member)
+@@ -1187,7 +1251,6 @@ void ksz8_config_cpu_port(struct dsa_switch *ds)
+ 		if (i == dev->phy_port_cnt)
+ 			break;
+ 		p->on = 1;
+-		p->phy = 1;
+ 	}
+ 	for (i = 0; i < dev->phy_port_cnt; i++) {
+ 		p = &dev->ports[i];
+diff --git a/drivers/net/dsa/microchip/ksz9477.c b/drivers/net/dsa/microchip/ksz9477.c
+index e4f446db0ca1..a6a0321a8931 100644
+--- a/drivers/net/dsa/microchip/ksz9477.c
++++ b/drivers/net/dsa/microchip/ksz9477.c
+@@ -193,6 +193,11 @@ int ksz9477_reset_switch(struct ksz_device *dev)
+ 	ksz_write32(dev, REG_SW_PORT_INT_MASK__4, 0x7F);
+ 	ksz_read32(dev, REG_SW_PORT_INT_STATUS__4, &data32);
+ 
++	/* KSZ9893 compatible chips do not support refclk configuration */
++	if (dev->chip_id == KSZ9893_CHIP_ID ||
++	    dev->chip_id == KSZ8563_CHIP_ID)
++		return 0;
++
+ 	data8 = SW_ENABLE_REFCLKO;
+ 	if (dev->synclko_disable)
+ 		data8 = 0;
+@@ -264,9 +269,20 @@ void ksz9477_port_init_cnt(struct ksz_device *dev, int port)
+ 	mutex_unlock(&mib->cnt_mutex);
+ }
+ 
+-void ksz9477_r_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 *data)
++static void ksz9477_r_phy_quirks(struct ksz_device *dev, u16 addr, u16 reg,
++				 u16 *data)
++{
++	/* KSZ8563R do not have extended registers but BMSR_ESTATEN and
++	 * BMSR_ERCAP bits are set.
++	 */
++	if (dev->chip_id == KSZ8563_CHIP_ID && reg == MII_BMSR)
++		*data &= ~(BMSR_ESTATEN | BMSR_ERCAP);
++}
++
++int ksz9477_r_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 *data)
+ {
+ 	u16 val = 0xffff;
++	int ret;
+ 
+ 	/* No real PHY after this. Simulate the PHY.
+ 	 * A fixed PHY can be setup in the device tree, but this function is
+@@ -274,7 +290,7 @@ void ksz9477_r_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 *data)
+ 	 * For RGMII PHY there is no way to access it so the fixed PHY should
+ 	 * be used.  For SGMII PHY the supporting code will be added later.
+ 	 */
+-	if (addr >= dev->phy_port_cnt) {
++	if (!dev->info->internal_phy[addr]) {
+ 		struct ksz_port *p = &dev->ports[addr];
+ 
+ 		switch (reg) {
+@@ -307,23 +323,25 @@ void ksz9477_r_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 *data)
+ 			break;
+ 		}
+ 	} else {
+-		ksz_pread16(dev, addr, 0x100 + (reg << 1), &val);
++		ret = ksz_pread16(dev, addr, 0x100 + (reg << 1), &val);
++		if (ret)
++			return ret;
++
++		ksz9477_r_phy_quirks(dev, addr, reg, &val);
+ 	}
+ 
+ 	*data = val;
++
++	return 0;
+ }
+ 
+-void ksz9477_w_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 val)
++int ksz9477_w_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 val)
+ {
+ 	/* No real PHY after this. */
+-	if (addr >= dev->phy_port_cnt)
+-		return;
++	if (!dev->info->internal_phy[addr])
++		return 0;
+ 
+-	/* No gigabit support.  Do not write to this register. */
+-	if (!(dev->features & GBIT_SUPPORT) && reg == MII_CTRL1000)
+-		return;
+-
+-	ksz_pwrite16(dev, addr, 0x100 + (reg << 1), val);
++	return ksz_pwrite16(dev, addr, 0x100 + (reg << 1), val);
+ }
+ 
+ void ksz9477_cfg_port_member(struct ksz_device *dev, int port, u8 member)
+@@ -869,7 +887,7 @@ static phy_interface_t ksz9477_get_interface(struct ksz_device *dev, int port)
+ 	phy_interface_t interface;
+ 	bool gbit;
+ 
+-	if (port < dev->phy_port_cnt)
++	if (dev->info->internal_phy[port])
+ 		return PHY_INTERFACE_MODE_NA;
+ 
+ 	gbit = ksz_get_gbit(dev, port);
+@@ -914,7 +932,7 @@ static void ksz9477_phy_errata_setup(struct ksz_device *dev, int port)
+ 	/* Energy Efficient Ethernet (EEE) feature select must
+ 	 * be manually disabled (except on KSZ8565 which is 100Mbit)
+ 	 */
+-	if (dev->features & GBIT_SUPPORT)
++	if (dev->info->gbit_capable[port])
+ 		ksz9477_port_mmd_write(dev, port, 0x07, 0x3c, 0x0000);
+ 
+ 	/* Register settings are required to meet data sheet
+@@ -941,10 +959,35 @@ void ksz9477_get_caps(struct ksz_device *dev, int port,
+ 	config->mac_capabilities = MAC_10 | MAC_100 | MAC_ASYM_PAUSE |
+ 				   MAC_SYM_PAUSE;
+ 
+-	if (dev->features & GBIT_SUPPORT)
++	if (dev->info->gbit_capable[port])
+ 		config->mac_capabilities |= MAC_1000FD;
+ }
+ 
++int ksz9477_set_ageing_time(struct ksz_device *dev, unsigned int msecs)
++{
++	u32 secs = msecs / 1000;
++	u8 value;
++	u8 data;
++	int ret;
++
++	value = FIELD_GET(SW_AGE_PERIOD_7_0_M, secs);
++
++	ret = ksz_write8(dev, REG_SW_LUE_CTRL_3, value);
++	if (ret < 0)
++		return ret;
++
++	data = FIELD_GET(SW_AGE_PERIOD_10_8_M, secs);
++
++	ret = ksz_read8(dev, REG_SW_LUE_CTRL_0, &value);
++	if (ret < 0)
++		return ret;
++
++	value &= ~SW_AGE_CNT_M;
++	value |= FIELD_PREP(SW_AGE_CNT_M, data);
++
++	return ksz_write8(dev, REG_SW_LUE_CTRL_0, value);
++}
++
+ void ksz9477_port_setup(struct ksz_device *dev, int port, bool cpu_port)
+ {
+ 	struct dsa_switch *ds = dev->ds;
+@@ -976,7 +1019,7 @@ void ksz9477_port_setup(struct ksz_device *dev, int port, bool cpu_port)
+ 	/* enable 802.1p priority */
+ 	ksz_port_cfg(dev, port, P_PRIO_CTRL, PORT_802_1P_PRIO_ENABLE, true);
+ 
+-	if (port < dev->phy_port_cnt) {
++	if (dev->info->internal_phy[port]) {
+ 		/* do not force flow control */
+ 		ksz_port_cfg(dev, port, REG_PORT_CTRL_0,
+ 			     PORT_FORCE_TX_FLOW_CTRL | PORT_FORCE_RX_FLOW_CTRL,
+@@ -999,7 +1042,7 @@ void ksz9477_port_setup(struct ksz_device *dev, int port, bool cpu_port)
+ 	ksz9477_cfg_port_member(dev, port, member);
+ 
+ 	/* clear pending interrupts */
+-	if (port < dev->phy_port_cnt)
++	if (dev->info->internal_phy[port])
+ 		ksz_pread16(dev, port, REG_PORT_PHY_INT_ENABLE, &data16);
+ }
+ 
+@@ -1051,25 +1094,13 @@ void ksz9477_config_cpu_port(struct dsa_switch *ds)
+ 
+ 			/* enable cpu port */
+ 			ksz9477_port_setup(dev, i, true);
+-			p->on = 1;
+ 		}
+ 	}
+ 
+ 	for (i = 0; i < dev->info->port_cnt; i++) {
+ 		if (i == dev->cpu_port)
+ 			continue;
+-		p = &dev->ports[i];
+-
+ 		ksz_port_stp_state_set(ds, i, BR_STATE_DISABLED);
+-		p->on = 1;
+-		if (i < dev->phy_port_cnt)
+-			p->phy = 1;
+-		if (dev->chip_id == 0x00947700 && i == 6) {
+-			p->sgmii = 1;
+-
+-			/* SGMII PHY detection code is not implemented yet. */
+-			p->phy = 0;
+-		}
+ 	}
+ }
+ 
+@@ -1158,29 +1189,6 @@ int ksz9477_switch_init(struct ksz_device *dev)
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = ksz_read8(dev, REG_GLOBAL_OPTIONS, &data8);
+-	if (ret)
+-		return ret;
+-
+-	/* Number of ports can be reduced depending on chip. */
+-	dev->phy_port_cnt = 5;
+-
+-	/* Default capability is gigabit capable. */
+-	dev->features = GBIT_SUPPORT;
+-
+-	if (dev->chip_id == KSZ9893_CHIP_ID) {
+-		dev->features |= IS_9893;
+-
+-		/* Chip does not support gigabit. */
+-		if (data8 & SW_QW_ABLE)
+-			dev->features &= ~GBIT_SUPPORT;
+-		dev->phy_port_cnt = 2;
+-	} else {
+-		/* Chip does not support gigabit. */
+-		if (!(data8 & SW_GIGABIT_ABLE))
+-			dev->features &= ~GBIT_SUPPORT;
+-	}
+-
+ 	return 0;
+ }
+ 
+diff --git a/drivers/net/dsa/microchip/ksz9477.h b/drivers/net/dsa/microchip/ksz9477.h
+index cd278b307b3c..00862c4cfb7f 100644
+--- a/drivers/net/dsa/microchip/ksz9477.h
++++ b/drivers/net/dsa/microchip/ksz9477.h
+@@ -16,8 +16,9 @@ u32 ksz9477_get_port_addr(int port, int offset);
+ void ksz9477_cfg_port_member(struct ksz_device *dev, int port, u8 member);
+ void ksz9477_flush_dyn_mac_table(struct ksz_device *dev, int port);
+ void ksz9477_port_setup(struct ksz_device *dev, int port, bool cpu_port);
+-void ksz9477_r_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 *data);
+-void ksz9477_w_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 val);
++int ksz9477_set_ageing_time(struct ksz_device *dev, unsigned int msecs);
++int ksz9477_r_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 *data);
++int ksz9477_w_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 val);
+ void ksz9477_r_mib_cnt(struct ksz_device *dev, int port, u16 addr, u64 *cnt);
+ void ksz9477_r_mib_pkt(struct ksz_device *dev, int port, u16 addr,
+ 		       u64 *dropped, u64 *cnt);
+diff --git a/drivers/net/dsa/microchip/ksz9477_i2c.c b/drivers/net/dsa/microchip/ksz9477_i2c.c
+index 99966514d444..8fbc122e3384 100644
+--- a/drivers/net/dsa/microchip/ksz9477_i2c.c
++++ b/drivers/net/dsa/microchip/ksz9477_i2c.c
+@@ -91,6 +91,10 @@ static const struct of_device_id ksz9477_dt_ids[] = {
+ 		.compatible = "microchip,ksz9477",
+ 		.data = &ksz_switch_chips[KSZ9477]
+ 	},
++	{
++		.compatible = "microchip,ksz9896",
++		.data = &ksz_switch_chips[KSZ9896]
++	},
+ 	{
+ 		.compatible = "microchip,ksz9897",
+ 		.data = &ksz_switch_chips[KSZ9897]
+diff --git a/drivers/net/dsa/microchip/ksz9477_reg.h b/drivers/net/dsa/microchip/ksz9477_reg.h
+index ddf99d1e4bbd..53c68d286dd3 100644
+--- a/drivers/net/dsa/microchip/ksz9477_reg.h
++++ b/drivers/net/dsa/microchip/ksz9477_reg.h
+@@ -189,8 +189,9 @@
+ 
+ #define SW_VLAN_ENABLE			BIT(7)
+ #define SW_DROP_INVALID_VID		BIT(6)
+-#define SW_AGE_CNT_M			0x7
++#define SW_AGE_CNT_M			GENMASK(5, 3)
+ #define SW_AGE_CNT_S			3
++#define SW_AGE_PERIOD_10_8_M		GENMASK(10, 8)
+ #define SW_RESV_MCAST_ENABLE		BIT(2)
+ #define SW_HASH_OPTION_M		0x03
+ #define SW_HASH_OPTION_CRC		1
+@@ -225,6 +226,7 @@
+ #define SW_PRIO_LOWEST_DA_SA		3
+ 
+ #define REG_SW_LUE_CTRL_3		0x0313
++#define SW_AGE_PERIOD_7_0_M		GENMASK(7, 0)
+ 
+ #define REG_SW_LUE_INT_STATUS		0x0314
+ #define REG_SW_LUE_INT_ENABLE		0x0315
+diff --git a/drivers/net/dsa/microchip/ksz_common.c b/drivers/net/dsa/microchip/ksz_common.c
+index 6bd69a7e6809..fcaa71f66322 100644
+--- a/drivers/net/dsa/microchip/ksz_common.c
++++ b/drivers/net/dsa/microchip/ksz_common.c
+@@ -170,12 +170,20 @@ static const struct ksz_dev_ops ksz8_dev_ops = {
+ 	.exit = ksz8_switch_exit,
+ };
+ 
++static void ksz9477_phylink_mac_link_up(struct ksz_device *dev, int port,
++					unsigned int mode,
++					phy_interface_t interface,
++					struct phy_device *phydev, int speed,
++					int duplex, bool tx_pause,
++					bool rx_pause);
++
+ static const struct ksz_dev_ops ksz9477_dev_ops = {
+ 	.setup = ksz9477_setup,
+ 	.get_port_addr = ksz9477_get_port_addr,
+ 	.cfg_port_member = ksz9477_cfg_port_member,
+ 	.flush_dyn_mac_table = ksz9477_flush_dyn_mac_table,
+ 	.port_setup = ksz9477_port_setup,
++	.set_ageing_time = ksz9477_set_ageing_time,
+ 	.r_phy = ksz9477_r_phy,
+ 	.w_phy = ksz9477_w_phy,
+ 	.r_mib_cnt = ksz9477_r_mib_cnt,
+@@ -196,6 +204,7 @@ static const struct ksz_dev_ops ksz9477_dev_ops = {
+ 	.mdb_del = ksz9477_mdb_del,
+ 	.change_mtu = ksz9477_change_mtu,
+ 	.max_mtu = ksz9477_max_mtu,
++	.phylink_mac_link_up = ksz9477_phylink_mac_link_up,
+ 	.config_cpu_port = ksz9477_config_cpu_port,
+ 	.enable_stp_addr = ksz9477_enable_stp_addr,
+ 	.reset = ksz9477_reset_switch,
+@@ -205,10 +214,12 @@ static const struct ksz_dev_ops ksz9477_dev_ops = {
+ 
+ static const struct ksz_dev_ops lan937x_dev_ops = {
+ 	.setup = lan937x_setup,
++	.teardown = lan937x_teardown,
+ 	.get_port_addr = ksz9477_get_port_addr,
+ 	.cfg_port_member = ksz9477_cfg_port_member,
+ 	.flush_dyn_mac_table = ksz9477_flush_dyn_mac_table,
+ 	.port_setup = lan937x_port_setup,
++	.set_ageing_time = lan937x_set_ageing_time,
+ 	.r_phy = lan937x_r_phy,
+ 	.w_phy = lan937x_w_phy,
+ 	.r_mib_cnt = ksz9477_r_mib_cnt,
+@@ -230,6 +241,7 @@ static const struct ksz_dev_ops lan937x_dev_ops = {
+ 	.mdb_del = ksz9477_mdb_del,
+ 	.change_mtu = lan937x_change_mtu,
+ 	.max_mtu = ksz9477_max_mtu,
++	.phylink_mac_link_up = ksz9477_phylink_mac_link_up,
+ 	.config_cpu_port = lan937x_config_cpu_port,
+ 	.enable_stp_addr = ksz9477_enable_stp_addr,
+ 	.reset = lan937x_reset_switch,
+@@ -412,7 +424,636 @@ static const u8 lan937x_shifts[] = {
+ 	[ALU_STAT_INDEX]		= 8,
+ };
+ 
++static const struct regmap_range ksz8563_valid_regs[] = {
++	regmap_reg_range(0x0000, 0x0003),
++	regmap_reg_range(0x0006, 0x0006),
++	regmap_reg_range(0x000f, 0x001f),
++	regmap_reg_range(0x0100, 0x0100),
++	regmap_reg_range(0x0104, 0x0107),
++	regmap_reg_range(0x010d, 0x010d),
++	regmap_reg_range(0x0110, 0x0113),
++	regmap_reg_range(0x0120, 0x012b),
++	regmap_reg_range(0x0201, 0x0201),
++	regmap_reg_range(0x0210, 0x0213),
++	regmap_reg_range(0x0300, 0x0300),
++	regmap_reg_range(0x0302, 0x031b),
++	regmap_reg_range(0x0320, 0x032b),
++	regmap_reg_range(0x0330, 0x0336),
++	regmap_reg_range(0x0338, 0x033e),
++	regmap_reg_range(0x0340, 0x035f),
++	regmap_reg_range(0x0370, 0x0370),
++	regmap_reg_range(0x0378, 0x0378),
++	regmap_reg_range(0x037c, 0x037d),
++	regmap_reg_range(0x0390, 0x0393),
++	regmap_reg_range(0x0400, 0x040e),
++	regmap_reg_range(0x0410, 0x042f),
++	regmap_reg_range(0x0500, 0x0519),
++	regmap_reg_range(0x0520, 0x054b),
++	regmap_reg_range(0x0550, 0x05b3),
++
++	/* port 1 */
++	regmap_reg_range(0x1000, 0x1001),
++	regmap_reg_range(0x1004, 0x100b),
++	regmap_reg_range(0x1013, 0x1013),
++	regmap_reg_range(0x1017, 0x1017),
++	regmap_reg_range(0x101b, 0x101b),
++	regmap_reg_range(0x101f, 0x1021),
++	regmap_reg_range(0x1030, 0x1030),
++	regmap_reg_range(0x1100, 0x1111),
++	regmap_reg_range(0x111a, 0x111d),
++	regmap_reg_range(0x1122, 0x1127),
++	regmap_reg_range(0x112a, 0x112b),
++	regmap_reg_range(0x1136, 0x1139),
++	regmap_reg_range(0x113e, 0x113f),
++	regmap_reg_range(0x1400, 0x1401),
++	regmap_reg_range(0x1403, 0x1403),
++	regmap_reg_range(0x1410, 0x1417),
++	regmap_reg_range(0x1420, 0x1423),
++	regmap_reg_range(0x1500, 0x1507),
++	regmap_reg_range(0x1600, 0x1612),
++	regmap_reg_range(0x1800, 0x180f),
++	regmap_reg_range(0x1900, 0x1907),
++	regmap_reg_range(0x1914, 0x191b),
++	regmap_reg_range(0x1a00, 0x1a03),
++	regmap_reg_range(0x1a04, 0x1a08),
++	regmap_reg_range(0x1b00, 0x1b01),
++	regmap_reg_range(0x1b04, 0x1b04),
++	regmap_reg_range(0x1c00, 0x1c05),
++	regmap_reg_range(0x1c08, 0x1c1b),
++
++	/* port 2 */
++	regmap_reg_range(0x2000, 0x2001),
++	regmap_reg_range(0x2004, 0x200b),
++	regmap_reg_range(0x2013, 0x2013),
++	regmap_reg_range(0x2017, 0x2017),
++	regmap_reg_range(0x201b, 0x201b),
++	regmap_reg_range(0x201f, 0x2021),
++	regmap_reg_range(0x2030, 0x2030),
++	regmap_reg_range(0x2100, 0x2111),
++	regmap_reg_range(0x211a, 0x211d),
++	regmap_reg_range(0x2122, 0x2127),
++	regmap_reg_range(0x212a, 0x212b),
++	regmap_reg_range(0x2136, 0x2139),
++	regmap_reg_range(0x213e, 0x213f),
++	regmap_reg_range(0x2400, 0x2401),
++	regmap_reg_range(0x2403, 0x2403),
++	regmap_reg_range(0x2410, 0x2417),
++	regmap_reg_range(0x2420, 0x2423),
++	regmap_reg_range(0x2500, 0x2507),
++	regmap_reg_range(0x2600, 0x2612),
++	regmap_reg_range(0x2800, 0x280f),
++	regmap_reg_range(0x2900, 0x2907),
++	regmap_reg_range(0x2914, 0x291b),
++	regmap_reg_range(0x2a00, 0x2a03),
++	regmap_reg_range(0x2a04, 0x2a08),
++	regmap_reg_range(0x2b00, 0x2b01),
++	regmap_reg_range(0x2b04, 0x2b04),
++	regmap_reg_range(0x2c00, 0x2c05),
++	regmap_reg_range(0x2c08, 0x2c1b),
++
++	/* port 3 */
++	regmap_reg_range(0x3000, 0x3001),
++	regmap_reg_range(0x3004, 0x300b),
++	regmap_reg_range(0x3013, 0x3013),
++	regmap_reg_range(0x3017, 0x3017),
++	regmap_reg_range(0x301b, 0x301b),
++	regmap_reg_range(0x301f, 0x3021),
++	regmap_reg_range(0x3030, 0x3030),
++	regmap_reg_range(0x3300, 0x3301),
++	regmap_reg_range(0x3303, 0x3303),
++	regmap_reg_range(0x3400, 0x3401),
++	regmap_reg_range(0x3403, 0x3403),
++	regmap_reg_range(0x3410, 0x3417),
++	regmap_reg_range(0x3420, 0x3423),
++	regmap_reg_range(0x3500, 0x3507),
++	regmap_reg_range(0x3600, 0x3612),
++	regmap_reg_range(0x3800, 0x380f),
++	regmap_reg_range(0x3900, 0x3907),
++	regmap_reg_range(0x3914, 0x391b),
++	regmap_reg_range(0x3a00, 0x3a03),
++	regmap_reg_range(0x3a04, 0x3a08),
++	regmap_reg_range(0x3b00, 0x3b01),
++	regmap_reg_range(0x3b04, 0x3b04),
++	regmap_reg_range(0x3c00, 0x3c05),
++	regmap_reg_range(0x3c08, 0x3c1b),
++};
++
++static const struct regmap_access_table ksz8563_register_set = {
++	.yes_ranges = ksz8563_valid_regs,
++	.n_yes_ranges = ARRAY_SIZE(ksz8563_valid_regs),
++};
++
++static const struct regmap_range ksz9477_valid_regs[] = {
++	regmap_reg_range(0x0000, 0x0003),
++	regmap_reg_range(0x0006, 0x0006),
++	regmap_reg_range(0x0010, 0x001f),
++	regmap_reg_range(0x0100, 0x0100),
++	regmap_reg_range(0x0103, 0x0107),
++	regmap_reg_range(0x010d, 0x010d),
++	regmap_reg_range(0x0110, 0x0113),
++	regmap_reg_range(0x0120, 0x012b),
++	regmap_reg_range(0x0201, 0x0201),
++	regmap_reg_range(0x0210, 0x0213),
++	regmap_reg_range(0x0300, 0x0300),
++	regmap_reg_range(0x0302, 0x031b),
++	regmap_reg_range(0x0320, 0x032b),
++	regmap_reg_range(0x0330, 0x0336),
++	regmap_reg_range(0x0338, 0x033b),
++	regmap_reg_range(0x033e, 0x033e),
++	regmap_reg_range(0x0340, 0x035f),
++	regmap_reg_range(0x0370, 0x0370),
++	regmap_reg_range(0x0378, 0x0378),
++	regmap_reg_range(0x037c, 0x037d),
++	regmap_reg_range(0x0390, 0x0393),
++	regmap_reg_range(0x0400, 0x040e),
++	regmap_reg_range(0x0410, 0x042f),
++	regmap_reg_range(0x0444, 0x044b),
++	regmap_reg_range(0x0450, 0x046f),
++	regmap_reg_range(0x0500, 0x0519),
++	regmap_reg_range(0x0520, 0x054b),
++	regmap_reg_range(0x0550, 0x05b3),
++	regmap_reg_range(0x0604, 0x060b),
++	regmap_reg_range(0x0610, 0x0612),
++	regmap_reg_range(0x0614, 0x062c),
++	regmap_reg_range(0x0640, 0x0645),
++	regmap_reg_range(0x0648, 0x064d),
++
++	/* port 1 */
++	regmap_reg_range(0x1000, 0x1001),
++	regmap_reg_range(0x1013, 0x1013),
++	regmap_reg_range(0x1017, 0x1017),
++	regmap_reg_range(0x101b, 0x101b),
++	regmap_reg_range(0x101f, 0x1020),
++	regmap_reg_range(0x1030, 0x1030),
++	regmap_reg_range(0x1100, 0x1115),
++	regmap_reg_range(0x111a, 0x111f),
++	regmap_reg_range(0x1122, 0x1127),
++	regmap_reg_range(0x112a, 0x112b),
++	regmap_reg_range(0x1136, 0x1139),
++	regmap_reg_range(0x113e, 0x113f),
++	regmap_reg_range(0x1400, 0x1401),
++	regmap_reg_range(0x1403, 0x1403),
++	regmap_reg_range(0x1410, 0x1417),
++	regmap_reg_range(0x1420, 0x1423),
++	regmap_reg_range(0x1500, 0x1507),
++	regmap_reg_range(0x1600, 0x1613),
++	regmap_reg_range(0x1800, 0x180f),
++	regmap_reg_range(0x1820, 0x1827),
++	regmap_reg_range(0x1830, 0x1837),
++	regmap_reg_range(0x1840, 0x184b),
++	regmap_reg_range(0x1900, 0x1907),
++	regmap_reg_range(0x1914, 0x191b),
++	regmap_reg_range(0x1920, 0x1920),
++	regmap_reg_range(0x1923, 0x1927),
++	regmap_reg_range(0x1a00, 0x1a03),
++	regmap_reg_range(0x1a04, 0x1a07),
++	regmap_reg_range(0x1b00, 0x1b01),
++	regmap_reg_range(0x1b04, 0x1b04),
++	regmap_reg_range(0x1c00, 0x1c05),
++	regmap_reg_range(0x1c08, 0x1c1b),
++
++	/* port 2 */
++	regmap_reg_range(0x2000, 0x2001),
++	regmap_reg_range(0x2013, 0x2013),
++	regmap_reg_range(0x2017, 0x2017),
++	regmap_reg_range(0x201b, 0x201b),
++	regmap_reg_range(0x201f, 0x2020),
++	regmap_reg_range(0x2030, 0x2030),
++	regmap_reg_range(0x2100, 0x2115),
++	regmap_reg_range(0x211a, 0x211f),
++	regmap_reg_range(0x2122, 0x2127),
++	regmap_reg_range(0x212a, 0x212b),
++	regmap_reg_range(0x2136, 0x2139),
++	regmap_reg_range(0x213e, 0x213f),
++	regmap_reg_range(0x2400, 0x2401),
++	regmap_reg_range(0x2403, 0x2403),
++	regmap_reg_range(0x2410, 0x2417),
++	regmap_reg_range(0x2420, 0x2423),
++	regmap_reg_range(0x2500, 0x2507),
++	regmap_reg_range(0x2600, 0x2613),
++	regmap_reg_range(0x2800, 0x280f),
++	regmap_reg_range(0x2820, 0x2827),
++	regmap_reg_range(0x2830, 0x2837),
++	regmap_reg_range(0x2840, 0x284b),
++	regmap_reg_range(0x2900, 0x2907),
++	regmap_reg_range(0x2914, 0x291b),
++	regmap_reg_range(0x2920, 0x2920),
++	regmap_reg_range(0x2923, 0x2927),
++	regmap_reg_range(0x2a00, 0x2a03),
++	regmap_reg_range(0x2a04, 0x2a07),
++	regmap_reg_range(0x2b00, 0x2b01),
++	regmap_reg_range(0x2b04, 0x2b04),
++	regmap_reg_range(0x2c00, 0x2c05),
++	regmap_reg_range(0x2c08, 0x2c1b),
++
++	/* port 3 */
++	regmap_reg_range(0x3000, 0x3001),
++	regmap_reg_range(0x3013, 0x3013),
++	regmap_reg_range(0x3017, 0x3017),
++	regmap_reg_range(0x301b, 0x301b),
++	regmap_reg_range(0x301f, 0x3020),
++	regmap_reg_range(0x3030, 0x3030),
++	regmap_reg_range(0x3100, 0x3115),
++	regmap_reg_range(0x311a, 0x311f),
++	regmap_reg_range(0x3122, 0x3127),
++	regmap_reg_range(0x312a, 0x312b),
++	regmap_reg_range(0x3136, 0x3139),
++	regmap_reg_range(0x313e, 0x313f),
++	regmap_reg_range(0x3400, 0x3401),
++	regmap_reg_range(0x3403, 0x3403),
++	regmap_reg_range(0x3410, 0x3417),
++	regmap_reg_range(0x3420, 0x3423),
++	regmap_reg_range(0x3500, 0x3507),
++	regmap_reg_range(0x3600, 0x3613),
++	regmap_reg_range(0x3800, 0x380f),
++	regmap_reg_range(0x3820, 0x3827),
++	regmap_reg_range(0x3830, 0x3837),
++	regmap_reg_range(0x3840, 0x384b),
++	regmap_reg_range(0x3900, 0x3907),
++	regmap_reg_range(0x3914, 0x391b),
++	regmap_reg_range(0x3920, 0x3920),
++	regmap_reg_range(0x3923, 0x3927),
++	regmap_reg_range(0x3a00, 0x3a03),
++	regmap_reg_range(0x3a04, 0x3a07),
++	regmap_reg_range(0x3b00, 0x3b01),
++	regmap_reg_range(0x3b04, 0x3b04),
++	regmap_reg_range(0x3c00, 0x3c05),
++	regmap_reg_range(0x3c08, 0x3c1b),
++
++	/* port 4 */
++	regmap_reg_range(0x4000, 0x4001),
++	regmap_reg_range(0x4013, 0x4013),
++	regmap_reg_range(0x4017, 0x4017),
++	regmap_reg_range(0x401b, 0x401b),
++	regmap_reg_range(0x401f, 0x4020),
++	regmap_reg_range(0x4030, 0x4030),
++	regmap_reg_range(0x4100, 0x4115),
++	regmap_reg_range(0x411a, 0x411f),
++	regmap_reg_range(0x4122, 0x4127),
++	regmap_reg_range(0x412a, 0x412b),
++	regmap_reg_range(0x4136, 0x4139),
++	regmap_reg_range(0x413e, 0x413f),
++	regmap_reg_range(0x4400, 0x4401),
++	regmap_reg_range(0x4403, 0x4403),
++	regmap_reg_range(0x4410, 0x4417),
++	regmap_reg_range(0x4420, 0x4423),
++	regmap_reg_range(0x4500, 0x4507),
++	regmap_reg_range(0x4600, 0x4613),
++	regmap_reg_range(0x4800, 0x480f),
++	regmap_reg_range(0x4820, 0x4827),
++	regmap_reg_range(0x4830, 0x4837),
++	regmap_reg_range(0x4840, 0x484b),
++	regmap_reg_range(0x4900, 0x4907),
++	regmap_reg_range(0x4914, 0x491b),
++	regmap_reg_range(0x4920, 0x4920),
++	regmap_reg_range(0x4923, 0x4927),
++	regmap_reg_range(0x4a00, 0x4a03),
++	regmap_reg_range(0x4a04, 0x4a07),
++	regmap_reg_range(0x4b00, 0x4b01),
++	regmap_reg_range(0x4b04, 0x4b04),
++	regmap_reg_range(0x4c00, 0x4c05),
++	regmap_reg_range(0x4c08, 0x4c1b),
++
++	/* port 5 */
++	regmap_reg_range(0x5000, 0x5001),
++	regmap_reg_range(0x5013, 0x5013),
++	regmap_reg_range(0x5017, 0x5017),
++	regmap_reg_range(0x501b, 0x501b),
++	regmap_reg_range(0x501f, 0x5020),
++	regmap_reg_range(0x5030, 0x5030),
++	regmap_reg_range(0x5100, 0x5115),
++	regmap_reg_range(0x511a, 0x511f),
++	regmap_reg_range(0x5122, 0x5127),
++	regmap_reg_range(0x512a, 0x512b),
++	regmap_reg_range(0x5136, 0x5139),
++	regmap_reg_range(0x513e, 0x513f),
++	regmap_reg_range(0x5400, 0x5401),
++	regmap_reg_range(0x5403, 0x5403),
++	regmap_reg_range(0x5410, 0x5417),
++	regmap_reg_range(0x5420, 0x5423),
++	regmap_reg_range(0x5500, 0x5507),
++	regmap_reg_range(0x5600, 0x5613),
++	regmap_reg_range(0x5800, 0x580f),
++	regmap_reg_range(0x5820, 0x5827),
++	regmap_reg_range(0x5830, 0x5837),
++	regmap_reg_range(0x5840, 0x584b),
++	regmap_reg_range(0x5900, 0x5907),
++	regmap_reg_range(0x5914, 0x591b),
++	regmap_reg_range(0x5920, 0x5920),
++	regmap_reg_range(0x5923, 0x5927),
++	regmap_reg_range(0x5a00, 0x5a03),
++	regmap_reg_range(0x5a04, 0x5a07),
++	regmap_reg_range(0x5b00, 0x5b01),
++	regmap_reg_range(0x5b04, 0x5b04),
++	regmap_reg_range(0x5c00, 0x5c05),
++	regmap_reg_range(0x5c08, 0x5c1b),
++
++	/* port 6 */
++	regmap_reg_range(0x6000, 0x6001),
++	regmap_reg_range(0x6013, 0x6013),
++	regmap_reg_range(0x6017, 0x6017),
++	regmap_reg_range(0x601b, 0x601b),
++	regmap_reg_range(0x601f, 0x6020),
++	regmap_reg_range(0x6030, 0x6030),
++	regmap_reg_range(0x6300, 0x6301),
++	regmap_reg_range(0x6400, 0x6401),
++	regmap_reg_range(0x6403, 0x6403),
++	regmap_reg_range(0x6410, 0x6417),
++	regmap_reg_range(0x6420, 0x6423),
++	regmap_reg_range(0x6500, 0x6507),
++	regmap_reg_range(0x6600, 0x6613),
++	regmap_reg_range(0x6800, 0x680f),
++	regmap_reg_range(0x6820, 0x6827),
++	regmap_reg_range(0x6830, 0x6837),
++	regmap_reg_range(0x6840, 0x684b),
++	regmap_reg_range(0x6900, 0x6907),
++	regmap_reg_range(0x6914, 0x691b),
++	regmap_reg_range(0x6920, 0x6920),
++	regmap_reg_range(0x6923, 0x6927),
++	regmap_reg_range(0x6a00, 0x6a03),
++	regmap_reg_range(0x6a04, 0x6a07),
++	regmap_reg_range(0x6b00, 0x6b01),
++	regmap_reg_range(0x6b04, 0x6b04),
++	regmap_reg_range(0x6c00, 0x6c05),
++	regmap_reg_range(0x6c08, 0x6c1b),
++
++	/* port 7 */
++	regmap_reg_range(0x7000, 0x7001),
++	regmap_reg_range(0x7013, 0x7013),
++	regmap_reg_range(0x7017, 0x7017),
++	regmap_reg_range(0x701b, 0x701b),
++	regmap_reg_range(0x701f, 0x7020),
++	regmap_reg_range(0x7030, 0x7030),
++	regmap_reg_range(0x7200, 0x7203),
++	regmap_reg_range(0x7206, 0x7207),
++	regmap_reg_range(0x7300, 0x7301),
++	regmap_reg_range(0x7400, 0x7401),
++	regmap_reg_range(0x7403, 0x7403),
++	regmap_reg_range(0x7410, 0x7417),
++	regmap_reg_range(0x7420, 0x7423),
++	regmap_reg_range(0x7500, 0x7507),
++	regmap_reg_range(0x7600, 0x7613),
++	regmap_reg_range(0x7800, 0x780f),
++	regmap_reg_range(0x7820, 0x7827),
++	regmap_reg_range(0x7830, 0x7837),
++	regmap_reg_range(0x7840, 0x784b),
++	regmap_reg_range(0x7900, 0x7907),
++	regmap_reg_range(0x7914, 0x791b),
++	regmap_reg_range(0x7920, 0x7920),
++	regmap_reg_range(0x7923, 0x7927),
++	regmap_reg_range(0x7a00, 0x7a03),
++	regmap_reg_range(0x7a04, 0x7a07),
++	regmap_reg_range(0x7b00, 0x7b01),
++	regmap_reg_range(0x7b04, 0x7b04),
++	regmap_reg_range(0x7c00, 0x7c05),
++	regmap_reg_range(0x7c08, 0x7c1b),
++};
++
++static const struct regmap_access_table ksz9477_register_set = {
++	.yes_ranges = ksz9477_valid_regs,
++	.n_yes_ranges = ARRAY_SIZE(ksz9477_valid_regs),
++};
++
++static const struct regmap_range ksz9896_valid_regs[] = {
++	regmap_reg_range(0x0000, 0x0003),
++	regmap_reg_range(0x0006, 0x0006),
++	regmap_reg_range(0x0010, 0x001f),
++	regmap_reg_range(0x0100, 0x0100),
++	regmap_reg_range(0x0103, 0x0107),
++	regmap_reg_range(0x010d, 0x010d),
++	regmap_reg_range(0x0110, 0x0113),
++	regmap_reg_range(0x0120, 0x0127),
++	regmap_reg_range(0x0201, 0x0201),
++	regmap_reg_range(0x0210, 0x0213),
++	regmap_reg_range(0x0300, 0x0300),
++	regmap_reg_range(0x0302, 0x030b),
++	regmap_reg_range(0x0310, 0x031b),
++	regmap_reg_range(0x0320, 0x032b),
++	regmap_reg_range(0x0330, 0x0336),
++	regmap_reg_range(0x0338, 0x033b),
++	regmap_reg_range(0x033e, 0x033e),
++	regmap_reg_range(0x0340, 0x035f),
++	regmap_reg_range(0x0370, 0x0370),
++	regmap_reg_range(0x0378, 0x0378),
++	regmap_reg_range(0x037c, 0x037d),
++	regmap_reg_range(0x0390, 0x0393),
++	regmap_reg_range(0x0400, 0x040e),
++	regmap_reg_range(0x0410, 0x042f),
++
++	/* port 1 */
++	regmap_reg_range(0x1000, 0x1001),
++	regmap_reg_range(0x1013, 0x1013),
++	regmap_reg_range(0x1017, 0x1017),
++	regmap_reg_range(0x101b, 0x101b),
++	regmap_reg_range(0x101f, 0x1020),
++	regmap_reg_range(0x1030, 0x1030),
++	regmap_reg_range(0x1100, 0x1115),
++	regmap_reg_range(0x111a, 0x111f),
++	regmap_reg_range(0x1122, 0x1127),
++	regmap_reg_range(0x112a, 0x112b),
++	regmap_reg_range(0x1136, 0x1139),
++	regmap_reg_range(0x113e, 0x113f),
++	regmap_reg_range(0x1400, 0x1401),
++	regmap_reg_range(0x1403, 0x1403),
++	regmap_reg_range(0x1410, 0x1417),
++	regmap_reg_range(0x1420, 0x1423),
++	regmap_reg_range(0x1500, 0x1507),
++	regmap_reg_range(0x1600, 0x1612),
++	regmap_reg_range(0x1800, 0x180f),
++	regmap_reg_range(0x1820, 0x1827),
++	regmap_reg_range(0x1830, 0x1837),
++	regmap_reg_range(0x1840, 0x184b),
++	regmap_reg_range(0x1900, 0x1907),
++	regmap_reg_range(0x1914, 0x1915),
++	regmap_reg_range(0x1a00, 0x1a03),
++	regmap_reg_range(0x1a04, 0x1a07),
++	regmap_reg_range(0x1b00, 0x1b01),
++	regmap_reg_range(0x1b04, 0x1b04),
++
++	/* port 2 */
++	regmap_reg_range(0x2000, 0x2001),
++	regmap_reg_range(0x2013, 0x2013),
++	regmap_reg_range(0x2017, 0x2017),
++	regmap_reg_range(0x201b, 0x201b),
++	regmap_reg_range(0x201f, 0x2020),
++	regmap_reg_range(0x2030, 0x2030),
++	regmap_reg_range(0x2100, 0x2115),
++	regmap_reg_range(0x211a, 0x211f),
++	regmap_reg_range(0x2122, 0x2127),
++	regmap_reg_range(0x212a, 0x212b),
++	regmap_reg_range(0x2136, 0x2139),
++	regmap_reg_range(0x213e, 0x213f),
++	regmap_reg_range(0x2400, 0x2401),
++	regmap_reg_range(0x2403, 0x2403),
++	regmap_reg_range(0x2410, 0x2417),
++	regmap_reg_range(0x2420, 0x2423),
++	regmap_reg_range(0x2500, 0x2507),
++	regmap_reg_range(0x2600, 0x2612),
++	regmap_reg_range(0x2800, 0x280f),
++	regmap_reg_range(0x2820, 0x2827),
++	regmap_reg_range(0x2830, 0x2837),
++	regmap_reg_range(0x2840, 0x284b),
++	regmap_reg_range(0x2900, 0x2907),
++	regmap_reg_range(0x2914, 0x2915),
++	regmap_reg_range(0x2a00, 0x2a03),
++	regmap_reg_range(0x2a04, 0x2a07),
++	regmap_reg_range(0x2b00, 0x2b01),
++	regmap_reg_range(0x2b04, 0x2b04),
++
++	/* port 3 */
++	regmap_reg_range(0x3000, 0x3001),
++	regmap_reg_range(0x3013, 0x3013),
++	regmap_reg_range(0x3017, 0x3017),
++	regmap_reg_range(0x301b, 0x301b),
++	regmap_reg_range(0x301f, 0x3020),
++	regmap_reg_range(0x3030, 0x3030),
++	regmap_reg_range(0x3100, 0x3115),
++	regmap_reg_range(0x311a, 0x311f),
++	regmap_reg_range(0x3122, 0x3127),
++	regmap_reg_range(0x312a, 0x312b),
++	regmap_reg_range(0x3136, 0x3139),
++	regmap_reg_range(0x313e, 0x313f),
++	regmap_reg_range(0x3400, 0x3401),
++	regmap_reg_range(0x3403, 0x3403),
++	regmap_reg_range(0x3410, 0x3417),
++	regmap_reg_range(0x3420, 0x3423),
++	regmap_reg_range(0x3500, 0x3507),
++	regmap_reg_range(0x3600, 0x3612),
++	regmap_reg_range(0x3800, 0x380f),
++	regmap_reg_range(0x3820, 0x3827),
++	regmap_reg_range(0x3830, 0x3837),
++	regmap_reg_range(0x3840, 0x384b),
++	regmap_reg_range(0x3900, 0x3907),
++	regmap_reg_range(0x3914, 0x3915),
++	regmap_reg_range(0x3a00, 0x3a03),
++	regmap_reg_range(0x3a04, 0x3a07),
++	regmap_reg_range(0x3b00, 0x3b01),
++	regmap_reg_range(0x3b04, 0x3b04),
++
++	/* port 4 */
++	regmap_reg_range(0x4000, 0x4001),
++	regmap_reg_range(0x4013, 0x4013),
++	regmap_reg_range(0x4017, 0x4017),
++	regmap_reg_range(0x401b, 0x401b),
++	regmap_reg_range(0x401f, 0x4020),
++	regmap_reg_range(0x4030, 0x4030),
++	regmap_reg_range(0x4100, 0x4115),
++	regmap_reg_range(0x411a, 0x411f),
++	regmap_reg_range(0x4122, 0x4127),
++	regmap_reg_range(0x412a, 0x412b),
++	regmap_reg_range(0x4136, 0x4139),
++	regmap_reg_range(0x413e, 0x413f),
++	regmap_reg_range(0x4400, 0x4401),
++	regmap_reg_range(0x4403, 0x4403),
++	regmap_reg_range(0x4410, 0x4417),
++	regmap_reg_range(0x4420, 0x4423),
++	regmap_reg_range(0x4500, 0x4507),
++	regmap_reg_range(0x4600, 0x4612),
++	regmap_reg_range(0x4800, 0x480f),
++	regmap_reg_range(0x4820, 0x4827),
++	regmap_reg_range(0x4830, 0x4837),
++	regmap_reg_range(0x4840, 0x484b),
++	regmap_reg_range(0x4900, 0x4907),
++	regmap_reg_range(0x4914, 0x4915),
++	regmap_reg_range(0x4a00, 0x4a03),
++	regmap_reg_range(0x4a04, 0x4a07),
++	regmap_reg_range(0x4b00, 0x4b01),
++	regmap_reg_range(0x4b04, 0x4b04),
++
++	/* port 5 */
++	regmap_reg_range(0x5000, 0x5001),
++	regmap_reg_range(0x5013, 0x5013),
++	regmap_reg_range(0x5017, 0x5017),
++	regmap_reg_range(0x501b, 0x501b),
++	regmap_reg_range(0x501f, 0x5020),
++	regmap_reg_range(0x5030, 0x5030),
++	regmap_reg_range(0x5100, 0x5115),
++	regmap_reg_range(0x511a, 0x511f),
++	regmap_reg_range(0x5122, 0x5127),
++	regmap_reg_range(0x512a, 0x512b),
++	regmap_reg_range(0x5136, 0x5139),
++	regmap_reg_range(0x513e, 0x513f),
++	regmap_reg_range(0x5400, 0x5401),
++	regmap_reg_range(0x5403, 0x5403),
++	regmap_reg_range(0x5410, 0x5417),
++	regmap_reg_range(0x5420, 0x5423),
++	regmap_reg_range(0x5500, 0x5507),
++	regmap_reg_range(0x5600, 0x5612),
++	regmap_reg_range(0x5800, 0x580f),
++	regmap_reg_range(0x5820, 0x5827),
++	regmap_reg_range(0x5830, 0x5837),
++	regmap_reg_range(0x5840, 0x584b),
++	regmap_reg_range(0x5900, 0x5907),
++	regmap_reg_range(0x5914, 0x5915),
++	regmap_reg_range(0x5a00, 0x5a03),
++	regmap_reg_range(0x5a04, 0x5a07),
++	regmap_reg_range(0x5b00, 0x5b01),
++	regmap_reg_range(0x5b04, 0x5b04),
++
++	/* port 6 */
++	regmap_reg_range(0x6000, 0x6001),
++	regmap_reg_range(0x6013, 0x6013),
++	regmap_reg_range(0x6017, 0x6017),
++	regmap_reg_range(0x601b, 0x601b),
++	regmap_reg_range(0x601f, 0x6020),
++	regmap_reg_range(0x6030, 0x6030),
++	regmap_reg_range(0x6100, 0x6115),
++	regmap_reg_range(0x611a, 0x611f),
++	regmap_reg_range(0x6122, 0x6127),
++	regmap_reg_range(0x612a, 0x612b),
++	regmap_reg_range(0x6136, 0x6139),
++	regmap_reg_range(0x613e, 0x613f),
++	regmap_reg_range(0x6300, 0x6301),
++	regmap_reg_range(0x6400, 0x6401),
++	regmap_reg_range(0x6403, 0x6403),
++	regmap_reg_range(0x6410, 0x6417),
++	regmap_reg_range(0x6420, 0x6423),
++	regmap_reg_range(0x6500, 0x6507),
++	regmap_reg_range(0x6600, 0x6612),
++	regmap_reg_range(0x6800, 0x680f),
++	regmap_reg_range(0x6820, 0x6827),
++	regmap_reg_range(0x6830, 0x6837),
++	regmap_reg_range(0x6840, 0x684b),
++	regmap_reg_range(0x6900, 0x6907),
++	regmap_reg_range(0x6914, 0x6915),
++	regmap_reg_range(0x6a00, 0x6a03),
++	regmap_reg_range(0x6a04, 0x6a07),
++	regmap_reg_range(0x6b00, 0x6b01),
++	regmap_reg_range(0x6b04, 0x6b04),
++};
++
++static const struct regmap_access_table ksz9896_register_set = {
++	.yes_ranges = ksz9896_valid_regs,
++	.n_yes_ranges = ARRAY_SIZE(ksz9896_valid_regs),
++};
++
+ const struct ksz_chip_data ksz_switch_chips[] = {
++	[KSZ8563] = {
++		.chip_id = KSZ8563_CHIP_ID,
++		.dev_name = "KSZ8563",
++		.num_vlans = 4096,
++		.num_alus = 4096,
++		.num_statics = 16,
++		.cpu_ports = 0x07,	/* can be configured as cpu port */
++		.port_cnt = 3,		/* total port count */
++		.ops = &ksz9477_dev_ops,
++		.mib_names = ksz9477_mib_names,
++		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
++		.reg_mib_cnt = MIB_COUNTER_NUM,
++		.regs = ksz9477_regs,
++		.masks = ksz9477_masks,
++		.shifts = ksz9477_shifts,
++		.xmii_ctrl0 = ksz9477_xmii_ctrl0,
++		.xmii_ctrl1 = ksz8795_xmii_ctrl1, /* Same as ksz8795 */
++		.supports_mii = {false, false, true},
++		.supports_rmii = {false, false, true},
++		.supports_rgmii = {false, false, true},
++		.internal_phy = {true, true, false},
++		.gbit_capable = {false, false, true},
++		.wr_table = &ksz8563_register_set,
++		.rd_table = &ksz8563_register_set,
++	},
++
+ 	[KSZ8795] = {
+ 		.chip_id = KSZ8795_CHIP_ID,
+ 		.dev_name = "KSZ8795",
+@@ -545,6 +1186,40 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 				   false, true, false},
+ 		.internal_phy	= {true, true, true, true,
+ 				   true, false, false},
++		.gbit_capable	= {true, true, true, true, true, true, true},
++		.wr_table = &ksz9477_register_set,
++		.rd_table = &ksz9477_register_set,
++	},
++
++	[KSZ9896] = {
++		.chip_id = KSZ9896_CHIP_ID,
++		.dev_name = "KSZ9896",
++		.num_vlans = 4096,
++		.num_alus = 4096,
++		.num_statics = 16,
++		.cpu_ports = 0x3F,	/* can be configured as cpu port */
++		.port_cnt = 6,		/* total physical port count */
++		.ops = &ksz9477_dev_ops,
++		.phy_errata_9477 = true,
++		.mib_names = ksz9477_mib_names,
++		.mib_cnt = ARRAY_SIZE(ksz9477_mib_names),
++		.reg_mib_cnt = MIB_COUNTER_NUM,
++		.regs = ksz9477_regs,
++		.masks = ksz9477_masks,
++		.shifts = ksz9477_shifts,
++		.xmii_ctrl0 = ksz9477_xmii_ctrl0,
++		.xmii_ctrl1 = ksz9477_xmii_ctrl1,
++		.supports_mii	= {false, false, false, false,
++				   false, true},
++		.supports_rmii	= {false, false, false, false,
++				   false, true},
++		.supports_rgmii = {false, false, false, false,
++				   false, true},
++		.internal_phy	= {true, true, true, true,
++				   true, false},
++		.gbit_capable	= {true, true, true, true, true, true},
++		.wr_table = &ksz9896_register_set,
++		.rd_table = &ksz9896_register_set,
+ 	},
+ 
+ 	[KSZ9897] = {
+@@ -573,6 +1248,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 				   false, true, true},
+ 		.internal_phy	= {true, true, true, true,
+ 				   true, false, false},
++		.gbit_capable	= {true, true, true, true, true, true, true},
+ 	},
+ 
+ 	[KSZ9893] = {
+@@ -596,6 +1272,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 		.supports_rmii = {false, false, true},
+ 		.supports_rgmii = {false, false, true},
+ 		.internal_phy = {true, true, false},
++		.gbit_capable = {true, true, true},
+ 	},
+ 
+ 	[KSZ9567] = {
+@@ -624,6 +1301,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
+ 				   false, true, true},
+ 		.internal_phy	= {true, true, true, true,
+ 				   true, false, false},
++		.gbit_capable	= {true, true, true, true, true, true, true},
+ 	},
+ 
+ 	[LAN9370] = {
+@@ -1023,6 +1701,14 @@ static int ksz_setup(struct dsa_switch *ds)
+ 	return 0;
+ }
+ 
++static void ksz_teardown(struct dsa_switch *ds)
++{
++	struct ksz_device *dev = ds->priv;
++
++	if (dev->dev_ops->teardown)
++		dev->dev_ops->teardown(ds);
++}
++
+ static void port_r_cnt(struct ksz_device *dev, int port)
+ {
+ 	struct ksz_port_mib *mib = &dev->ports[port].mib;
+@@ -1104,8 +1790,11 @@ static int ksz_phy_read16(struct dsa_switch *ds, int addr, int reg)
+ {
+ 	struct ksz_device *dev = ds->priv;
+ 	u16 val = 0xffff;
++	int ret;
+ 
+-	dev->dev_ops->r_phy(dev, addr, reg, &val);
++	ret = dev->dev_ops->r_phy(dev, addr, reg, &val);
++	if (ret)
++		return ret;
+ 
+ 	return val;
+ }
+@@ -1113,8 +1802,11 @@ static int ksz_phy_read16(struct dsa_switch *ds, int addr, int reg)
+ static int ksz_phy_write16(struct dsa_switch *ds, int addr, int reg, u16 val)
+ {
+ 	struct ksz_device *dev = ds->priv;
++	int ret;
+ 
+-	dev->dev_ops->w_phy(dev, addr, reg, val);
++	ret = dev->dev_ops->w_phy(dev, addr, reg, val);
++	if (ret)
++		return ret;
+ 
+ 	return 0;
+ }
+@@ -1203,6 +1895,16 @@ static void ksz_port_fast_age(struct dsa_switch *ds, int port)
+ 	dev->dev_ops->flush_dyn_mac_table(dev, port);
+ }
+ 
++static int ksz_set_ageing_time(struct dsa_switch *ds, unsigned int msecs)
++{
++	struct ksz_device *dev = ds->priv;
++
++	if (!dev->dev_ops->set_ageing_time)
++		return -EOPNOTSUPP;
++
++	return dev->dev_ops->set_ageing_time(dev, msecs);
++}
++
+ static int ksz_port_fdb_add(struct dsa_switch *ds, int port,
+ 			    const unsigned char *addr, u16 vid,
+ 			    struct dsa_db db)
+@@ -1366,10 +2068,12 @@ static enum dsa_tag_protocol ksz_get_tag_protocol(struct dsa_switch *ds,
+ 		proto = DSA_TAG_PROTO_KSZ8795;
+ 
+ 	if (dev->chip_id == KSZ8830_CHIP_ID ||
++	    dev->chip_id == KSZ8563_CHIP_ID ||
+ 	    dev->chip_id == KSZ9893_CHIP_ID)
+ 		proto = DSA_TAG_PROTO_KSZ9893;
+ 
+ 	if (dev->chip_id == KSZ9477_CHIP_ID ||
++	    dev->chip_id == KSZ9896_CHIP_ID ||
+ 	    dev->chip_id == KSZ9897_CHIP_ID ||
+ 	    dev->chip_id == KSZ9567_CHIP_ID)
+ 		proto = DSA_TAG_PROTO_KSZ9477;
+@@ -1484,7 +2188,8 @@ static void ksz_set_xmii(struct ksz_device *dev, int port,
+ 	case PHY_INTERFACE_MODE_RGMII_RXID:
+ 		data8 |= bitval[P_RGMII_SEL];
+ 		/* On KSZ9893, disable RGMII in-band status support */
+-		if (dev->features & IS_9893)
++		if (dev->chip_id == KSZ9893_CHIP_ID ||
++		    dev->chip_id == KSZ8563_CHIP_ID)
+ 			data8 &= ~P_MII_MAC_MODE;
+ 		break;
+ 	default:
+@@ -1656,13 +2361,13 @@ static void ksz_duplex_flowctrl(struct ksz_device *dev, int port, int duplex,
+ 	ksz_prmw8(dev, port, regs[P_XMII_CTRL_0], mask, val);
+ }
+ 
+-static void ksz_phylink_mac_link_up(struct dsa_switch *ds, int port,
+-				    unsigned int mode,
+-				    phy_interface_t interface,
+-				    struct phy_device *phydev, int speed,
+-				    int duplex, bool tx_pause, bool rx_pause)
++static void ksz9477_phylink_mac_link_up(struct ksz_device *dev, int port,
++					unsigned int mode,
++					phy_interface_t interface,
++					struct phy_device *phydev, int speed,
++					int duplex, bool tx_pause,
++					bool rx_pause)
+ {
+-	struct ksz_device *dev = ds->priv;
+ 	struct ksz_port *p;
+ 
+ 	p = &dev->ports[port];
+@@ -1676,6 +2381,15 @@ static void ksz_phylink_mac_link_up(struct dsa_switch *ds, int port,
+ 	ksz_port_set_xmii_speed(dev, port, speed);
+ 
+ 	ksz_duplex_flowctrl(dev, port, duplex, tx_pause, rx_pause);
++}
++
++static void ksz_phylink_mac_link_up(struct dsa_switch *ds, int port,
++				    unsigned int mode,
++				    phy_interface_t interface,
++				    struct phy_device *phydev, int speed,
++				    int duplex, bool tx_pause, bool rx_pause)
++{
++	struct ksz_device *dev = ds->priv;
+ 
+ 	if (dev->dev_ops->phylink_mac_link_up)
+ 		dev->dev_ops->phylink_mac_link_up(dev, port, mode, interface,
+@@ -1685,7 +2399,7 @@ static void ksz_phylink_mac_link_up(struct dsa_switch *ds, int port,
+ 
+ static int ksz_switch_detect(struct ksz_device *dev)
+ {
+-	u8 id1, id2;
++	u8 id1, id2, id4;
+ 	u16 id16;
+ 	u32 id32;
+ 	int ret;
+@@ -1730,8 +2444,8 @@ static int ksz_switch_detect(struct ksz_device *dev)
+ 
+ 		switch (id32) {
+ 		case KSZ9477_CHIP_ID:
++		case KSZ9896_CHIP_ID:
+ 		case KSZ9897_CHIP_ID:
+-		case KSZ9893_CHIP_ID:
+ 		case KSZ9567_CHIP_ID:
+ 		case LAN9370_CHIP_ID:
+ 		case LAN9371_CHIP_ID:
+@@ -1739,6 +2453,18 @@ static int ksz_switch_detect(struct ksz_device *dev)
+ 		case LAN9373_CHIP_ID:
+ 		case LAN9374_CHIP_ID:
+ 			dev->chip_id = id32;
++			break;
++		case KSZ9893_CHIP_ID:
++			ret = ksz_read8(dev, REG_CHIP_ID4,
++					&id4);
++			if (ret)
++				return ret;
++
++			if (id4 == SKU_ID_KSZ8563)
++				dev->chip_id = KSZ8563_CHIP_ID;
++			else
++				dev->chip_id = KSZ9893_CHIP_ID;
++
+ 			break;
+ 		default:
+ 			dev_err(dev->dev,
+@@ -1753,6 +2479,7 @@ static const struct dsa_switch_ops ksz_switch_ops = {
+ 	.get_tag_protocol	= ksz_get_tag_protocol,
+ 	.get_phy_flags		= ksz_get_phy_flags,
+ 	.setup			= ksz_setup,
++	.teardown		= ksz_teardown,
+ 	.phy_read		= ksz_phy_read16,
+ 	.phy_write		= ksz_phy_write16,
+ 	.phylink_get_caps	= ksz_phylink_get_caps,
+@@ -1760,6 +2487,7 @@ static const struct dsa_switch_ops ksz_switch_ops = {
+ 	.phylink_mac_link_up	= ksz_phylink_mac_link_up,
+ 	.phylink_mac_link_down	= ksz_mac_link_down,
+ 	.port_enable		= ksz_enable_port,
++	.set_ageing_time	= ksz_set_ageing_time,
+ 	.get_strings		= ksz_get_strings,
+ 	.get_ethtool_stats	= ksz_get_ethtool_stats,
+ 	.get_sset_count		= ksz_sset_count,
+@@ -1917,6 +2645,9 @@ int ksz_switch_register(struct ksz_device *dev)
+ 				     GFP_KERNEL);
+ 		if (!dev->ports[i].mib.counters)
+ 			return -ENOMEM;
++
++		dev->ports[i].ksz_dev = dev;
++		dev->ports[i].num = i;
+ 	}
+ 
+ 	/* set the real number of ports */
+diff --git a/drivers/net/dsa/microchip/ksz_common.h b/drivers/net/dsa/microchip/ksz_common.h
+index 0d9520dc6d2d..6203dcd8c8f7 100644
+--- a/drivers/net/dsa/microchip/ksz_common.h
++++ b/drivers/net/dsa/microchip/ksz_common.h
+@@ -13,9 +13,12 @@
+ #include <linux/phy.h>
+ #include <linux/regmap.h>
+ #include <net/dsa.h>
++#include <linux/irq.h>
+ 
+ #define KSZ_MAX_NUM_PORTS 8
+ 
++struct ksz_device;
++
+ struct vlan_table {
+ 	u32 table[3];
+ };
+@@ -61,6 +64,17 @@ struct ksz_chip_data {
+ 	bool supports_rmii[KSZ_MAX_NUM_PORTS];
+ 	bool supports_rgmii[KSZ_MAX_NUM_PORTS];
+ 	bool internal_phy[KSZ_MAX_NUM_PORTS];
++	bool gbit_capable[KSZ_MAX_NUM_PORTS];
++	const struct regmap_access_table *wr_table;
++	const struct regmap_access_table *rd_table;
++};
++
++struct ksz_irq {
++	u16 masked;
++	struct irq_chip chip;
++	struct irq_domain *domain;
++	int nirqs;
++	char name[16];
+ };
+ 
+ struct ksz_port {
+@@ -70,9 +84,7 @@ struct ksz_port {
+ 	struct phy_device phydev;
+ 
+ 	u32 on:1;			/* port is not disabled by hardware */
+-	u32 phy:1;			/* port has a PHY */
+ 	u32 fiber:1;			/* port is fiber */
+-	u32 sgmii:1;			/* port is SGMII */
+ 	u32 force:1;
+ 	u32 read:1;			/* read MIB counters in background */
+ 	u32 freeze:1;			/* MIB counter freeze is enabled */
+@@ -82,6 +94,9 @@ struct ksz_port {
+ 	u16 max_frame;
+ 	u32 rgmii_tx_val;
+ 	u32 rgmii_rx_val;
++	struct ksz_device *ksz_dev;
++	struct ksz_irq pirq;
++	u8 num;
+ };
+ 
+ struct ksz_device {
+@@ -99,6 +114,7 @@ struct ksz_device {
+ 	struct regmap *regmap[3];
+ 
+ 	void *priv;
++	int irq;
+ 
+ 	struct gpio_desc *reset_gpio;	/* Optional reset GPIO */
+ 
+@@ -118,17 +134,20 @@ struct ksz_device {
+ 	unsigned long mib_read_interval;
+ 	u16 mirror_rx;
+ 	u16 mirror_tx;
+-	u32 features;			/* chip specific features */
+ 	u16 port_mask;
++	struct mutex lock_irq;		/* IRQ Access */
++	struct ksz_irq girq;
+ };
+ 
+ /* List of supported models */
+ enum ksz_model {
++	KSZ8563,
+ 	KSZ8795,
+ 	KSZ8794,
+ 	KSZ8765,
+ 	KSZ8830,
+ 	KSZ9477,
++	KSZ9896,
+ 	KSZ9897,
+ 	KSZ9893,
+ 	KSZ9567,
+@@ -140,11 +159,13 @@ enum ksz_model {
+ };
+ 
+ enum ksz_chip_id {
++	KSZ8563_CHIP_ID = 0x8563,
+ 	KSZ8795_CHIP_ID = 0x8795,
+ 	KSZ8794_CHIP_ID = 0x8794,
+ 	KSZ8765_CHIP_ID = 0x8765,
+ 	KSZ8830_CHIP_ID = 0x8830,
+ 	KSZ9477_CHIP_ID = 0x00947700,
++	KSZ9896_CHIP_ID = 0x00989600,
+ 	KSZ9897_CHIP_ID = 0x00989700,
+ 	KSZ9893_CHIP_ID = 0x00989300,
+ 	KSZ9567_CHIP_ID = 0x00956700,
+@@ -254,13 +275,15 @@ struct alu_struct {
+ 
+ struct ksz_dev_ops {
+ 	int (*setup)(struct dsa_switch *ds);
++	void (*teardown)(struct dsa_switch *ds);
+ 	u32 (*get_port_addr)(int port, int offset);
+ 	void (*cfg_port_member)(struct ksz_device *dev, int port, u8 member);
+ 	void (*flush_dyn_mac_table)(struct ksz_device *dev, int port);
+ 	void (*port_cleanup)(struct ksz_device *dev, int port);
+ 	void (*port_setup)(struct ksz_device *dev, int port, bool cpu_port);
+-	void (*r_phy)(struct ksz_device *dev, u16 phy, u16 reg, u16 *val);
+-	void (*w_phy)(struct ksz_device *dev, u16 phy, u16 reg, u16 val);
++	int (*set_ageing_time)(struct ksz_device *dev, unsigned int msecs);
++	int (*r_phy)(struct ksz_device *dev, u16 phy, u16 reg, u16 *val);
++	int (*w_phy)(struct ksz_device *dev, u16 phy, u16 reg, u16 val);
+ 	void (*r_mib_cnt)(struct ksz_device *dev, int port, u16 addr,
+ 			  u64 *cnt);
+ 	void (*r_mib_pkt)(struct ksz_device *dev, int port, u16 addr,
+@@ -330,6 +353,10 @@ static inline int ksz_read8(struct ksz_device *dev, u32 reg, u8 *val)
+ 	unsigned int value;
+ 	int ret = regmap_read(dev->regmap[0], reg, &value);
+ 
++	if (ret)
++		dev_err(dev->dev, "can't read 8bit reg: 0x%x %pe\n", reg,
++			ERR_PTR(ret));
++
+ 	*val = value;
+ 	return ret;
+ }
+@@ -339,6 +366,10 @@ static inline int ksz_read16(struct ksz_device *dev, u32 reg, u16 *val)
+ 	unsigned int value;
+ 	int ret = regmap_read(dev->regmap[1], reg, &value);
+ 
++	if (ret)
++		dev_err(dev->dev, "can't read 16bit reg: 0x%x %pe\n", reg,
++			ERR_PTR(ret));
++
+ 	*val = value;
+ 	return ret;
+ }
+@@ -348,6 +379,10 @@ static inline int ksz_read32(struct ksz_device *dev, u32 reg, u32 *val)
+ 	unsigned int value;
+ 	int ret = regmap_read(dev->regmap[2], reg, &value);
+ 
++	if (ret)
++		dev_err(dev->dev, "can't read 32bit reg: 0x%x %pe\n", reg,
++			ERR_PTR(ret));
++
+ 	*val = value;
+ 	return ret;
+ }
+@@ -358,7 +393,10 @@ static inline int ksz_read64(struct ksz_device *dev, u32 reg, u64 *val)
+ 	int ret;
+ 
+ 	ret = regmap_bulk_read(dev->regmap[2], reg, value, 2);
+-	if (!ret)
++	if (ret)
++		dev_err(dev->dev, "can't read 64bit reg: 0x%x %pe\n", reg,
++			ERR_PTR(ret));
++	else
+ 		*val = (u64)value[0] << 32 | value[1];
+ 
+ 	return ret;
+@@ -366,17 +404,38 @@ static inline int ksz_read64(struct ksz_device *dev, u32 reg, u64 *val)
+ 
+ static inline int ksz_write8(struct ksz_device *dev, u32 reg, u8 value)
+ {
+-	return regmap_write(dev->regmap[0], reg, value);
++	int ret;
++
++	ret = regmap_write(dev->regmap[0], reg, value);
++	if (ret)
++		dev_err(dev->dev, "can't write 8bit reg: 0x%x %pe\n", reg,
++			ERR_PTR(ret));
++
++	return ret;
+ }
+ 
+ static inline int ksz_write16(struct ksz_device *dev, u32 reg, u16 value)
+ {
+-	return regmap_write(dev->regmap[1], reg, value);
++	int ret;
++
++	ret = regmap_write(dev->regmap[1], reg, value);
++	if (ret)
++		dev_err(dev->dev, "can't write 16bit reg: 0x%x %pe\n", reg,
++			ERR_PTR(ret));
++
++	return ret;
+ }
+ 
+ static inline int ksz_write32(struct ksz_device *dev, u32 reg, u32 value)
+ {
+-	return regmap_write(dev->regmap[2], reg, value);
++	int ret;
++
++	ret = regmap_write(dev->regmap[2], reg, value);
++	if (ret)
++		dev_err(dev->dev, "can't write 32bit reg: 0x%x %pe\n", reg,
++			ERR_PTR(ret));
++
++	return ret;
+ }
+ 
+ static inline int ksz_write64(struct ksz_device *dev, u32 reg, u64 value)
+@@ -391,40 +450,42 @@ static inline int ksz_write64(struct ksz_device *dev, u32 reg, u64 value)
+ 	return regmap_bulk_write(dev->regmap[2], reg, val, 2);
+ }
+ 
+-static inline void ksz_pread8(struct ksz_device *dev, int port, int offset,
+-			      u8 *data)
++static inline int ksz_pread8(struct ksz_device *dev, int port, int offset,
++			     u8 *data)
+ {
+-	ksz_read8(dev, dev->dev_ops->get_port_addr(port, offset), data);
++	return ksz_read8(dev, dev->dev_ops->get_port_addr(port, offset), data);
+ }
+ 
+-static inline void ksz_pread16(struct ksz_device *dev, int port, int offset,
+-			       u16 *data)
++static inline int ksz_pread16(struct ksz_device *dev, int port, int offset,
++			      u16 *data)
+ {
+-	ksz_read16(dev, dev->dev_ops->get_port_addr(port, offset), data);
++	return ksz_read16(dev, dev->dev_ops->get_port_addr(port, offset), data);
+ }
+ 
+-static inline void ksz_pread32(struct ksz_device *dev, int port, int offset,
+-			       u32 *data)
++static inline int ksz_pread32(struct ksz_device *dev, int port, int offset,
++			      u32 *data)
+ {
+-	ksz_read32(dev, dev->dev_ops->get_port_addr(port, offset), data);
++	return ksz_read32(dev, dev->dev_ops->get_port_addr(port, offset), data);
+ }
+ 
+-static inline void ksz_pwrite8(struct ksz_device *dev, int port, int offset,
+-			       u8 data)
++static inline int ksz_pwrite8(struct ksz_device *dev, int port, int offset,
++			      u8 data)
+ {
+-	ksz_write8(dev, dev->dev_ops->get_port_addr(port, offset), data);
++	return ksz_write8(dev, dev->dev_ops->get_port_addr(port, offset), data);
+ }
+ 
+-static inline void ksz_pwrite16(struct ksz_device *dev, int port, int offset,
+-				u16 data)
++static inline int ksz_pwrite16(struct ksz_device *dev, int port, int offset,
++			       u16 data)
+ {
+-	ksz_write16(dev, dev->dev_ops->get_port_addr(port, offset), data);
++	return ksz_write16(dev, dev->dev_ops->get_port_addr(port, offset),
++			   data);
+ }
+ 
+-static inline void ksz_pwrite32(struct ksz_device *dev, int port, int offset,
+-				u32 data)
++static inline int ksz_pwrite32(struct ksz_device *dev, int port, int offset,
++			       u32 data)
+ {
+-	ksz_write32(dev, dev->dev_ops->get_port_addr(port, offset), data);
++	return ksz_write32(dev, dev->dev_ops->get_port_addr(port, offset),
++			   data);
+ }
+ 
+ static inline void ksz_prmw8(struct ksz_device *dev, int port, int offset,
+@@ -483,6 +544,10 @@ static inline int is_lan937x(struct ksz_device *dev)
+ 
+ #define SW_REV_ID_M			GENMASK(7, 4)
+ 
++/* KSZ9893, KSZ9563, KSZ8563 specific register  */
++#define REG_CHIP_ID4			0x0f
++#define SKU_ID_KSZ8563			0x3c
++
+ /* Driver set switch broadcast storm protection at 10% rate. */
+ #define BROADCAST_STORM_PROT_RATE	10
+ 
+@@ -497,10 +562,6 @@ static inline int is_lan937x(struct ksz_device *dev)
+ 
+ #define SW_START			0x01
+ 
+-/* Used with variable features to indicate capabilities. */
+-#define GBIT_SUPPORT			BIT(0)
+-#define IS_9893				BIT(2)
+-
+ /* xMII configuration */
+ #define P_MII_DUPLEX_M			BIT(6)
+ #define P_MII_100MBIT_M			BIT(4)
+diff --git a/drivers/net/dsa/microchip/ksz_spi.c b/drivers/net/dsa/microchip/ksz_spi.c
+index 05bd089795f8..82e2352f55fa 100644
+--- a/drivers/net/dsa/microchip/ksz_spi.c
++++ b/drivers/net/dsa/microchip/ksz_spi.c
+@@ -66,7 +66,10 @@ static int ksz_spi_probe(struct spi_device *spi)
+ 	for (i = 0; i < ARRAY_SIZE(ksz8795_regmap_config); i++) {
+ 		rc = regmap_config[i];
+ 		rc.lock_arg = &dev->regmap_mutex;
++		rc.wr_table = chip->wr_table;
++		rc.rd_table = chip->rd_table;
+ 		dev->regmap[i] = devm_regmap_init_spi(spi, &rc);
++
+ 		if (IS_ERR(dev->regmap[i])) {
+ 			ret = PTR_ERR(dev->regmap[i]);
+ 			dev_err(&spi->dev,
+@@ -85,6 +88,8 @@ static int ksz_spi_probe(struct spi_device *spi)
+ 	if (ret)
+ 		return ret;
+ 
++	dev->irq = spi->irq;
++
+ 	ret = ksz_switch_register(dev);
+ 
+ 	/* Main DSA driver may not be started yet. */
+@@ -146,6 +151,10 @@ static const struct of_device_id ksz_dt_ids[] = {
+ 		.compatible = "microchip,ksz9477",
+ 		.data = &ksz_switch_chips[KSZ9477]
+ 	},
++	{
++		.compatible = "microchip,ksz9896",
++		.data = &ksz_switch_chips[KSZ9896]
++	},
+ 	{
+ 		.compatible = "microchip,ksz9897",
+ 		.data = &ksz_switch_chips[KSZ9897]
+@@ -160,7 +169,7 @@ static const struct of_device_id ksz_dt_ids[] = {
+ 	},
+ 	{
+ 		.compatible = "microchip,ksz8563",
+-		.data = &ksz_switch_chips[KSZ9893]
++		.data = &ksz_switch_chips[KSZ8563]
+ 	},
+ 	{
+ 		.compatible = "microchip,ksz9567",
+@@ -197,6 +206,7 @@ static const struct spi_device_id ksz_spi_ids[] = {
+ 	{ "ksz8863" },
+ 	{ "ksz8873" },
+ 	{ "ksz9477" },
++	{ "ksz9896" },
+ 	{ "ksz9897" },
+ 	{ "ksz9893" },
+ 	{ "ksz9563" },
+@@ -226,6 +236,7 @@ static struct spi_driver ksz_spi_driver = {
+ module_spi_driver(ksz_spi_driver);
+ 
+ MODULE_ALIAS("spi:ksz9477");
++MODULE_ALIAS("spi:ksz9896");
+ MODULE_ALIAS("spi:ksz9897");
+ MODULE_ALIAS("spi:ksz9893");
+ MODULE_ALIAS("spi:ksz9563");
+diff --git a/drivers/net/dsa/microchip/lan937x.h b/drivers/net/dsa/microchip/lan937x.h
+index 4e0b1dccec27..8e9e66d6728d 100644
+--- a/drivers/net/dsa/microchip/lan937x.h
++++ b/drivers/net/dsa/microchip/lan937x.h
+@@ -8,14 +8,16 @@
+ 
+ int lan937x_reset_switch(struct ksz_device *dev);
+ int lan937x_setup(struct dsa_switch *ds);
++void lan937x_teardown(struct dsa_switch *ds);
+ void lan937x_port_setup(struct ksz_device *dev, int port, bool cpu_port);
+ void lan937x_config_cpu_port(struct dsa_switch *ds);
+ int lan937x_switch_init(struct ksz_device *dev);
+ void lan937x_switch_exit(struct ksz_device *dev);
+-void lan937x_r_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 *data);
+-void lan937x_w_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 val);
++int lan937x_r_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 *data);
++int lan937x_w_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 val);
+ int lan937x_change_mtu(struct ksz_device *dev, int port, int new_mtu);
+ void lan937x_phylink_get_caps(struct ksz_device *dev, int port,
+ 			      struct phylink_config *config);
+ void lan937x_setup_rgmii_delay(struct ksz_device *dev, int port);
++int lan937x_set_ageing_time(struct ksz_device *dev, unsigned int msecs);
+ #endif
+diff --git a/drivers/net/dsa/microchip/lan937x_main.c b/drivers/net/dsa/microchip/lan937x_main.c
+index daedd2bf20c1..3e83f8ca0f09 100644
+--- a/drivers/net/dsa/microchip/lan937x_main.c
++++ b/drivers/net/dsa/microchip/lan937x_main.c
+@@ -10,6 +10,8 @@
+ #include <linux/of_mdio.h>
+ #include <linux/if_bridge.h>
+ #include <linux/if_vlan.h>
++#include <linux/irq.h>
++#include <linux/irqdomain.h>
+ #include <linux/math.h>
+ #include <net/dsa.h>
+ #include <net/switchdev.h>
+@@ -18,6 +20,8 @@
+ #include "ksz_common.h"
+ #include "lan937x.h"
+ 
++#define LAN937x_PNIRQS 6
++
+ static int lan937x_cfg(struct ksz_device *dev, u32 addr, u8 bits, bool set)
+ {
+ 	return regmap_update_bits(dev->regmap[0], addr, bits, set ? bits : 0);
+@@ -128,14 +132,14 @@ static int lan937x_internal_phy_read(struct ksz_device *dev, int addr, int reg,
+ 	return ksz_read16(dev, REG_VPHY_IND_DATA__2, val);
+ }
+ 
+-void lan937x_r_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 *data)
++int lan937x_r_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 *data)
+ {
+-	lan937x_internal_phy_read(dev, addr, reg, data);
++	return lan937x_internal_phy_read(dev, addr, reg, data);
+ }
+ 
+-void lan937x_w_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 val)
++int lan937x_w_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 val)
+ {
+-	lan937x_internal_phy_write(dev, addr, reg, val);
++	return lan937x_internal_phy_write(dev, addr, reg, val);
+ }
+ 
+ static int lan937x_sw_mdio_read(struct mii_bus *bus, int addr, int regnum)
+@@ -165,6 +169,45 @@ static int lan937x_sw_mdio_write(struct mii_bus *bus, int addr, int regnum,
+ 	return lan937x_internal_phy_write(dev, addr, regnum, val);
+ }
+ 
++static int lan937x_irq_phy_setup(struct ksz_device *dev)
++{
++	struct dsa_switch *ds = dev->ds;
++	int phy, err_phy;
++	int irq;
++	int ret;
++
++	for (phy = 0; phy < KSZ_MAX_NUM_PORTS; phy++) {
++		if (BIT(phy) & ds->phys_mii_mask) {
++			irq = irq_find_mapping(dev->ports[phy].pirq.domain,
++					       PORT_SRC_PHY_INT);
++			if (irq < 0) {
++				ret = irq;
++				goto out;
++			}
++			ds->slave_mii_bus->irq[phy] = irq;
++		}
++	}
++	return 0;
++out:
++	err_phy = phy;
++
++	for (phy = 0; phy < err_phy; phy++)
++		if (BIT(phy) & ds->phys_mii_mask)
++			irq_dispose_mapping(ds->slave_mii_bus->irq[phy]);
++
++	return ret;
++}
++
++static void lan937x_irq_phy_free(struct ksz_device *dev)
++{
++	struct dsa_switch *ds = dev->ds;
++	int phy;
++
++	for (phy = 0; phy < KSZ_MAX_NUM_PORTS; phy++)
++		if (BIT(phy) & ds->phys_mii_mask)
++			irq_dispose_mapping(ds->slave_mii_bus->irq[phy]);
++}
++
+ static int lan937x_mdio_register(struct ksz_device *dev)
+ {
+ 	struct dsa_switch *ds = dev->ds;
+@@ -194,10 +237,17 @@ static int lan937x_mdio_register(struct ksz_device *dev)
+ 
+ 	ds->slave_mii_bus = bus;
+ 
++	ret = lan937x_irq_phy_setup(dev);
++	if (ret) {
++		of_node_put(mdio_np);
++		return ret;
++	}
++
+ 	ret = devm_of_mdiobus_register(ds->dev, bus, mdio_np);
+ 	if (ret) {
+ 		dev_err(ds->dev, "unable to register MDIO bus %s\n",
+ 			bus->id);
++		lan937x_irq_phy_free(dev);
+ 	}
+ 
+ 	of_node_put(mdio_np);
+@@ -225,6 +275,10 @@ int lan937x_reset_switch(struct ksz_device *dev)
+ 	if (ret < 0)
+ 		return ret;
+ 
++	ret = ksz_write32(dev, REG_SW_INT_STATUS__4, POR_READY_INT);
++	if (ret < 0)
++		return ret;
++
+ 	ret = ksz_write32(dev, REG_SW_PORT_INT_MASK__4, 0xFF);
+ 	if (ret < 0)
+ 		return ret;
+@@ -315,6 +369,23 @@ int lan937x_change_mtu(struct ksz_device *dev, int port, int new_mtu)
+ 	return 0;
+ }
+ 
++int lan937x_set_ageing_time(struct ksz_device *dev, unsigned int msecs)
++{
++	u32 secs = msecs / 1000;
++	u32 value;
++	int ret;
++
++	value = FIELD_GET(SW_AGE_PERIOD_7_0_M, secs);
++
++	ret = ksz_write8(dev, REG_SW_AGE_PERIOD__1, value);
++	if (ret < 0)
++		return ret;
++
++	value = FIELD_GET(SW_AGE_PERIOD_19_8_M, secs);
++
++	return ksz_write16(dev, REG_SW_AGE_PERIOD__2, value);
++}
++
+ static void lan937x_set_tune_adj(struct ksz_device *dev, int port,
+ 				 u16 reg, u8 val)
+ {
+@@ -383,9 +454,289 @@ void lan937x_setup_rgmii_delay(struct ksz_device *dev, int port)
+ 	}
+ }
+ 
++int lan937x_switch_init(struct ksz_device *dev)
++{
++	dev->port_mask = (1 << dev->info->port_cnt) - 1;
++
++	return 0;
++}
++
++static void lan937x_girq_mask(struct irq_data *d)
++{
++	struct ksz_device *dev = irq_data_get_irq_chip_data(d);
++	unsigned int n = d->hwirq;
++
++	dev->girq.masked |= (1 << n);
++}
++
++static void lan937x_girq_unmask(struct irq_data *d)
++{
++	struct ksz_device *dev = irq_data_get_irq_chip_data(d);
++	unsigned int n = d->hwirq;
++
++	dev->girq.masked &= ~(1 << n);
++}
++
++static void lan937x_girq_bus_lock(struct irq_data *d)
++{
++	struct ksz_device *dev = irq_data_get_irq_chip_data(d);
++
++	mutex_lock(&dev->lock_irq);
++}
++
++static void lan937x_girq_bus_sync_unlock(struct irq_data *d)
++{
++	struct ksz_device *dev = irq_data_get_irq_chip_data(d);
++	int ret;
++
++	ret = ksz_write32(dev, REG_SW_PORT_INT_MASK__4, dev->girq.masked);
++	if (ret)
++		dev_err(dev->dev, "failed to change IRQ mask\n");
++
++	mutex_unlock(&dev->lock_irq);
++}
++
++static const struct irq_chip lan937x_girq_chip = {
++	.name			= "lan937x-global",
++	.irq_mask		= lan937x_girq_mask,
++	.irq_unmask		= lan937x_girq_unmask,
++	.irq_bus_lock		= lan937x_girq_bus_lock,
++	.irq_bus_sync_unlock	= lan937x_girq_bus_sync_unlock,
++};
++
++static int lan937x_girq_domain_map(struct irq_domain *d,
++				   unsigned int irq, irq_hw_number_t hwirq)
++{
++	struct ksz_device *dev = d->host_data;
++
++	irq_set_chip_data(irq, d->host_data);
++	irq_set_chip_and_handler(irq, &dev->girq.chip, handle_level_irq);
++	irq_set_noprobe(irq);
++
++	return 0;
++}
++
++static const struct irq_domain_ops lan937x_girq_domain_ops = {
++	.map	= lan937x_girq_domain_map,
++	.xlate	= irq_domain_xlate_twocell,
++};
++
++static void lan937x_girq_free(struct ksz_device *dev)
++{
++	int irq, virq;
++
++	free_irq(dev->irq, dev);
++
++	for (irq = 0; irq < dev->girq.nirqs; irq++) {
++		virq = irq_find_mapping(dev->girq.domain, irq);
++		irq_dispose_mapping(virq);
++	}
++
++	irq_domain_remove(dev->girq.domain);
++}
++
++static irqreturn_t lan937x_girq_thread_fn(int irq, void *dev_id)
++{
++	struct ksz_device *dev = dev_id;
++	unsigned int nhandled = 0;
++	unsigned int sub_irq;
++	unsigned int n;
++	u32 data;
++	int ret;
++
++	/* Read global interrupt status register */
++	ret = ksz_read32(dev, REG_SW_PORT_INT_STATUS__4, &data);
++	if (ret)
++		goto out;
++
++	for (n = 0; n < dev->girq.nirqs; ++n) {
++		if (data & (1 << n)) {
++			sub_irq = irq_find_mapping(dev->girq.domain, n);
++			handle_nested_irq(sub_irq);
++			++nhandled;
++		}
++	}
++out:
++	return (nhandled > 0 ? IRQ_HANDLED : IRQ_NONE);
++}
++
++static int lan937x_girq_setup(struct ksz_device *dev)
++{
++	int ret, irq;
++
++	dev->girq.nirqs = dev->info->port_cnt;
++	dev->girq.domain = irq_domain_add_simple(NULL, dev->girq.nirqs, 0,
++						 &lan937x_girq_domain_ops, dev);
++	if (!dev->girq.domain)
++		return -ENOMEM;
++
++	for (irq = 0; irq < dev->girq.nirqs; irq++)
++		irq_create_mapping(dev->girq.domain, irq);
++
++	dev->girq.chip = lan937x_girq_chip;
++	dev->girq.masked = ~0;
++
++	ret = request_threaded_irq(dev->irq, NULL, lan937x_girq_thread_fn,
++				   IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
++				   dev_name(dev->dev), dev);
++	if (ret)
++		goto out;
++
++	return 0;
++
++out:
++	lan937x_girq_free(dev);
++
++	return ret;
++}
++
++static void lan937x_pirq_mask(struct irq_data *d)
++{
++	struct ksz_port *port = irq_data_get_irq_chip_data(d);
++	unsigned int n = d->hwirq;
++
++	port->pirq.masked |= (1 << n);
++}
++
++static void lan937x_pirq_unmask(struct irq_data *d)
++{
++	struct ksz_port *port = irq_data_get_irq_chip_data(d);
++	unsigned int n = d->hwirq;
++
++	port->pirq.masked &= ~(1 << n);
++}
++
++static void lan937x_pirq_bus_lock(struct irq_data *d)
++{
++	struct ksz_port *port = irq_data_get_irq_chip_data(d);
++	struct ksz_device *dev = port->ksz_dev;
++
++	mutex_lock(&dev->lock_irq);
++}
++
++static void lan937x_pirq_bus_sync_unlock(struct irq_data *d)
++{
++	struct ksz_port *port = irq_data_get_irq_chip_data(d);
++	struct ksz_device *dev = port->ksz_dev;
++
++	ksz_pwrite8(dev, port->num, REG_PORT_INT_MASK, port->pirq.masked);
++	mutex_unlock(&dev->lock_irq);
++}
++
++static const struct irq_chip lan937x_pirq_chip = {
++	.name			= "lan937x-port",
++	.irq_mask		= lan937x_pirq_mask,
++	.irq_unmask		= lan937x_pirq_unmask,
++	.irq_bus_lock		= lan937x_pirq_bus_lock,
++	.irq_bus_sync_unlock	= lan937x_pirq_bus_sync_unlock,
++};
++
++static int lan937x_pirq_domain_map(struct irq_domain *d, unsigned int irq,
++				   irq_hw_number_t hwirq)
++{
++	struct ksz_port *port = d->host_data;
++
++	irq_set_chip_data(irq, d->host_data);
++	irq_set_chip_and_handler(irq, &port->pirq.chip, handle_level_irq);
++	irq_set_noprobe(irq);
++
++	return 0;
++}
++
++static const struct irq_domain_ops lan937x_pirq_domain_ops = {
++	.map	= lan937x_pirq_domain_map,
++	.xlate	= irq_domain_xlate_twocell,
++};
++
++static void lan937x_pirq_free(struct ksz_device *dev, u8 p)
++{
++	struct ksz_port *port = &dev->ports[p];
++	int irq, virq;
++	int irq_num;
++
++	irq_num = irq_find_mapping(dev->girq.domain, p);
++	if (irq_num < 0)
++		return;
++
++	free_irq(irq_num, port);
++
++	for (irq = 0; irq < port->pirq.nirqs; irq++) {
++		virq = irq_find_mapping(port->pirq.domain, irq);
++		irq_dispose_mapping(virq);
++	}
++
++	irq_domain_remove(port->pirq.domain);
++}
++
++static irqreturn_t lan937x_pirq_thread_fn(int irq, void *dev_id)
++{
++	struct ksz_port *port = dev_id;
++	unsigned int nhandled = 0;
++	struct ksz_device *dev;
++	unsigned int sub_irq;
++	unsigned int n;
++	u8 data;
++
++	dev = port->ksz_dev;
++
++	/* Read port interrupt status register */
++	ksz_pread8(dev, port->num, REG_PORT_INT_STATUS, &data);
++
++	for (n = 0; n < port->pirq.nirqs; ++n) {
++		if (data & (1 << n)) {
++			sub_irq = irq_find_mapping(port->pirq.domain, n);
++			handle_nested_irq(sub_irq);
++			++nhandled;
++		}
++	}
++
++	return (nhandled > 0 ? IRQ_HANDLED : IRQ_NONE);
++}
++
++static int lan937x_pirq_setup(struct ksz_device *dev, u8 p)
++{
++	struct ksz_port *port = &dev->ports[p];
++	int ret, irq;
++	int irq_num;
++
++	port->pirq.nirqs = LAN937x_PNIRQS;
++	port->pirq.domain = irq_domain_add_simple(dev->dev->of_node,
++						  port->pirq.nirqs, 0,
++						  &lan937x_pirq_domain_ops,
++						  port);
++	if (!port->pirq.domain)
++		return -ENOMEM;
++
++	for (irq = 0; irq < port->pirq.nirqs; irq++)
++		irq_create_mapping(port->pirq.domain, irq);
++
++	port->pirq.chip = lan937x_pirq_chip;
++	port->pirq.masked = ~0;
++
++	irq_num = irq_find_mapping(dev->girq.domain, p);
++	if (irq_num < 0)
++		return irq_num;
++
++	snprintf(port->pirq.name, sizeof(port->pirq.name), "port_irq-%d", p);
++
++	ret = request_threaded_irq(irq_num, NULL, lan937x_pirq_thread_fn,
++				   IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
++				   port->pirq.name, port);
++	if (ret)
++		goto out;
++
++	return 0;
++
++out:
++	lan937x_pirq_free(dev, p);
++
++	return ret;
++}
++
+ int lan937x_setup(struct dsa_switch *ds)
+ {
+ 	struct ksz_device *dev = ds->priv;
++	struct dsa_port *dp;
+ 	int ret;
+ 
+ 	/* enable Indirect Access from SPI to the VPHY registers */
+@@ -395,10 +746,22 @@ int lan937x_setup(struct dsa_switch *ds)
+ 		return ret;
+ 	}
+ 
++	if (dev->irq > 0) {
++		ret = lan937x_girq_setup(dev);
++		if (ret)
++			return ret;
++
++		dsa_switch_for_each_user_port(dp, dev->ds) {
++			ret = lan937x_pirq_setup(dev, dp->index);
++			if (ret)
++				goto out_girq;
++		}
++	}
++
+ 	ret = lan937x_mdio_register(dev);
+ 	if (ret < 0) {
+ 		dev_err(dev->dev, "failed to register the mdio");
+-		return ret;
++		goto out_pirq;
+ 	}
+ 
+ 	/* The VLAN aware is a global setting. Mixed vlan
+@@ -424,13 +787,29 @@ int lan937x_setup(struct dsa_switch *ds)
+ 		    (SW_CLK125_ENB | SW_CLK25_ENB), true);
+ 
+ 	return 0;
++
++out_pirq:
++	if (dev->irq > 0)
++		dsa_switch_for_each_user_port(dp, dev->ds)
++			lan937x_pirq_free(dev, dp->index);
++out_girq:
++	if (dev->irq > 0)
++		lan937x_girq_free(dev);
++
++	return ret;
+ }
+ 
+-int lan937x_switch_init(struct ksz_device *dev)
++void lan937x_teardown(struct dsa_switch *ds)
+ {
+-	dev->port_mask = (1 << dev->info->port_cnt) - 1;
++	struct ksz_device *dev = ds->priv;
++	struct dsa_port *dp;
+ 
+-	return 0;
++	if (dev->irq > 0) {
++		dsa_switch_for_each_user_port(dp, dev->ds)
++			lan937x_pirq_free(dev, dp->index);
++
++		lan937x_girq_free(dev);
++	}
+ }
+ 
+ void lan937x_switch_exit(struct ksz_device *dev)
+diff --git a/drivers/net/dsa/microchip/lan937x_reg.h b/drivers/net/dsa/microchip/lan937x_reg.h
+index ba4adaddb3ec..5bc16a4c4441 100644
+--- a/drivers/net/dsa/microchip/lan937x_reg.h
++++ b/drivers/net/dsa/microchip/lan937x_reg.h
+@@ -62,6 +62,12 @@
+ #define SW_FAST_AGING			BIT(1)
+ #define SW_LINK_AUTO_AGING		BIT(0)
+ 
++#define REG_SW_AGE_PERIOD__1		0x0313
++#define SW_AGE_PERIOD_7_0_M		GENMASK(7, 0)
++
++#define REG_SW_AGE_PERIOD__2		0x0320
++#define SW_AGE_PERIOD_19_8_M		GENMASK(19, 8)
++
+ #define REG_SW_MAC_CTRL_0		0x0330
+ #define SW_NEW_BACKOFF			BIT(7)
+ #define SW_PAUSE_UNH_MODE		BIT(1)
+@@ -118,6 +124,18 @@
+ /* Port Registers */
+ 
+ /* 0 - Operation */
++#define REG_PORT_INT_STATUS		0x001B
++#define REG_PORT_INT_MASK		0x001F
++
++#define PORT_TAS_INT			BIT(5)
++#define PORT_QCI_INT			BIT(4)
++#define PORT_SGMII_INT			BIT(3)
++#define PORT_PTP_INT			BIT(2)
++#define PORT_PHY_INT			BIT(1)
++#define PORT_ACL_INT			BIT(0)
++
++#define PORT_SRC_PHY_INT		1
++
+ #define REG_PORT_CTRL_0			0x0020
+ 
+ #define PORT_MAC_LOOPBACK		BIT(7)
+diff --git a/drivers/net/phy/microchip_t1.c b/drivers/net/phy/microchip_t1.c
+index d4c93d59bc53..8569a545e0a3 100644
+--- a/drivers/net/phy/microchip_t1.c
++++ b/drivers/net/phy/microchip_t1.c
+@@ -28,12 +28,16 @@
+ 
+ /* Interrupt Source Register */
+ #define LAN87XX_INTERRUPT_SOURCE                (0x18)
++#define LAN87XX_INTERRUPT_SOURCE_2              (0x08)
+ 
+ /* Interrupt Mask Register */
+ #define LAN87XX_INTERRUPT_MASK                  (0x19)
+ #define LAN87XX_MASK_LINK_UP                    (0x0004)
+ #define LAN87XX_MASK_LINK_DOWN                  (0x0002)
+ 
++#define LAN87XX_INTERRUPT_MASK_2                (0x09)
++#define LAN87XX_MASK_COMM_RDY			BIT(10)
++
+ /* MISC Control 1 Register */
+ #define LAN87XX_CTRL_1                          (0x11)
+ #define LAN87XX_MASK_RGMII_TXC_DLY_EN           (0x4000)
+@@ -424,17 +428,55 @@ static int lan87xx_phy_config_intr(struct phy_device *phydev)
+ 	int rc, val = 0;
+ 
+ 	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
+-		/* unmask all source and clear them before enable */
+-		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, 0x7FFF);
++		/* clear all interrupt */
++		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, val);
++		if (rc < 0)
++			return rc;
++
+ 		rc = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
+-		val = LAN87XX_MASK_LINK_UP | LAN87XX_MASK_LINK_DOWN;
++		if (rc < 0)
++			return rc;
++
++		rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
++				 PHYACC_ATTR_BANK_MISC,
++				 LAN87XX_INTERRUPT_MASK_2, val);
++		if (rc < 0)
++			return rc;
++
++		rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
++				 PHYACC_ATTR_BANK_MISC,
++				 LAN87XX_INTERRUPT_SOURCE_2, 0);
++		if (rc < 0)
++			return rc;
++
++		/* enable link down and comm ready interrupt */
++		val = LAN87XX_MASK_LINK_DOWN;
+ 		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, val);
++		if (rc < 0)
++			return rc;
++
++		val = LAN87XX_MASK_COMM_RDY;
++		rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
++				 PHYACC_ATTR_BANK_MISC,
++				 LAN87XX_INTERRUPT_MASK_2, val);
+ 	} else {
+ 		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, val);
+-		if (rc)
++		if (rc < 0)
+ 			return rc;
+ 
+ 		rc = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
++		if (rc < 0)
++			return rc;
++
++		rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
++				 PHYACC_ATTR_BANK_MISC,
++				 LAN87XX_INTERRUPT_MASK_2, val);
++		if (rc < 0)
++			return rc;
++
++		rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
++				 PHYACC_ATTR_BANK_MISC,
++				 LAN87XX_INTERRUPT_SOURCE_2, 0);
+ 	}
+ 
+ 	return rc < 0 ? rc : 0;
+@@ -444,6 +486,14 @@ static irqreturn_t lan87xx_handle_interrupt(struct phy_device *phydev)
+ {
+ 	int irq_status;
+ 
++	irq_status  = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
++				  PHYACC_ATTR_BANK_MISC,
++				  LAN87XX_INTERRUPT_SOURCE_2, 0);
++	if (irq_status < 0) {
++		phy_error(phydev);
++		return IRQ_NONE;
++	}
++
+ 	irq_status = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
+ 	if (irq_status < 0) {
+ 		phy_error(phydev);
+-- 
+2.34.1
+

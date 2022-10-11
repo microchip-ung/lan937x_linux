@@ -1,0 +1,6273 @@
+From b25a5c42b4f8d530776c02c50b9317f5ab2043d7 Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Wed, 21 Sep 2022 12:43:39 +0530
+Subject: [PATCH 04/15] dsa integration with latest code
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/dsa/microchip/Kconfig           |   18 +
+ drivers/net/dsa/microchip/Makefile          |    6 +
+ drivers/net/dsa/microchip/ksz_common.c      |  112 ++
+ drivers/net/dsa/microchip/ksz_common.h      |   41 +
+ drivers/net/dsa/microchip/lan937x.h         |   12 +
+ drivers/net/dsa/microchip/lan937x_acl.c     |  953 ++++++++++++++
+ drivers/net/dsa/microchip/lan937x_acl.h     |  490 ++++++++
+ drivers/net/dsa/microchip/lan937x_devlink.c |  161 +++
+ drivers/net/dsa/microchip/lan937x_devlink.h |   19 +
+ drivers/net/dsa/microchip/lan937x_flower.c  | 1244 ++++++++++++++++++
+ drivers/net/dsa/microchip/lan937x_flower.h  |  240 ++++
+ drivers/net/dsa/microchip/lan937x_main.c    |  208 ++-
+ drivers/net/dsa/microchip/lan937x_ptp.c     | 1250 +++++++++++++++++++
+ drivers/net/dsa/microchip/lan937x_ptp.h     |   73 ++
+ drivers/net/dsa/microchip/lan937x_reg.h     |  448 +++++++
+ drivers/net/dsa/microchip/lan937x_tas.c     |  119 ++
+ drivers/net/dsa/microchip/lan937x_tas.h     |   20 +
+ drivers/net/dsa/microchip/lan937x_tc.c      |  110 ++
+ drivers/net/dsa/microchip/lan937x_tc.h      |   17 +
+ include/linux/dsa/ksz_common.h              |   71 ++
+ include/net/dsa.h                           |    5 +
+ net/dsa/tag_ksz.c                           |  199 ++-
+ 22 files changed, 5800 insertions(+), 16 deletions(-)
+ create mode 100644 drivers/net/dsa/microchip/lan937x_acl.c
+ create mode 100644 drivers/net/dsa/microchip/lan937x_acl.h
+ create mode 100644 drivers/net/dsa/microchip/lan937x_devlink.c
+ create mode 100644 drivers/net/dsa/microchip/lan937x_devlink.h
+ create mode 100644 drivers/net/dsa/microchip/lan937x_flower.c
+ create mode 100644 drivers/net/dsa/microchip/lan937x_flower.h
+ create mode 100644 drivers/net/dsa/microchip/lan937x_ptp.c
+ create mode 100644 drivers/net/dsa/microchip/lan937x_ptp.h
+ create mode 100644 drivers/net/dsa/microchip/lan937x_tas.c
+ create mode 100644 drivers/net/dsa/microchip/lan937x_tas.h
+ create mode 100644 drivers/net/dsa/microchip/lan937x_tc.c
+ create mode 100644 drivers/net/dsa/microchip/lan937x_tc.h
+ create mode 100644 include/linux/dsa/ksz_common.h
+
+diff --git a/drivers/net/dsa/microchip/Kconfig b/drivers/net/dsa/microchip/Kconfig
+index 06b1efdb5e7d..cd80c61dd426 100644
+--- a/drivers/net/dsa/microchip/Kconfig
++++ b/drivers/net/dsa/microchip/Kconfig
+@@ -21,6 +21,24 @@ config NET_DSA_MICROCHIP_KSZ_SPI
+ 	help
+ 	  Select to enable support for registering switches configured through SPI.
+ 
++config NET_DSA_MICROCHIP_LAN937X_PTP
++        bool "Support for the PTP clock on the LAN937x Ethernet Switch"
++        depends on NET_DSA_MICROCHIP_KSZ_COMMON
++        depends on PTP_1588_CLOCK
++        help
++                This enables support for timestamping & PTP clock manipulation in the
++                LAN937x Ethernet switch
++
++config NET_DSA_MICROCHIP_LAN937X_TAS
++        bool "Support for the Time-Aware Scheduler on LAN937x Ethernet Switch"
++        depends on NET_DSA_MICROCHIP_KSZ_COMMON && NET_SCH_TAPRIO
++        depends on NET_SCH_TAPRIO=y || NET_DSA_MICROCHIP_KSZ_COMMON=m
++        depends on NET_DSA_MICROCHIP_LAN937X_PTP
++        help
++          This enables support for the Time aware scheduler in LAN937x DSA
++          Driver, which is controlled using a hardware offload of the
++          tc-tqprio qdisc.
++
+ config NET_DSA_MICROCHIP_KSZ8863_SMI
+ 	tristate "KSZ series SMI connected switch driver"
+ 	depends on NET_DSA_MICROCHIP_KSZ_COMMON
+diff --git a/drivers/net/dsa/microchip/Makefile b/drivers/net/dsa/microchip/Makefile
+index 28873559efc2..3a660fbea75e 100644
+--- a/drivers/net/dsa/microchip/Makefile
++++ b/drivers/net/dsa/microchip/Makefile
+@@ -4,6 +4,12 @@ ksz_switch-objs := ksz_common.o
+ ksz_switch-objs += ksz9477.o
+ ksz_switch-objs += ksz8795.o
+ ksz_switch-objs += lan937x_main.o
++ksz_switch-objs += lan937x_devlink.o
++ksz_switch-objs += lan937x_tc.o
++ksz_switch-objs += lan937x_acl.o
++ksz_switch-objs += lan937x_flower.o
++obj-$(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)     += lan937x_ptp.o
++obj-$(CONFIG_NET_DSA_MICROCHIP_LAN937X_TAS)     += lan937x_tas.o
+ obj-$(CONFIG_NET_DSA_MICROCHIP_KSZ9477_I2C)	+= ksz9477_i2c.o
+ obj-$(CONFIG_NET_DSA_MICROCHIP_KSZ_SPI)		+= ksz_spi.o
+ obj-$(CONFIG_NET_DSA_MICROCHIP_KSZ8863_SMI)	+= ksz8863_smi.o
+diff --git a/drivers/net/dsa/microchip/ksz_common.c b/drivers/net/dsa/microchip/ksz_common.c
+index fcaa71f66322..d0cf43222bd1 100644
+--- a/drivers/net/dsa/microchip/ksz_common.c
++++ b/drivers/net/dsa/microchip/ksz_common.c
+@@ -24,6 +24,10 @@
+ #include "ksz8.h"
+ #include "ksz9477.h"
+ #include "lan937x.h"
++#include "lan937x_devlink.h"
++#include "lan937x_tc.h"
++#include "lan937x_flower.h"
++#include "lan937x_reg.h"
+ 
+ #define MIB_COUNTER_NUM 0x20
+ 
+@@ -1544,6 +1548,92 @@ void ksz_r_mib_stats64(struct ksz_device *dev, int port)
+ 	spin_unlock(&mib->stats64_lock);
+ }
+ 
++static void lan937x_get_eth_phy_stats(struct dsa_switch *ds, int port,
++				      struct ethtool_eth_phy_stats *phy_stats)
++{
++	struct ksz_device *dev = ds->priv;
++	struct ksz_port_mib *mib = &dev->ports[port].mib;
++	u64 *cnt;
++
++	mutex_lock(&mib->cnt_mutex);
++
++	cnt = &mib->counters[0x05];
++	ksz9477_r_mib_pkt(dev, port, 0x05, NULL, cnt);
++
++	phy_stats->SymbolErrorDuringCarrier = *cnt;
++
++	mutex_unlock(&mib->cnt_mutex);
++}
++
++static void lan937x_get_eth_mac_stats(struct dsa_switch *ds, int port,
++				     struct ethtool_eth_mac_stats *mac_stats)
++{
++	struct ksz_device *dev = ds->priv;
++	struct ksz_port_mib *mib = &dev->ports[port].mib;
++	u64 *ctr = mib->counters;
++
++	mutex_lock(&mib->cnt_mutex);
++
++	while (mib->cnt_ptr < dev->info->mib_cnt) {
++		ksz9477_r_mib_pkt(dev, port, mib->cnt_ptr,
++				NULL, &mib->counters[mib->cnt_ptr]);
++		++mib->cnt_ptr;
++	}
++
++	mac_stats->FramesTransmittedOK = ctr[0x19] +
++		ctr[0x18] +
++		ctr[0x1A] +
++		ctr[0x17];
++
++	mac_stats->SingleCollisionFrames = ctr[0x1E];
++	mac_stats->MultipleCollisionFrames = ctr[0x1F];
++
++	mac_stats->FramesReceivedOK = ctr[0x0B] +
++		ctr[0x0A] +
++		ctr[0x0C] +
++		ctr[0x09];
++
++	mac_stats->FrameCheckSequenceErrors = ctr[0x06];
++	mac_stats->AlignmentErrors = ctr[0x07];
++	mac_stats->OctetsTransmittedOK = ctr[0x81];
++	mac_stats->FramesWithDeferredXmissions = ctr[0x1B];
++	mac_stats->LateCollisions = ctr[0x16];
++	mac_stats->FramesAbortedDueToXSColls = ctr[0x1D];
++	mac_stats->FramesLostDueToIntMACXmitError = ctr[0x83];
++
++	mac_stats->OctetsReceivedOK = ctr[0x80];
++	mac_stats->FramesLostDueToIntMACRcvError = ctr[0x82];
++	mac_stats->MulticastFramesXmittedOK = ctr[0x19];
++	mac_stats->BroadcastFramesXmittedOK = ctr[0x18];
++
++	mac_stats->MulticastFramesReceivedOK = ctr[0x0B];
++	mac_stats->BroadcastFramesReceivedOK = ctr[0x0A];
++	mac_stats->InRangeLengthErrors = ctr[0x02];
++
++	mib->cnt_ptr = 0;
++	mutex_unlock(&mib->cnt_mutex);
++}
++
++static void lan937x_get_eth_ctrl_stats(struct dsa_switch *ds, int port,
++				       struct ethtool_eth_ctrl_stats *ctrl_sts)
++{
++	struct ksz_device *dev = ds->priv;
++	struct ksz_port_mib *mib = &dev->ports[port].mib;
++	u64 *cnt;
++
++	mutex_lock(&mib->cnt_mutex);
++
++	cnt = &mib->counters[0x09];
++	ksz9477_r_mib_pkt(dev, port, 0x09, NULL, cnt);
++	ctrl_sts->MACControlFramesReceived = *cnt;
++
++	cnt = &mib->counters[0x17];
++	ksz9477_r_mib_pkt(dev, port, 0x17, NULL, cnt);
++	ctrl_sts->MACControlFramesTransmitted = *cnt;
++
++	mutex_unlock(&mib->cnt_mutex);
++}
++
+ static void ksz_get_stats64(struct dsa_switch *ds, int port,
+ 			    struct rtnl_link_stats64 *s)
+ {
+@@ -2511,6 +2601,20 @@ static const struct dsa_switch_ops ksz_switch_ops = {
+ 	.get_pause_stats	= ksz_get_pause_stats,
+ 	.port_change_mtu	= ksz_change_mtu,
+ 	.port_max_mtu		= ksz_max_mtu,
++        .devlink_param_get      = lan937x_devlink_param_get,
++        .devlink_param_set      = lan937x_devlink_param_set,
++        .devlink_info_get       = lan937x_devlink_info_get,
++	.port_setup_tc          = lan937x_setup_tc,
++        .port_mirror_add        = lan937x_port_mirror_add,
++        .port_mirror_del        = lan937x_port_mirror_del,
++        .port_policer_add       = lan937x_port_policer_add,
++        .port_policer_del       = lan937x_port_policer_del,
++        .cls_flower_add         = lan937x_cls_flower_add,
++        .cls_flower_del         = lan937x_cls_flower_del,
++        .cls_flower_stats       = lan937x_cls_flower_stats,
++	.get_eth_ctrl_stats     = lan937x_get_eth_ctrl_stats,
++	.get_eth_mac_stats      = lan937x_get_eth_mac_stats,
++	.get_eth_phy_stats      = lan937x_get_eth_phy_stats,
+ };
+ 
+ struct ksz_device *ksz_switch_alloc(struct device *base, void *priv)
+@@ -2648,6 +2752,14 @@ int ksz_switch_register(struct ksz_device *dev)
+ 
+ 		dev->ports[i].ksz_dev = dev;
+ 		dev->ports[i].num = i;
++
++		dev->ports[i].priv =
++                        devm_kzalloc(dev->dev,
++                                     sizeof(struct lan937x_flr_blk),
++                                     GFP_KERNEL);
++
++                if (!dev->ports[i].priv)
++                        return -ENOMEM;
+ 	}
+ 
+ 	/* set the real number of ports */
+diff --git a/drivers/net/dsa/microchip/ksz_common.h b/drivers/net/dsa/microchip/ksz_common.h
+index 6203dcd8c8f7..59ba71acdff6 100644
+--- a/drivers/net/dsa/microchip/ksz_common.h
++++ b/drivers/net/dsa/microchip/ksz_common.h
+@@ -7,6 +7,8 @@
+ #ifndef __KSZ_COMMON_H
+ #define __KSZ_COMMON_H
+ 
++#include <linux/dsa/ksz_common.h>
++#include <linux/ptp_clock_kernel.h>
+ #include <linux/etherdevice.h>
+ #include <linux/kernel.h>
+ #include <linux/mutex.h>
+@@ -15,6 +17,10 @@
+ #include <net/dsa.h>
+ #include <linux/irq.h>
+ 
++enum ksz_ptp_tou_mode {
++       KSZ_PTP_TOU_IDLE,
++       KSZ_PTP_TOU_PPS
++};
+ #define KSZ_MAX_NUM_PORTS 8
+ 
+ struct ksz_device;
+@@ -97,6 +103,19 @@ struct ksz_port {
+ 	struct ksz_device *ksz_dev;
+ 	struct ksz_irq pirq;
+ 	u8 num;
++
++	void * priv;
++
++#if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
++       bool hwts_tx_en;
++        struct lan937x_port_ptp_shared ptp_shared;
++        ktime_t tstamp_sync;
++       struct completion tstamp_sync_comp;
++        ktime_t tstamp_pdelayreq;
++       struct completion tstamp_pdelayreq_comp;
++        ktime_t tstamp_pdelayrsp;
++       struct completion tstamp_pdelayrsp_comp;
++#endif
+ };
+ 
+ struct ksz_device {
+@@ -122,6 +141,8 @@ struct ksz_device {
+ 	u32 chip_id;
+ 	u8 chip_rev;
+ 	int cpu_port;			/* port connected to CPU */
++	int dsa_port;
++	int smi_index;
+ 	int phy_port_cnt;
+ 	phy_interface_t compat_interface;
+ 	bool synclko_125;
+@@ -137,6 +158,14 @@ struct ksz_device {
+ 	u16 port_mask;
+ 	struct mutex lock_irq;		/* IRQ Access */
+ 	struct ksz_irq girq;
++	u16 cut_through_enable;
++#if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
++       struct ptp_clock_info ptp_caps;
++       struct ptp_clock *ptp_clock;
++       struct mutex ptp_mutex;  //to serialize the activity in the phc
++       struct ksz_device_ptp_shared ptp_shared;
++       enum ksz_ptp_tou_mode ptp_tou_mode;
++#endif
+ };
+ 
+ /* List of supported models */
+@@ -450,6 +479,12 @@ static inline int ksz_write64(struct ksz_device *dev, u32 reg, u64 value)
+ 	return regmap_bulk_write(dev->regmap[2], reg, val, 2);
+ }
+ 
++static inline int ksz_write8_bulk(struct ksz_device *dev, u32 reg, u8 *value,
++                                  u8 n)
++{
++       return regmap_bulk_write(dev->regmap[0], reg, value, n);
++}
++
+ static inline int ksz_pread8(struct ksz_device *dev, int port, int offset,
+ 			     u8 *data)
+ {
+@@ -488,6 +523,12 @@ static inline int ksz_pwrite32(struct ksz_device *dev, int port, int offset,
+ 			   data);
+ }
+ 
++static inline int ksz_pwrite8_bulk(struct ksz_device *dev, int port, int offset,
++				   u8 *data, u8 n)
++{
++	return ksz_write8_bulk(dev, dev->dev_ops->get_port_addr(port, offset), data, n);
++}
++
+ static inline void ksz_prmw8(struct ksz_device *dev, int port, int offset,
+ 			     u8 mask, u8 val)
+ {
+diff --git a/drivers/net/dsa/microchip/lan937x.h b/drivers/net/dsa/microchip/lan937x.h
+index 8e9e66d6728d..b78cc95bf7f3 100644
+--- a/drivers/net/dsa/microchip/lan937x.h
++++ b/drivers/net/dsa/microchip/lan937x.h
+@@ -20,4 +20,16 @@ void lan937x_phylink_get_caps(struct ksz_device *dev, int port,
+ 			      struct phylink_config *config);
+ void lan937x_setup_rgmii_delay(struct ksz_device *dev, int port);
+ int lan937x_set_ageing_time(struct ksz_device *dev, unsigned int msecs);
++int lan937x_cfg32(struct ksz_device *dev, u32 addr, u32 bits, bool set);
++int lan937x_port_cfg(struct ksz_device *dev, int port, int offset, u8 bits, bool set);
++void lan937x_port_mirror_del(struct dsa_switch *ds, int port, struct dsa_mall_mirror_tc_entry *mirror);
++int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
++			    struct dsa_mall_mirror_tc_entry *mirror,
++			    bool ingress, struct netlink_ext_ack *extack);
++
++int lan937x_tc_pol_rate_to_reg(u64 rate_bytes_per_sec, u8 *regval);
++int lan937x_port_policer_add(struct dsa_switch *ds, int port,
++			     struct dsa_mall_policer_tc_entry *policer);
++void lan937x_port_policer_del(struct dsa_switch *ds, int port);
++
+ #endif
+diff --git a/drivers/net/dsa/microchip/lan937x_acl.c b/drivers/net/dsa/microchip/lan937x_acl.c
+new file mode 100644
+index 000000000000..ca6170c17eee
+--- /dev/null
++++ b/drivers/net/dsa/microchip/lan937x_acl.c
+@@ -0,0 +1,953 @@
++// SPDX-License-Identifier: GPL-2.0
++/* Microchip lan937x dev ops functions
++ * Copyright (C) 2019-2021 Microchip Technology Inc.
++ */
++#include <net/dsa.h>
++#include <net/switchdev.h>
++#include "ksz_common.h"
++#include "lan937x_reg.h"
++#include "lan937x.h"
++#include "lan937x_tc.h"
++#include "lan937x_flower.h"
++#include "lan937x_acl.h"
++
++static const u8 parser_key_format[MAX_ACL_PARSER] = {
++	[PARSER_IDX_0] = PARSER_MULTI_KEY_FORMAT,
++	[PARSER_IDX_1] = PARSER_UNIVERSAL_FORMAT,
++	[PARSER_IDX_2] = PARSER_MULTI_KEY_FORMAT,
++	[PARSER_IDX_3] = PARSER_UNIVERSAL_FORMAT
++};
++
++static const struct lan937x_acl_rfr acl_rfrs_table[MAX_ACL_PARSER][MAX_RFR] = {
++	[PARSER_IDX_0] = {
++		[RFR_IDX_0] = {
++			.dissectors_covered = DST_MAC_DISSECTOR_PRESENT,
++			.layer = l2,
++			.ofst = 0,
++			.len = 6,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_1] = {
++			.dissectors_covered = SRC_MAC_DISSECTOR_PRESENT,
++			.layer = l2,
++			.ofst = 6,
++			.len = 6,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_2] = {
++			.dissectors_covered = ETHTYPE_DISSECTOR_PRESENT,
++			.layer = l2,
++			.ofst = 12,
++			.len = 2,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_3] = {
++			.dissectors_covered = IPV4_TOS_DISSECTOR_PRESENT,
++			.layer = l3,
++			.ofst = 0,
++			.len = 4,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_4] = {
++			.dissectors_covered = (IPV4_TTL_DISSECTOR_PRESENT |
++					       IPV4_PROTO_DISSECTOR_PRESENT),
++			.layer = l3,
++			.ofst = 8,
++			.len = 4,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_5] = {
++			.dissectors_covered = (IPV4_SRC_IP_DISSECTOR_PRESENT),
++			.layer = l3,
++			.ofst = 12,
++			.len = 4,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_6] = {
++			.dissectors_covered = (IPV4_DST_IP_DISSECTOR_PRESENT),
++			.layer = l3,
++			.ofst = 16,
++			.len = 4,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_7] = {
++			.dissectors_covered = (L4_SRC_PORT_DISSECTOR_PRESENT),
++			.layer = l4,
++			.ofst = 0,
++			.len = 2,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_8] = {
++			.dissectors_covered = (L4_DST_PORT_DISSECTOR_PRESENT),
++			.layer = l4,
++			.ofst = 2,
++			.len = 2,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_9] = {
++			.dissectors_covered = 0,
++		},
++	},
++	[PARSER_IDX_1] = {
++		[RFR_IDX_0] = {
++			.dissectors_covered = IPV6_TC_DISSECTOR_PRESENT,
++			.layer = l3,
++			.ofst = 0,
++			.len = 4,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_1] = {
++			.dissectors_covered = (IPV6_HOP_DISSECTOR_PRESENT |
++					       IPV6_NXTHDR_DISSECTOR_PRESENT),
++			.layer = l3,
++			.ofst = 4,
++			.len = 4,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_2] = {
++			.dissectors_covered = (IPV6_SRC_IP_DISSECTOR_PRESENT),
++			.layer = l3,
++			.ofst = 8,
++			.len = 16,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_3] = {
++			.dissectors_covered = (IPV6_DST_IP_DISSECTOR_PRESENT),
++			.layer = l3,
++			.ofst = 24,
++			.len = 16,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_4] = {
++			.dissectors_covered = 0,
++		},
++		[RFR_IDX_5] = {
++			.dissectors_covered = 0,
++		},
++		[RFR_IDX_6] = {
++			.dissectors_covered = 0,
++		},
++		[RFR_IDX_7] = {
++			.dissectors_covered = 0,
++		},
++		[RFR_IDX_8] = {
++			.dissectors_covered = 0,
++		},
++		[RFR_IDX_9] = {
++			.dissectors_covered = 0,
++		},
++	},
++	[PARSER_IDX_2] = {
++		[RFR_IDX_0] = {
++			.dissectors_covered = DST_MAC_DISSECTOR_PRESENT,
++			.layer = l2,
++			.ofst = 0,
++			.len = 6,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_1] = {
++			.dissectors_covered = SRC_MAC_DISSECTOR_PRESENT,
++			.layer = l2,
++			.ofst = 6,
++			.len = 6,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_2] = {
++			.dissectors_covered = VLAN_TAG_DISSECTORS_PRESENT,
++			.layer = l2,
++			.ofst = 12,
++			.len = 4,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_3] = {
++			.dissectors_covered = ETHTYPE_DISSECTOR_PRESENT,
++			.layer = l2,
++			.ofst = 12 + sizeof(struct vlan_tag),
++			.len = 2,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_4] = {
++			.dissectors_covered = IPV4_TOS_DISSECTOR_PRESENT,
++			.layer = l3,
++			.ofst = 0 + sizeof(struct vlan_tag),
++			.len = 4,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_5] = {
++			.dissectors_covered = (IPV4_TTL_DISSECTOR_PRESENT |
++					       IPV4_PROTO_DISSECTOR_PRESENT),
++			.layer = l3,
++			.ofst = 8 + sizeof(struct vlan_tag),
++			.len = 4,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_6] = {
++			.dissectors_covered = (IPV4_SRC_IP_DISSECTOR_PRESENT),
++			.layer = l3,
++			.ofst = 12 + sizeof(struct vlan_tag),
++			.len = 4,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_7] = {
++			.dissectors_covered = (IPV4_DST_IP_DISSECTOR_PRESENT),
++			.layer = l3,
++			.ofst = 16 + sizeof(struct vlan_tag),
++			.len = 4,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_8] = {
++			.dissectors_covered = (L4_SRC_PORT_DISSECTOR_PRESENT),
++			.layer = l4,
++			.ofst = 0 + sizeof(struct vlan_tag),
++			.len = 2,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_9] = {
++			.dissectors_covered = (L4_DST_PORT_DISSECTOR_PRESENT),
++			.layer = l4,
++			.ofst = 2 + sizeof(struct vlan_tag),
++			.len = 2,
++			.rng_match_en = false,
++		},
++	},
++	[PARSER_IDX_3] = {
++		[RFR_IDX_0] = {
++			.dissectors_covered = IPV6_TC_DISSECTOR_PRESENT,
++			.layer = l3,
++			.ofst = 0,
++			.len = 4,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_1] = {
++			.dissectors_covered = (IPV6_HOP_DISSECTOR_PRESENT |
++					       IPV6_NXTHDR_DISSECTOR_PRESENT),
++			.layer = l3,
++			.ofst = 4,
++			.len = 4,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_2] = {
++			.dissectors_covered = (IPV6_SRC_IP_DISSECTOR_PRESENT),
++			.layer = l3,
++			.ofst = 8,
++			.len = 16,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_3] = {
++			.dissectors_covered = (IPV6_DST_IP_DISSECTOR_PRESENT),
++			.layer = l3,
++			.ofst = 24,
++			.len = 16,
++			.rng_match_en = false,
++		},
++		[RFR_IDX_4] = {
++			.dissectors_covered = 0,
++		},
++		[RFR_IDX_5] = {
++			.dissectors_covered = 0,
++		},
++		[RFR_IDX_6] = {
++			.dissectors_covered = 0,
++		},
++		[RFR_IDX_7] = {
++			.dissectors_covered = 0,
++		},
++		[RFR_IDX_8] = {
++			.dissectors_covered = 0,
++		},
++		[RFR_IDX_9] = {
++			.dissectors_covered = 0,
++		},
++	}
++};
++
++int lan937x_get_acl_req(enum lan937x_filter_type type,
++			u8 *parser_idx, u8 *n_entries)
++{
++	switch (type) {
++	case LAN937x_VLAN_UNAWARE_FILTER:
++		*parser_idx = 0;
++		*n_entries = 2;
++		break;
++	case LAN937x_VLAN_AWARE_FILTER:
++		*parser_idx = 2;
++		*n_entries = 2;
++		break;
++	case LAN937x_BCAST_FILTER:
++	default:
++		return -EINVAL;
++	}
++
++	return 0;
++}
++
++static int lan937x_wait_tcam_busy(struct ksz_device *dev, int port)
++{
++	unsigned int val;
++
++	return regmap_read_poll_timeout(dev->regmap[2],
++					PORT_CTRL_ADDR(port,
++						       REG_ACL_PORT_ARACR),
++					val,
++					val & ACL_ARACR_TCAM_OP_STS,
++					10,
++					10000);
++}
++
++static int lan937x_set_acl_access_ctl(struct ksz_device *dev,
++				      int port,
++				      struct lan937x_acl_access_ctl *acc_ctl)
++{
++	u32 val;
++	int ret;
++
++	ret = lan937x_wait_tcam_busy(dev, port);
++	if (ret)
++		return ret;
++
++	val = acl_acc_ctl(acc_ctl);
++
++	ksz_pwrite32(dev, port, REG_ACL_PORT_ARACR, val);
++
++	ret = lan937x_wait_tcam_busy(dev, port);
++	return ret;
++}
++
++static int lan937x_acl_entry_write(struct ksz_device *dev,
++				   u8 port, u8 entry_idx,
++				   struct lan937x_acl_entry *acl_entry)
++{
++	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
++	struct lan937x_acl_access_ctl access_ctl;
++	struct lan937x_acl_byte_en byte_en_cfg;
++	int ret;
++
++	ret = lan937x_wait_tcam_busy(dev, port);
++	if (ret)
++		return ret;
++
++	/* Write TCAM mask in ADR */
++	ret = ksz_pwrite8_bulk(dev, port, REG_ACL_PORT_ADR,
++				   &acl_entry->acl_mask[0],
++				   MAX_ACL_DATA_MASK_SIZE);
++	if (ret)
++		return ret;
++
++	/* Write TCAM Data in ADR */
++	ret = ksz_pwrite8_bulk(dev, port,
++				   REG_ACL_PORT_ADR + MAX_ACL_DATA_MASK_SIZE,
++				   &acl_entry->acl_data[0],
++				   MAX_ACL_DATA_MASK_SIZE);
++	if (ret)
++		return ret;
++
++	/* Write AAR */
++	ret = ksz_pwrite8_bulk(dev, port, REG_ACL_PORT_AAR,
++				   &acl_entry->acl_action[0],
++				   MAX_ACL_ACTION_SIZE);
++	if (ret)
++		return ret;
++
++	/* Each bit of this BYTE_EN register defines which
++	 * bytes in ADR & AAR are writable
++	 */
++	memset(&byte_en_cfg, 0xFF, sizeof(byte_en_cfg));
++	ret = ksz_pwrite8_bulk(dev, port, REG_ACL_PORT_ABER,
++				   &byte_en_cfg.acl_mask[0],
++				   sizeof(byte_en_cfg));
++	if (ret)
++		return ret;
++
++	/* HW workaround for ACL write */
++	ksz_pwrite16(dev, port, 0x66C, 0xFFFF);
++
++	/* HW workaround for ACL write */
++	ksz_pwrite16(dev, port, 0x672, 0xFFFF);
++
++	/* Clear data in access_ctl */
++	clr_data(access_ctl);
++
++	/* Set TCAM Control Register for TCAM Entry Write */
++	set_tcam_addr(access_ctl, entry_idx);
++	set_pri_low(access_ctl, true);
++	set_tcam_vben(access_ctl, true);
++	set_tcam_vbi(access_ctl, true);
++	set_tcam_row_vld(access_ctl, 0x0F);
++	set_tcam_req(access_ctl, TCAM_REQ_TYPE_WRITE_TCAM);
++	set_tcam_acc(access_ctl, TCAM_MASK_DATA);
++
++	/* Write ACL register */
++	ret = lan937x_set_acl_access_ctl(dev,
++					 port, &access_ctl);
++	if (ret)
++		return ret;
++
++	res->tcam_entries_used[entry_idx] = true;
++
++	return ret;
++}
++
++static void lan937x_cpy_array_to_entry(u8 *s_data, u8 *s_mask,
++				       struct lan937x_acl_entry *acl_entry,
++				       u8 offset,
++				       u8 n)
++{
++	u8 *d_mask = &acl_entry->acl_mask[offset];
++	u8 *d_data = &acl_entry->acl_data[offset];
++	u8 i;
++
++	for (i = 0; i < n; i++) {
++		/* Apply mask to data given from the rule */
++		s_data[i] &= s_mask[i];
++
++		/* As per datasheet, TCAM mask should be inverted of data
++		 * for strict match
++		 */
++		s_mask[i] &= (~s_data[i]);
++
++		/* Copy Mask & Data to TCAM Entry */
++		d_mask[i] = s_mask[i];
++		d_data[i] = s_data[i];
++	}
++}
++
++static void lan937x_cpy_ethaddr_to_entry(struct lan937x_val_mask_u64 *ethaddr,
++					 struct lan937x_acl_entry *acl_entry,
++					 u8 offset)
++{
++	u64 tdata = ethaddr->value;
++	u64 tmask = ethaddr->mask;
++
++	/* Apply mask to data given from the rule */
++	tdata &= tmask;
++
++	/* As per datasheet, TCAM mask should be inverted of data
++	 * for strict match
++	 */
++	tmask &= (~tdata);
++
++	/* Copy Mask & Data to TCAM Entry */
++	u64_to_ether_addr(tmask, &acl_entry->acl_mask[offset]);
++	u64_to_ether_addr(tdata, &acl_entry->acl_data[offset]);
++}
++
++static void lan937x_cpy_u8_to_entry(struct lan937x_val_mask_u8 *field,
++				    struct lan937x_acl_entry *acl_entry,
++				    u8 offset)
++{
++	u8 tdata = field->value;
++	u8 tmask = field->mask;
++
++	/* Apply mask to data given from the rule */
++	tdata &= tmask;
++
++	/* As per datasheet, TCAM mask should be inverted of data
++	 * for strict match
++	 */
++	tmask &= (~tdata);
++
++	/* Copy Mask & Data to TCAM Entry */
++	acl_entry->acl_mask[offset] |= (tmask);
++	acl_entry->acl_data[offset] |= (tdata);
++}
++
++static void lan937x_cpy_u16_to_entry(struct lan937x_val_mask_u16 *field,
++				     struct lan937x_acl_entry *acl_entry,
++				     u8 offset)
++{
++	u16 tdata;
++	u16 tmask;
++
++	*((__be16 *)&tdata) = cpu_to_be16(field->value);
++	*((__be16 *)&tmask) = cpu_to_be16(field->mask);
++
++	/* Apply mask to data given from the rule */
++	tdata &= tmask;
++
++	/* As per datasheet, TCAM mask should be inverted of data
++	 * for strict match
++	 */
++	tmask &= (~tdata);
++
++	acl_entry->acl_mask[offset + 1] |= ((tmask & 0xFF00) >> 8);
++	acl_entry->acl_mask[offset] |= (tmask & 0x00FF);
++	acl_entry->acl_data[offset + 1] |= (tdata & 0xFF00) >> 8;
++	acl_entry->acl_data[offset] |= (tdata & 0x00FF);
++}
++
++static int lan937x_acl_fill_entry(struct ksz_device *dev,
++				  int port, u8 parser_idx,
++				  enum lan937x_acl_dissector_type disctr,
++				  struct lan937x_key *key,
++				  struct lan937x_acl_entry *acl_entry)
++{
++	const struct lan937x_acl_rfr *rfr_ptr = acl_rfrs_table[parser_idx];
++	u8 *acl_mask = acl_entry->acl_mask;
++	u8 *acl_data = acl_entry->acl_data;
++	u8 ofst = 0;
++	int i;
++
++	if (parser_key_format[parser_idx] == PARSER_MULTI_KEY_FORMAT)
++		ofst += TCAM_MULTI_KEY_ENTRY_START;
++
++	for (i = 0; i < MAX_RFR_PER_PARSER; i++) {
++		/* No more valid RFRs in Parser */
++		if (!rfr_ptr[i].dissectors_covered)
++			break;
++
++		if (!(rfr_ptr[i].dissectors_covered & BIT(disctr))) {
++			/* Accumulate the length of all previous RFRs till
++			 * the intended RFR which carries the intended
++			 * dissector. Accumulated offset is finally used as the
++			 * offset in TCAM entry to fill TCAM data
++			 */
++			ofst += rfr_ptr[i].len;
++			continue;
++		}
++
++		switch (disctr) {
++		case acl_dst_mac_dissector:
++			lan937x_cpy_ethaddr_to_entry(&key->dst_mac,
++						     acl_entry,
++							ofst);
++			break;
++		case acl_src_mac_dissector:
++			lan937x_cpy_ethaddr_to_entry(&key->src_mac,
++						     acl_entry,
++							ofst);
++			break;
++		case acl_vlan_id_dissector: {
++			u16 tdata;
++			u16 tmask;
++
++			*((__be16 *)&tdata) = cpu_to_be16(key->vlan_id.value);
++			*((__be16 *)&tmask) = cpu_to_be16(key->vlan_id.mask);
++
++			tdata &= tmask;
++			tmask &= (~tdata);
++
++			acl_mask[ofst + 2] |= (tmask & 0x0F);
++			acl_mask[ofst + 3] |= (tmask & 0xFF00) >> 8;
++			acl_data[ofst + 2] |= (tdata & 0x0F);
++			acl_data[ofst + 3] |= (tdata & 0xFF00) >> 8;
++			break;
++		}
++		case acl_vlan_pcp_dissector: {
++			u16 tdata = key->vlan_prio.value;
++			u16 tmask = key->vlan_prio.mask;
++
++			tdata &= tmask;
++			tmask &= (~tdata);
++
++			acl_mask[ofst + 2] |= (tmask & 0x07) << 5;
++			acl_data[ofst + 2] |= (tdata & 0x07) << 5;
++			break;
++		}
++		case acl_ethtype_dissector:
++			lan937x_cpy_u16_to_entry(&key->ethtype,
++						 acl_entry,
++						 ofst);
++			break;
++		case acl_ipv4_tos_dissector: {
++			/* IPV4 TOS starts at offset 1 byte from RFR start */
++			lan937x_cpy_u8_to_entry(&key->ipv4.tos,
++						acl_entry,
++						ofst + 1);
++			break;
++		}
++		case acl_ipv4_ttl_dissector: {
++			lan937x_cpy_u8_to_entry(&key->ipv4.ttl,
++						acl_entry,
++						ofst);
++			break;
++		}
++		case acl_ipv4_protocol_dissector: {
++			/* IPV4 proto starts at offset 1 byte from RFR start */
++			lan937x_cpy_u8_to_entry(&key->ipv4.proto,
++						acl_entry,
++						ofst + 1);
++			break;
++		}
++		case acl_ipv4_src_ip_dissector: {
++			lan937x_cpy_array_to_entry(key->ipv4.sip.value,
++						   key->ipv4.sip.mask,
++						   acl_entry,
++						   ofst, 0x04);
++			break;
++		}
++		case acl_ipv4_dst_ip_dissector: {
++			lan937x_cpy_array_to_entry(key->ipv4.dip.value,
++						   key->ipv4.dip.mask,
++						   acl_entry,
++						   ofst, 0x04);
++			break;
++		}
++		case acl_ipv6_tc_dissector: {
++			u8 tdata = key->ipv6.tc.value;
++			u8 tmask = key->ipv6.tc.mask;
++
++			tdata &= tmask;
++			tmask &= (~tdata);
++
++			acl_mask[ofst]	|= ((tmask & 0xF0) >> 0x04);
++			acl_data[ofst]	|= ((tdata & 0xF0) >> 0x04);
++			acl_mask[ofst + 1] |= ((tmask & 0x0F) << 0x04);
++			acl_data[ofst + 1] |= ((tdata & 0x0F) << 0x04);
++			break;
++		}
++		case acl_ipv6_nxt_hdr_dissector: {
++			/* IPV6 next header starts at offset 2 byte from RFR
++			 * start
++			 */
++			lan937x_cpy_u8_to_entry(&key->ipv6.next_hdr,
++						acl_entry,
++						ofst + 2);
++			break;
++		}
++		case acl_ipv6_hop_dissector: {
++			/* IPV6 hop starts at offset 3 byte from RFR start */
++			lan937x_cpy_u8_to_entry(&key->ipv6.hop,
++						acl_entry,
++						ofst + 3);
++			break;
++		}
++		case acl_ipv6_src_ip_dissector: {
++			lan937x_cpy_array_to_entry(key->ipv6.sip.value,
++						   key->ipv6.sip.mask,
++						   acl_entry,
++						   ofst, 16);
++			break;
++		}
++		case acl_ipv6_dst_ip_dissector: {
++			lan937x_cpy_array_to_entry(key->ipv6.dip.value,
++						   key->ipv6.dip.mask,
++						   acl_entry,
++						   ofst, 16);
++			break;
++		}
++		case acl_l4_src_port_dissector: {
++			lan937x_cpy_u16_to_entry(&key->src_port,
++						 acl_entry,
++						 ofst);
++			break;
++		}
++		case acl_l4_dst_port_dissector: {
++			lan937x_cpy_u16_to_entry(&key->dst_port,
++						 acl_entry,
++						 ofst);
++			break;
++		}
++		default:
++			break;
++		} /* switch ends */
++
++		return 0;
++	}
++
++	return -EINVAL;
++}
++
++int lan937x_acl_program_entry(struct ksz_device *dev, int port,
++			      struct lan937x_flower_rule *rule)
++{
++	struct lan937x_flower_action *action = &rule->flower->action;
++	u32 actions_presence_mask = action->actions_presence_mask;
++	struct lan937x_key *key = &rule->flower->filter.key;
++	struct lan937x_resrc_alloc *resrc = rule->resrc;
++	u32 acl_dissector_map = key->acl_dissector_map;
++	u8 n_entries = resrc->type.tcam.n_entries;
++	u8 parser = resrc->type.tcam.parser;
++	struct lan937x_acl_entry *acl_entry;
++	int ret = EINVAL;
++	u8 *acl_action;
++	u8 i, j;
++
++	acl_entry = devm_kzalloc(dev->dev, sizeof(*acl_entry) * n_entries,
++				 GFP_KERNEL);
++
++	if (!acl_entry)
++		return -ENOSPC;
++
++	for (i = 0; ((acl_dissector_map != 0) &&
++		     (i < LAN937X_NUM_DISSECTORS_SUPPORTED)); i++) {
++		if (!(acl_dissector_map & BIT(i)))
++			continue;
++
++		acl_dissector_map &= ~BIT(i);
++
++		for (j = 0; j < n_entries; j++) {
++			ret = lan937x_acl_fill_entry(dev, port, parser + j,
++						     i, key, &acl_entry[j]);
++			if (!ret)
++				break;
++		}
++		if (ret)
++			goto out;
++	}
++
++	for (i = 0; ((actions_presence_mask != 0) &&
++		     (i < LAN937X_NUM_ACTIONS_SUPPORTED)); i++) {
++		if (!(actions_presence_mask & BIT(i)))
++			continue;
++
++		actions_presence_mask &= ~BIT(i);
++
++		/* Only use the first entry to fill the action */
++		acl_action = acl_entry[0].acl_action;
++
++		switch (i) {
++		case LAN937X_ACT_REDIRECT_FLOW:
++			set_map_mode(acl_action, MM_REPLACE_FWD_LKUP_TABLE);
++			set_dst_port(acl_action, action->redirect_port_mask);
++			break;
++		case LAN937X_ACT_STREAM_POLICE:
++		case LAN937X_ACT_STREAM_GATE:
++			set_map_mode(acl_action, 2);
++			set_dst_port(acl_action, 0xff);
++			set_strm_en(acl_action, resrc->type.strm_flt.en);
++			set_strm_id(acl_action, resrc->type.strm_flt.index);
++			break;
++		case LAN937X_ACT_DROP:
++			set_map_mode(acl_action, MM_REPLACE_FWD_LKUP_TABLE);
++			/* Donot forward to any valid port */
++			set_dst_port(acl_action, 0x00);
++			break;
++		case LAN937X_ACT_PRIORITY:
++			set_que_en(acl_action);
++			set_que_sel(acl_action, action->skbedit_prio);
++			break;
++		default:
++			ret = -EINVAL;
++			goto out;
++		}
++	}
++	if (resrc->type.tcam.cntr != STATS_COUNTER_NOT_ASSIGNED)
++		set_fr_counter(acl_action, resrc->type.tcam.cntr);
++
++	/* For Multiple format Key
++	 * Bit 383:382 PARSER_NUM Programmed to the 1st parser used TCAM rule
++	 */
++	if (parser_key_format[parser] == PARSER_MULTI_KEY_FORMAT) {
++		acl_entry[0].acl_mask[0] |= ((~parser) << 6);
++		acl_entry[0].acl_data[0] |= (parser << 6);
++	}
++
++	for (j = 0; j < n_entries; j++) {
++		ret = lan937x_acl_entry_write(dev, port,
++					      resrc->type.tcam.index + j,
++					      &acl_entry[j]);
++		if (ret)
++			break;
++	}
++
++out:
++	devm_kfree(dev->dev, acl_entry);
++	return ret;
++}
++
++static int lan937x_set_rfr_entry(struct ksz_device *dev, int port,
++				 u8 parser_idx, u8 rfr_idx,
++				 const struct lan937x_acl_rfr *rfr_entry)
++{
++	struct lan937x_rfr_reg_type rfr_data;
++	u8 tcam_addr_access;
++	u16 reg_ofst;
++
++	tcam_addr_access = parser_idx % 2;
++
++	reg_ofst = ACL_CTRL_BASE_ADDR + (rfr_idx * MAX_RFR_SIZE) +
++		   (tcam_addr_access * MAX_RFR_SIZE * MAX_RFR_PER_PARSER);
++
++	if (!(rfr_entry->dissectors_covered)) {
++		/* Ensure unused RFRs arent filled with junk */
++		rfr_data.u32value = 0x00000000;
++		goto pgm;
++	}
++
++	rfr_data.u32value = (RFR_OSFT_L4_RELATV(rfr_entry->layer == l4) |
++			     RFR_OSFT_L3_RELATV(rfr_entry->layer == l3) |
++			     RFR_OSFT_L2_RELATV(rfr_entry->layer == l2));
++	rfr_data.u32value |= RFR_OFST(rfr_entry->ofst);
++	rfr_data.u32value |= RFR_LENGTH(rfr_entry->len);
++	rfr_data.u32value |= RFR_RNG_MATCH_EN(rfr_entry->rng_match_en);
++	rfr_data.u32value |= RFR_RNG_OSFT(rfr_entry->rng_ofst);
++
++pgm:
++	ksz_pwrite32(dev, port, reg_ofst, rfr_data.u32value);
++
++	return 0;
++}
++
++static int lan937x_program_rfrs(struct ksz_device *dev,
++				int port)
++{
++	struct lan937x_acl_access_ctl access_ctl;
++	const struct lan937x_acl_rfr *rfr_entry;
++	int parser_idx, rfr_idx;
++	int count = 0;
++	int ret;
++
++	for (parser_idx = 0; parser_idx < MAX_ACL_PARSERS; parser_idx++) {
++		for (rfr_idx = 0; rfr_idx < MAX_RFR_PER_PARSER; rfr_idx++) {
++			rfr_entry = &acl_rfrs_table[parser_idx][rfr_idx];
++			ret = lan937x_set_rfr_entry(dev, port, parser_idx,
++						    rfr_idx, rfr_entry);
++			if (ret)
++				return ret;
++		}
++
++		/* Increament the parser count */
++		count++;
++
++		/* At once Rule Format regs for 2 Parsers are programmable */
++		if (count != (MAX_PARSER_PER_ENTRY))
++			continue;
++
++		/* Restart the parser counter */
++		count = 0;
++
++		clr_data(access_ctl);
++
++		if (parser_idx < MAX_PARSER_PER_ENTRY)
++			set_tcam_addr(access_ctl, TCAM_PARSER_0_1);
++		else
++			set_tcam_addr(access_ctl, TCAM_PARSER_2_3);
++
++		set_tcam_vben(access_ctl, true);
++		set_tcam_vbi(access_ctl, true);
++		set_tcam_row_vld(access_ctl, 0x0F);
++		set_tcam_req(access_ctl, TCAM_REQ_TYPE_WRITE_RFR);
++		set_tcam_acc(access_ctl, TCAM_MASK_DATA);
++
++		ret = lan937x_set_acl_access_ctl(dev, port, &access_ctl);
++		if (ret)
++			return ret;
++	}
++
++	return ret;
++}
++
++int lan937x_init_acl_parsers(struct ksz_device *dev, int port)
++{
++	int ret;
++
++	ret = lan937x_program_rfrs(dev, port);
++	if (ret)
++		return ret;
++
++	ksz_pwrite32(dev, port, REG_ACL_PORT_PCTRL,
++			       (PCTRL_TWO_FORMAT_TWO_PARSER_EACH |
++				PCTRL_KEY2_VLAN_TAG_EN	|
++				PCTRL_KEYTYPE0_MULTI_FMT |
++				PCTRL_KEYTYPE2_MULTI_FMT));
++
++	ksz_pwrite8(dev, port, REG_PORT_RX_AUTH_CTL,
++			      (AUTH_CTL_ACL_PASS_MODE | AUTH_CTL_ACL_ENABLE));
++
++	return 0;
++}
++
++int lan937x_acl_free_entry(struct ksz_device *dev, int port,
++			   struct lan937x_flower_rule *rule)
++{
++	struct lan937x_resrc_alloc *resrc = rule->resrc;
++	u8 n_entries = resrc->type.tcam.n_entries;
++	struct lan937x_acl_access_ctl access_ctl;
++	bool last_entry = false;
++	u8 i, row;
++	int ret;
++
++	/* Nothing to delete */
++	if (!n_entries)
++		return 0;
++
++	/* Shift all the TCAM Entries that are below the current entry upwards
++	 * by n_entries time to over write the current rule
++	 */
++	clr_data(access_ctl);
++
++	/* Assign the first entry index */
++	set_row_shift(access_ctl, (n_entries + resrc->type.tcam.index));
++
++	/* Identify the row where the Last Entry is present*/
++	ret = lan937x_assign_tcam_entries(dev, port, 0x01,
++					  &access_ctl.tcam_addr);
++	if (ret == -ENOSPC) {
++		set_tcam_addr(access_ctl, LAN937X_NUM_TCAM_ENTRIES);
++		last_entry = true;
++	}
++
++	if (access_ctl.row_shift == access_ctl.tcam_addr ||
++	    last_entry) {
++		/* There are no valid entries below the current
++		 * rule under deletion. So No shifting is necessary
++		 */
++		set_pri_low(access_ctl, true);
++		set_tcam_vben(access_ctl, true);
++		set_tcam_vbi(access_ctl, false);
++		set_tcam_row_vld(access_ctl, 0x0F);
++		set_num_shift(access_ctl, (n_entries - 1));
++		set_tcam_req(access_ctl, TCAM_REQ_TYPE_SHIFT_TCAM);
++		set_tcam_acc(access_ctl, TCAM_MASK_DATA);
++
++		ret = lan937x_set_acl_access_ctl(dev, port, &access_ctl);
++		if (ret)
++			return ret;
++	}
++
++	/* After shifting upward, invalidate the very last n_entries.
++	 * If last_entry is true then shifting will not happen, but the last
++	 * n_entries will be invalidated, which will decommision the rule
++	 */
++	row = access_ctl.tcam_addr;
++	for (i = (row - 1); i > (row - n_entries); i--) {
++		clr_data(access_ctl);
++
++		set_tcam_addr(access_ctl, i);
++		set_pri_low(access_ctl, true);
++		set_tcam_vben(access_ctl, true);
++		/*vbi - 0: makes TCAM entry invalid.*/
++		set_tcam_vbi(access_ctl, false);
++		set_tcam_row_vld(access_ctl, 0x0F);
++		set_tcam_req(access_ctl, TCAM_REQ_TYPE_WRITE_TCAM);
++		set_tcam_acc(access_ctl, TCAM_MASK_DATA);
++
++		ret = lan937x_set_acl_access_ctl(dev, port, &access_ctl);
++		if (ret)
++			return ret;
++	}
++
++	/* Deleted rule no longer has any tcam entries */
++	resrc->type.tcam.n_entries = 0x00;
++
++	return ret;
++}
++
++irqreturn_t lan937x_acl_isr(struct ksz_device *dev, int port)
++{
++	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
++	u8 intsts;
++
++	ksz_pread8(dev, port, REG_ACL_PORT_INT_STS, &intsts);
++
++	if (intsts & ACL_FR_COUNT_OVR0) {
++		res->tcam_match_cntr_bkup[0] += ACL_FR_COUNT_MAX_VALUE;
++		res->tcam_match_cntr_bkup[0] &= ~((u64)ACL_FR_COUNT_MAX_VALUE);
++	}
++	if (intsts & ACL_FR_COUNT_OVR1) {
++		res->tcam_match_cntr_bkup[1] += ACL_FR_COUNT_MAX_VALUE;
++		res->tcam_match_cntr_bkup[1] &= ~((u64)ACL_FR_COUNT_MAX_VALUE);
++	}
++	if (intsts & ACL_FR_COUNT_OVR2) {
++		res->tcam_match_cntr_bkup[2] += ACL_FR_COUNT_MAX_VALUE;
++		res->tcam_match_cntr_bkup[2] &= ~((u64)ACL_FR_COUNT_MAX_VALUE);
++	}
++	if (intsts & ACL_FR_COUNT_OVR3) {
++		res->tcam_match_cntr_bkup[3] += ACL_FR_COUNT_MAX_VALUE;
++		res->tcam_match_cntr_bkup[3] &= ~((u64)ACL_FR_COUNT_MAX_VALUE);
++	}
++
++	ksz_pwrite8(dev, port, REG_ACL_PORT_INT_STS, intsts);
++
++	return IRQ_HANDLED;
++}
+diff --git a/drivers/net/dsa/microchip/lan937x_acl.h b/drivers/net/dsa/microchip/lan937x_acl.h
+new file mode 100644
+index 000000000000..bd32ac2b180a
+--- /dev/null
++++ b/drivers/net/dsa/microchip/lan937x_acl.h
+@@ -0,0 +1,490 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/* Microchip switch driver common header
++ *
++ * Copyright (C) 2019-2021 Microchip Technology Inc.
++ */
++#ifndef _NET_DSA_DRIVERS_LAN937X_ACL_H
++#define _NET_DSA_DRIVERS_LAN937X_ACL_H
++
++/* Reg Data */
++#define ACL_ARACR_ADD_SHIFT_LO_PRI	(0x10000000)
++#define ACL_ARACR_TCAM_FLUSH		(0x08000000)
++#define ACL_ARACR_TCAM_VBEN		(0x04000000)
++#define ACL_ARACR_TCAM_VBI		(0x02000000)
++#define ACL_ARACR_TCAM_ROW_VLD	(0x01E00000)
++#define ACL_ARACR_START_ROW_SHFIT	(0x000FC000)
++#define ACL_ARACR_TCAM_OP_STS		(0x00002000)
++#define ACL_ARACR_TCAM_REQ_TYPE	(0x00001C00)
++#define ACL_ARACR_TCAM_ACC_TYPE	(0x00000300)
++#define ACL_ARACR_TCAM_NUM_SHIFT	(0x000000C0)
++#define ACL_ARACR_TCAM_ADDR_MASK	(0x0000003F)
++
++#define ACL_PCTRL_NUM_KEY_FORMAT	(0xF0000000)
++#define ACL_PCTRL_KEY_TYPE		(0x0F000000)
++#define ACL_PCTRL_IP_OPTIONS		(0x00F00000)
++#define ACL_PCTRL_VLAN_TAG		(0x000F0000)
++#define ACL_PCTRL_ABS_OFF		(0x0000F000)
++#define ACL_PCTRL_HSR_TAG		(0x00000F00)
++#define ACL_PCTRL_SNAP_TAG		(0x000000F0)
++
++#define ACL_INT_STS_TOP		(0x00000001)
++#define ACL_INT_STS_FRC0		(0x00000002)
++#define ACL_INT_STS_FRC1		(0x00000004)
++#define ACL_INT_STS_FRC2		(0x00000008)
++#define ACL_INT_STS_FRC3		(0x00000010)
++#define ACL_INT_STS_FRCX		(0x0000001E)
++#define ACL_INT_MASK_TOP		(0x00000001)
++#define ACL_INT_MASK_FRC0		(0x00000002)
++#define ACL_INT_MASK_FRC1		(0x00000004)
++#define ACL_INT_MASK_FRC2		(0x00000008)
++#define ACL_INT_MASK_FRC3		(0x00000010)
++#define ACL_INT_MASK_FRCX		(0x0000001E)
++
++#define ACL_TCAM_BIST0_TCAMSEL	(0x00000600)
++#define ACL_TCAM_BIST0_FAIL		(0x00000100)
++#define ACL_TCAM_BIST0_PASS		(0x00000080)
++#define ACL_TCAM_BIST0_PAUSE		(0x00000040)
++#define ACL_TCAM_BIST0_SHO		(0x00000020)
++#define ACL_TCAM_BIST0_SHI		(0x00000010)
++#define ACL_TCAM_BIST0_RESUME		(0x00000008)
++#define ACL_TCAM_BIST0_RTNEN		(0x00000004)
++#define ACL_TCAM_BIST0_RUN		(0x00000002)
++#define ACL_TCAM_BIST0_RESET		(0x00000001)
++#define ACL_TCAM_BIST1_DEFADDR	(0x0000007F)
++#define ACL_TCAM_BIST2_FAILSEQ	(0x000000FF)
++#define ACL_TCAM_BIST3_SKPERRCNT	(0x0000001F)
++
++#define TCAM_BIST_TCAMSEL_SHIFT	9
++#define TCAM_BIST_FAIL_SHIFT		8
++#define TCAM_BIST_PASS_SHIFT		7
++#define TCAM_BIST_PAUSE_SHIFT		6
++#define TCAM_BIST_SHO_SHIFT		5
++#define TCAM_BIST_SHI_SHIFT		4
++#define TCAM_BIST_RESUME_SHIFT	3
++#define TCAM_BIST_RTNEN_SHIFT		2
++#define TCAM_BIST_RUN_SHIFT		1
++#define TCAM_BIST_RESET_SHIFT		0
++
++/* AAR0 [40:33]*/
++#define LAN937X_ACL_AAR_TS		(0x80)
++#define LAN937X_ACL_AAR_COUNT		(0x40)
++#define LAN937X_ACL_AAR_COUNT_SEL	(0x30)
++#define LAN937X_ACL_AAR_STREAM_EN	(0x8)
++#define LAN937X_ACL_AAR_STREAM_ID	(0x7)
++
++/* AAR1 [32:25] */
++#define LAN937X_ACL_AAR_RVTG		(0x80)
++#define LAN937X_ACL_AAR_VID_H		(0x7F)
++/* AAR2 [24:17] */
++#define LAN937X_ACL_AAR_VID_L		(0xFC)
++#define LAN937X_ACL_AAR_QUE_EN		(0x03)
++/* ARR3 [16:9] */
++#define LAN937X_ACL_AAR_QUE_SEL	(0xE0)
++#define LAN937X_ACL_AAR_RP		(0x10)
++#define LAN937X_ACL_AAR_PRI		(0x0E)
++#define LAN937X_ACL_AAR_MM_H		(0x01)
++/* ARR4 [8:1] */
++#define LAN937X_ACL_AAR_MM_L		(0x80)
++#define LAN937X_ACL_AAR_DPORT_H	(0x7F)
++/* AAR5 [0] */
++#define LAN937X_ACL_AAR_DPORT_L	(0x80)
++
++#define TCAM_RFR_EN_RNGM		(0x20000000)
++#define TCAM_RFR_L4			(0x10000000)
++#define TCAM_RFR_L3			(0x08000000)
++#define TCAM_RFR_L2			(0x04000000)
++#define TCAM_RFR_OFST			(0x03FFE000)
++#define TCAM_RFR_LEN			(0x00000F80)
++#define TCAM_RFR_RNG_OFST		(0x0000003E)
++
++/* Reg Mask */
++#define TCAM_LO_PRI_POS		28
++#define TCAM_FLUSH_POS		27
++#define TCAM_VBEN_POS		26
++#define TCAM_VBI_POS			25
++#define TCAM_ROW_VLD_POS		21
++#define TCAM_START_ROW_SHIFT_POS	14
++#define TCAM_OPERATION_STATUS_POS	13
++#define TCAM_REQ_TYPE_POS		10
++#define TCAM_ACC_TYPE_POS		8
++#define TCAM_NUM_SHIFT_POS		6
++#define TCAM_ADDR_POS		0
++
++/* AAR0 [63:56]*/
++#define TCAM_AAR_TS_POS		7
++#define TCAM_AAR_COUNT_POS		6
++#define TCAM_AAR_COUNT_SEL_POS		4
++#define TCAM_AAR_STREAM_EN_POS		3
++#define TCAM_AAR_STREAM_ID_POS		0
++/* AAR1 [55:48] */
++#define TCAM_AAR_RVTG_POS		7
++#define TCAM_AAR_VID_DATA_H_POS	6
++/* AAR2 [47:40] */
++#define TCAM_AAR_VID_DATA_L_POS	2
++#define TCAM_AAR_QUE_EN_POS  0
++/* ARR3 [39:32] */
++#define TCAM_AAR_QUE_SEL_POS		5
++#define TCAM_AAR_RP_POS		4
++#define TCAM_AAR_PRI_POS		1
++#define TCAM_AAR_MM_H_POS		1
++/* ARR4 [31:24] */
++#define TCAM_AAR_MM_L_POS		7
++#define TCAM_AAR_DP_H_POS		1
++/* AAR5 [23:16] */
++#define TCAM_AAR_DP_L_POS		7
++/* AAR6 [15:8] */
++/* AAR7 [7:0 */
++
++/* Map Mode value defines */
++/* The forwarding map from the lookup table is replaced with DPORT map.*/
++#define MM_REPLACE_FWD_LKUP_TABLE	0x03
++/* the forwarding map from the lookup table is AND'ed with DPORT map*/
++#define MM_AND_FWD_LKUP_TABLE		0x02
++/* the forwarding map from the lookup table is OR'ed with DPORT map*/
++#define MM_OR_FWD_LKUP_TABLE		0x01
++/**No remapping of Dport*/
++#define MM_NO_REMAPPING			0x00
++
++#define TCAM_NUM_KEY_FORMAT_POS	28
++#define TCAM_KEY_TYPE_POS		24
++#define TCAM_IP_OPTIONS_POS		20
++#define TCAM_VLAN_TAG_POS		16
++#define TCAM_ABS_OFF_POS		12
++#define TCAM_HSR_TAG_POS		8
++#define TCAM_SNAP_TAG_POS		4
++
++#define TCAM_RFR_RN_EN_POS		29
++#define TCAM_RFR_L4_POS		28
++#define TCAM_RFR_L3_POS		27
++#define TCAM_RFR_L2_POS		26
++#define TCAM_RFR_OFST_POS		13
++#define TCAM_RFR_LEN_POS		7
++#define TCAM_RFR_RNG_POS		1
++
++#define LAN937X_MAX_RFR		10
++
++#define TCAM_INT_TOP			0
++#define TCAM_INT_FRC0			1
++#define TCAM_INT_FRC1			2
++#define TCAM_INT_FRC2			3
++#define TCAM_INT_FRC3			4
++#define TCAM_INT_FRCX			1
++/* Misc */
++#define TCAM_REQ_TYPE_READ_TCAM	0x0
++#define TCAM_REQ_TYPE_WRITE_TCAM	0x1
++#define TCAM_REQ_TYPE_ADD_TCAM	0x2
++#define TCAM_REQ_TYPE_SHIFT_TCAM	0x3
++#define TCAM_REQ_TYPE_READ_KIVR	0x4
++#define TCAM_REQ_TYPE_WRITE_KIVR	0x5
++#define TCAM_REQ_TYPE_READ_RFR	0x6
++#define TCAM_REQ_TYPE_WRITE_RFR	0x7
++#define TCAM_ADDR_KIVR_0_1		0x00
++#define TCAM_ADDR_KIVR_2_3		0x01
++#define TCAM_ADDR_RFR_0_1		0x00
++#define TCAM_ADDR_RFR_2_3		0x01
++#define TCAM_ADDR_RNG_BND		0x02
++#define TCAM_ADDR_RNG_CMP		0x03
++
++#define TCAM_ADR_SIZE			96
++#define TCAM_AAR_SIZE			6
++
++#define TCAM_MASK			0x01
++#define TCAM_DATA			0x02
++#define TCAM_MASK_DATA		0x03
++
++#define TCAM_MULTI_KEY_ENTRY_START	0x01
++
++#define TCAM_PARSER_0_1		0x00
++#define TCAM_PARSER_2_3		0x01
++
++#define TCAM_RC_ULM			0x02
++#define TCAM_RC_CMP			0x03
++
++#define ADR2RFR			0x01
++#define RFR2ADR			0x02
++#define ADR2KIVR			0x03
++#define KIVR2ADR			0x04
++#define ADR2ADR			0x05
++
++#define ACLTCAMHW			0x01
++#define ACLTCAMRAM			0x02
++#define ACLRFRHW			0x03
++#define ACLRFRRAM			0x04
++#define ACLTCAMDATA			0x02
++#define ACLKIVRHW			0x05
++#define ACLKIVRRAM			0x06
++#define ACLRCMHW			0x07
++#define ACLRCMRAM			0x08
++
++#define ACLTCAMMASK			0x01
++#define ACLTCAMDATA			0x02
++#define ACLTCAMAAR			0x03
++#define ACLTCAMPARX			0x04
++#define ACLTCAMPARX_1			0x05
++
++/* ACL MACRO*/
++#define MAX_ACL_ENTRIES		64
++#define MAX_ACL_DATA_MASK_SIZE		48  /* Bytes */
++#define MAX_ACL_ACTION_SIZE		8   /* Bytes */
++#define MAX_KIVR_SIZE			48  /* Bytes */
++#define MAX_RFR_SIZE			4   /* Bytes */
++#define MAX_RNG_BOUND_SIZE		2   /* Bytes */
++#define MAX_RNG_COMP_SIZE		2   /* Bytes */
++#define MAX_RNG_MASK_SIZE		4   /* Bytes */
++#define MAX_BYTE_ENABLE_SIZE		14  /* Bytes */
++#define MAX_MASK_DATA_BEN_SIZE		6   /* Bytes */
++#define MAX_ACL_COUNTER_SIZE		4   /* Bytes */
++#define MAX_ACL_NMATCH_SIZE		8   /* Bytes */
++#define MAX_DSCP_X_COLOR		16
++#define MAX_RX_QUEUE			8
++#define MAX_METER_STREAM		8
++#define MAX_MAC_LENGTH			6
++#define MAX_ACL_FRAME_COUNT		4
++#define MAX_ACL_PARSERS		4
++#define MAX_PARSER_PER_ENTRY		2
++#define MAX_RFR_PER_PARSER		10
++#define MAX_RFR				MAX_RFR_PER_PARSER
++#define MAX_ACL_PARSER		4
++#define MAX_RNG_CMP_PER_PARSER		10
++#define MAX_RNG_LB			16
++#define MAX_RNG_UB			16
++
++#define PARSER_IDX_0			0
++#define PARSER_IDX_1			1
++#define PARSER_IDX_2			2
++#define PARSER_IDX_3			3
++
++#define RFR_IDX_0			0
++#define RFR_IDX_1			1
++#define RFR_IDX_2			2
++#define RFR_IDX_3			3
++#define RFR_IDX_4			4
++#define RFR_IDX_5			5
++#define RFR_IDX_6			6
++#define RFR_IDX_7			7
++#define RFR_IDX_8			8
++#define RFR_IDX_9			9
++
++/* Key Format
++ * Multi Key Format - First byte of Entry should match Parser index to
++ * avoid false matches
++ * Univerasal Format - No Parser index matches. Only dissector classification
++ */
++#define PARSER_UNIVERSAL_FORMAT		0x00
++#define PARSER_MULTI_KEY_FORMAT		0x01
++
++enum lan937x_acl_dissector_type {
++	acl_dst_mac_dissector,
++	acl_src_mac_dissector,
++	acl_vlan_id_dissector,
++	acl_vlan_pcp_dissector,
++	acl_ethtype_dissector,
++	acl_ipv4_tos_dissector,
++	acl_ipv4_ttl_dissector,
++	acl_ipv4_protocol_dissector,
++	acl_ipv4_src_ip_dissector,
++	acl_ipv4_dst_ip_dissector,
++	acl_ipv6_tc_dissector,
++	acl_ipv6_hop_dissector,
++	acl_ipv6_nxt_hdr_dissector,
++	acl_ipv6_src_ip_dissector,
++	acl_ipv6_dst_ip_dissector,
++	acl_l4_src_port_dissector,
++	acl_l4_dst_port_dissector,
++
++	acl_num_dissectors_supported,
++};
++
++#define DST_MAC_DISSECTOR_PRESENT	BIT(acl_dst_mac_dissector)
++#define SRC_MAC_DISSECTOR_PRESENT	BIT(acl_src_mac_dissector)
++#define VLAN_ID_DISSECTOR_PRESENT	BIT(acl_vlan_id_dissector)
++#define VLAN_PCP_DISSECTOR_PRESENT	BIT(acl_vlan_pcp_dissector)
++#define ETHTYPE_DISSECTOR_PRESENT	BIT(acl_ethtype_dissector)
++#define IPV4_TOS_DISSECTOR_PRESENT	BIT(acl_ipv4_tos_dissector)
++#define IPV4_TTL_DISSECTOR_PRESENT	BIT(acl_ipv4_ttl_dissector)
++#define IPV4_PROTO_DISSECTOR_PRESENT	BIT(acl_ipv4_protocol_dissector)
++#define IPV4_SRC_IP_DISSECTOR_PRESENT	BIT(acl_ipv4_src_ip_dissector)
++#define IPV4_DST_IP_DISSECTOR_PRESENT	BIT(acl_ipv4_dst_ip_dissector)
++#define IPV6_TC_DISSECTOR_PRESENT	BIT(acl_ipv6_tc_dissector)
++#define IPV6_HOP_DISSECTOR_PRESENT	BIT(acl_ipv6_hop_dissector)
++#define IPV6_NXTHDR_DISSECTOR_PRESENT	BIT(acl_ipv6_nxt_hdr_dissector)
++#define IPV6_SRC_IP_DISSECTOR_PRESENT	BIT(acl_ipv6_src_ip_dissector)
++#define IPV6_DST_IP_DISSECTOR_PRESENT	BIT(acl_ipv6_dst_ip_dissector)
++#define L4_SRC_PORT_DISSECTOR_PRESENT	BIT(acl_l4_src_port_dissector)
++#define L4_DST_PORT_DISSECTOR_PRESENT	BIT(acl_l4_dst_port_dissector)
++
++#define VLAN_TAG_DISSECTORS_PRESENT	(VLAN_ID_DISSECTOR_PRESENT | \
++					VLAN_PCP_DISSECTOR_PRESENT)
++
++/**TCAM Access Control Register defines*/
++
++#define acl_pri_low(val)	((((u32)val) << TCAM_LO_PRI_POS)\
++				 & ACL_ARACR_ADD_SHIFT_LO_PRI)
++#define acl_tcam_flush(val)	((((u32)val) << TCAM_FLUSH_POS)\
++				 & ACL_ARACR_TCAM_FLUSH)
++#define acl_tcam_vben(val)	((((u32)val) << TCAM_VBEN_POS)\
++				 & ACL_ARACR_TCAM_VBEN)
++#define acl_tcam_vbi(val)	((((u32)val) << TCAM_VBI_POS)\
++				 & ACL_ARACR_TCAM_VBI)
++#define acl_tcam_row_vld(val)	((((u32)val) << TCAM_ROW_VLD_POS)\
++				 & ACL_ARACR_TCAM_ROW_VLD)
++#define acl_row_shift(val)	((((u32)val) << TCAM_START_ROW_SHIFT_POS)\
++				 & ACL_ARACR_START_ROW_SHFIT)
++#define acl_tcam_req(val)	((((u32)val) << TCAM_REQ_TYPE_POS)\
++				 & ACL_ARACR_TCAM_REQ_TYPE)
++#define acl_tcam_acc(val)	((((u32)val) << TCAM_ACC_TYPE_POS)\
++				 & ACL_ARACR_TCAM_ACC_TYPE)
++#define acl_num_shift(val)	((((u32)val) << TCAM_NUM_SHIFT_POS)\
++				 & ACL_ARACR_TCAM_NUM_SHIFT)
++#define acl_tcam_addr(val)	(((u32)val) & ACL_ARACR_TCAM_ADDR_MASK)
++
++ /* TCAM data structures */
++struct lan937x_acl_entry {
++	u8 acl_entry_index;
++	u8 acl_mask[MAX_ACL_DATA_MASK_SIZE];
++	u8 acl_data[MAX_ACL_DATA_MASK_SIZE];
++	u8 acl_action[MAX_ACL_ACTION_SIZE];
++};
++
++/* Defines to help filling the action RAM contents */
++static inline void set_que_en(u8 *act)
++{
++	act[2] |= (0x03 >> TCAM_AAR_QUE_EN_POS);
++}
++
++static inline void set_que_sel(u8 *act, u8 pri)
++{
++	act[3] |= ((pri << TCAM_AAR_QUE_SEL_POS) & LAN937X_ACL_AAR_QUE_SEL);
++}
++
++static inline void set_map_mode(u8 *act, u8 MM)
++{
++	act[3] |= ((MM >> TCAM_AAR_MM_H_POS) & LAN937X_ACL_AAR_MM_H);
++	act[4] |= ((MM << TCAM_AAR_MM_L_POS) & LAN937X_ACL_AAR_MM_L);
++}
++
++static inline void set_dst_port(u8 *act, u8 dp)
++{
++	act[4] |= ((dp >> TCAM_AAR_DP_H_POS) & LAN937X_ACL_AAR_DPORT_H);
++	act[5] |= ((dp << TCAM_AAR_DP_L_POS) & LAN937X_ACL_AAR_DPORT_L);
++}
++
++static inline void set_strm_en(u8 *act, u8 en)
++{
++	act[0] |= ((en << TCAM_AAR_STREAM_EN_POS) & LAN937X_ACL_AAR_STREAM_EN);
++}
++
++static inline void set_strm_id(u8 *act, u8 i)
++{
++	act[0] |= (i & LAN937X_ACL_AAR_STREAM_ID);
++}
++
++static inline void set_fr_counter(u8 *act, u8 i)
++{
++	act[0] |= ((1 << TCAM_AAR_COUNT_POS) | (i << TCAM_AAR_COUNT_SEL_POS));
++}
++
++struct lan937x_acl_rfr {
++	u32 dissectors_covered;
++	u8 layer;
++	u16 ofst;
++	u8 len;
++	bool rng_match_en;
++	u8 rng_ofst;
++};
++
++/* enum for layer 2, layer 3, layer 4*/
++enum layer {
++	l2,
++	l3,
++	l4,
++};
++
++/* Defines to set RFR fields*/
++#define RFR_RNG_MATCH_EN(X)	(((X) << TCAM_RFR_RN_EN_POS) & TCAM_RFR_EN_RNGM)
++#define RFR_OSFT_L4_RELATV(X)	((((u32)(X)) << TCAM_RFR_L4_POS) & TCAM_RFR_L4)
++#define RFR_OSFT_L3_RELATV(X)	((((u32)(X)) << TCAM_RFR_L3_POS) & TCAM_RFR_L3)
++#define RFR_OSFT_L2_RELATV(X)	((((u32)(X)) << TCAM_RFR_L2_POS) & TCAM_RFR_L2)
++
++#define RFR_OFST(X)	((((X) >> 1) << TCAM_RFR_OFST_POS) & TCAM_RFR_OFST)
++#define RFR_LENGTH(X)	((((X) >> 1) << TCAM_RFR_LEN_POS) & TCAM_RFR_LEN)
++#define RFR_RNG_OSFT(X)	(((X) << TCAM_RFR_RNG_POS) & TCAM_RFR_RNG_OFST)
++
++struct lan937x_acl_rfr_table {
++	struct lan937x_acl_rfr rfr_entries[MAX_PARSER_PER_ENTRY][MAX_RFR];
++};
++
++struct lan937x_rfr_reg_type {
++	union {
++		u8 bval[MAX_RFR_SIZE];
++		u32 u32value;
++	};
++};
++
++struct lan937x_acl_range_cfg {
++	u16 rng_upper_bound[MAX_RNG_UB];
++	u16 rng_lower_bound[MAX_RNG_LB];
++	u32 rng_bound_msk;
++};
++
++struct lan937x_acl_range_comparator {
++	u16 rng_cmp[MAX_ACL_PARSER][MAX_RNG_CMP_PER_PARSER];
++};
++
++struct lan937x_acl_kivr {
++	u8 kivr[MAX_PARSER_PER_ENTRY][MAX_KIVR_SIZE];
++};
++
++struct lan937x_acl_access_ctl {
++	bool pri_low;
++	bool tcam_flush;
++	bool tcam_vben;
++	bool tcam_vbi;
++	u8 tcam_row_vld;
++	u8 row_shift;
++	u8 tcam_req;
++	u8 tcam_acc;
++	u8 num_shift;
++	u8 tcam_addr;
++};
++
++/* Form the register value to program in the acl_access control register*/
++static inline u32 acl_acc_ctl(struct lan937x_acl_access_ctl *acc)
++{
++	return (acl_pri_low(acc->pri_low) |
++		acl_tcam_flush(acc->tcam_flush) |
++		acl_tcam_vben(acc->tcam_vben) |
++		acl_tcam_vbi(acc->tcam_vbi) |
++		acl_tcam_row_vld(acc->tcam_row_vld) |
++		acl_row_shift(acc->row_shift) |
++		acl_tcam_req(acc->tcam_req) |
++		acl_tcam_acc(acc->tcam_acc) |
++		acl_num_shift(acc->num_shift) |
++		acl_tcam_addr(acc->tcam_addr));
++}
++
++/*Macros to set values in lan937x_acl_access_ctl*/
++#define clr_data(data)	memset(&(data), 0x00, sizeof(data))
++#define set_pri_low(acc, val)	acc.pri_low = val
++#define set_tcam_flush(acc, val)	acc.tcam_flush = val
++#define set_tcam_vben(acc, val)	acc.tcam_vben = val
++#define set_tcam_vbi(acc, val)	acc.tcam_vbi = val
++#define set_tcam_row_vld(acc, val)	acc.tcam_row_vld = val
++#define set_row_shift(acc, val)	acc.row_shift = val
++#define set_tcam_req(acc, val)	acc.tcam_req = val
++#define set_tcam_acc(acc, val)	acc.tcam_acc = val
++#define set_num_shift(acc, val)	acc.num_shift = val
++#define set_tcam_addr(acc, val)	acc.tcam_addr = val
++
++struct lan937x_acl_byte_en {
++	u8 acl_mask[6];
++	u8 acl_data[6];
++	u8 acl_action[1];
++} __packed;
++
++struct vlan_tag {
++	u16 vlan_tpid;
++	u8 tci[2];
++} __packed;
++
++#endif
+diff --git a/drivers/net/dsa/microchip/lan937x_devlink.c b/drivers/net/dsa/microchip/lan937x_devlink.c
+new file mode 100644
+index 000000000000..cb162312826c
+--- /dev/null
++++ b/drivers/net/dsa/microchip/lan937x_devlink.c
+@@ -0,0 +1,161 @@
++// SPDX-License-Identifier: GPL-2.0
++/* Microchip LAN937X devlink implementation
++ * Copyright (C) 2021 Microchip Technology Inc.
++ */
++
++#include "ksz_common.h"
++#include "lan937x_reg.h"
++#include "lan937x.h"
++#include "lan937x_devlink.h"
++
++static int lan937x_cut_through_get(struct ksz_device *dev, u16 *value)
++{
++	*value = dev->cut_through_enable;
++
++	return 0;
++}
++
++/* Devlink param is not accepting the hex decimal number. So as of now
++ * 1000, 2000, is used to differentiate the lan1, 2 and so on.
++ * Bit 0 to 7 corresponds to each queue. So if 1255 then for lan1 all the
++ * queues are cut-through enabled.
++ */
++static int lan937x_cut_through_set(struct ksz_device *dev, u16 value)
++{
++	struct dsa_switch *ds = dev->ds;
++	u8 queue = (value % 1000);
++	u8 port = (value / 1000);
++	u8 tas_gate_ctl;
++	bool enable;
++	int ret;
++	u8 i;
++
++	if ((port == 0) || (port > ds->num_ports)) {
++		dev_err(dev->dev, "Port number should be from 1 to %d",
++			ds->num_ports);
++		return -EINVAL;
++	}
++
++	//Port starts from value 0
++	port = port - 1;
++
++	if (!dsa_is_user_port(ds, port)) {
++		dev_err(dev->dev, "Port is not a user port");
++		return -EINVAL;
++	}
++
++	ksz_pread8(dev, port, REG_PORT_TAS_GATE_CTRL__1, &tas_gate_ctl);
++
++	if (!(tas_gate_ctl & TAS_GATE_ENABLE)) {
++		dev_err(dev->dev, "TAS should be enabled before cut-through");
++		return -EINVAL;
++	}
++
++	for (i = 0; i < ds->num_tx_queues; i++) {
++		ksz_pwrite32(dev, port, REG_PORT_MTI_QUEUE_INDEX__4, i);
++
++		if (queue & (1<<i))
++			enable = 1;
++		else
++			enable = 0;
++
++		ret = lan937x_port_cfg(dev, port, REG_PORT_TAS_CTL__1,
++				       TAS_CUT_THROUGH, enable);
++		if (ret)
++			return ret;
++	}
++
++	dev->cut_through_enable = value;
++
++	return 0;
++}
++
++enum lan937x_devlink_param_id {
++	LAN937X_DEVLINK_PARAM_ID_BASE = DEVLINK_PARAM_GENERIC_ID_MAX,
++	LAN937X_DEVLINK_PARAM_ID_CUT_THROUGH,
++};
++
++int lan937x_devlink_param_get(struct dsa_switch *ds, u32 id,
++			      struct devlink_param_gset_ctx *ctx)
++{
++	struct ksz_device *dev = ds->priv;
++	int ret;
++
++	switch (id) {
++	case LAN937X_DEVLINK_PARAM_ID_CUT_THROUGH:
++		ret = lan937x_cut_through_get(dev, &ctx->val.vu16);
++		break;
++	default:
++		ret = -EOPNOTSUPP;
++		break;
++	}
++
++	return ret;
++}
++
++int lan937x_devlink_param_set(struct dsa_switch *ds, u32 id,
++			      struct devlink_param_gset_ctx *ctx)
++{
++	struct ksz_device *dev = ds->priv;
++	int ret;
++
++	switch (id) {
++	case LAN937X_DEVLINK_PARAM_ID_CUT_THROUGH:
++		ret = lan937x_cut_through_set(dev, ctx->val.vu16);
++		break;
++	default:
++		ret = -EOPNOTSUPP;
++		break;
++	}
++
++	return ret;
++}
++
++static const struct devlink_param lan937x_devlink_params[] = {
++	DSA_DEVLINK_PARAM_DRIVER(LAN937X_DEVLINK_PARAM_ID_CUT_THROUGH,
++				 "cut_through", DEVLINK_PARAM_TYPE_U16,
++				 BIT(DEVLINK_PARAM_CMODE_RUNTIME)),
++};
++
++static int lan937x_init_devlink_params(struct dsa_switch *ds)
++{
++	return dsa_devlink_params_register(ds, lan937x_devlink_params,
++					   ARRAY_SIZE(lan937x_devlink_params));
++}
++
++static void lan937x_exit_devlink_params(struct dsa_switch *ds)
++{
++	dsa_devlink_params_unregister(ds, lan937x_devlink_params,
++				      ARRAY_SIZE(lan937x_devlink_params));
++}
++
++int lan937x_devlink_info_get(struct dsa_switch *ds,
++			     struct devlink_info_req *req,
++			     struct netlink_ext_ack *extack)
++{
++	int ret;
++
++	ret = devlink_info_driver_name_put(req, "lan937x");
++	if (ret)
++		return ret;
++
++	ret = devlink_info_version_fixed_put(
++		req, DEVLINK_INFO_VERSION_GENERIC_ASIC_ID, "lan937x");
++	return ret;
++}
++
++int lan937x_devlink_init(struct dsa_switch *ds)
++{
++	int ret;
++
++	ret = lan937x_init_devlink_params(ds);
++	if (ret)
++		return ret;
++
++	return 0;
++}
++
++void lan937x_devlink_exit(struct dsa_switch *ds)
++{
++	lan937x_exit_devlink_params(ds);
++}
+diff --git a/drivers/net/dsa/microchip/lan937x_devlink.h b/drivers/net/dsa/microchip/lan937x_devlink.h
+new file mode 100644
+index 000000000000..60ee764e5c59
+--- /dev/null
++++ b/drivers/net/dsa/microchip/lan937x_devlink.h
+@@ -0,0 +1,19 @@
++// SPDX-License-Identifier: GPL-2.0
++/* Copyright (C) 2021 Microchip Technology Inc.
++ */
++
++#ifndef _LAN937x_DEVLINK_H
++#define _LAN937x_DEVLINK_H
++
++
++int lan937x_devlink_init(struct dsa_switch *ds);
++void lan937x_devlink_exit(struct dsa_switch *ds);
++int lan937x_devlink_param_get(struct dsa_switch *ds, u32 id,
++			      struct devlink_param_gset_ctx *ctx);
++int lan937x_devlink_param_set(struct dsa_switch *ds, u32 id,
++			      struct devlink_param_gset_ctx *ctx);
++int lan937x_devlink_info_get(struct dsa_switch *ds,
++			     struct devlink_info_req *req,
++			     struct netlink_ext_ack *extack);
++
++#endif
+diff --git a/drivers/net/dsa/microchip/lan937x_flower.c b/drivers/net/dsa/microchip/lan937x_flower.c
+new file mode 100644
+index 000000000000..47d54801328b
+--- /dev/null
++++ b/drivers/net/dsa/microchip/lan937x_flower.c
+@@ -0,0 +1,1244 @@
++// SPDX-License-Identifier: GPL-2.0
++/* Microchip LAN937X switch driver main logic
++ * Copyright (C) 2019-2021 Microchip Technology Inc.
++ */
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/iopoll.h>
++#include <linux/phy.h>
++#include <linux/if_bridge.h>
++#include <net/dsa.h>
++#include <net/switchdev.h>
++#include "lan937x_reg.h"
++#include "lan937x_ptp.h"
++#include "ksz_common.h"
++#include "lan937x.h"
++#include "lan937x_tc.h"
++#include "lan937x_flower.h"
++#include "lan937x_acl.h"
++
++struct lan937x_flr_blk *lan937x_get_flr_blk(struct ksz_device *dev, int port)
++{
++	struct ksz_port *p = &dev->ports[port];
++
++	return p->priv;
++}
++
++struct lan937x_p_res *lan937x_get_flr_res(struct ksz_device *dev, int port)
++{
++	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
++
++	return &blk->res;
++}
++
++static int lan937x_assign_stream_filter(struct ksz_device *dev, int port,
++					u8 *stream_idx)
++{
++	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
++	int i;
++
++	for (i = 0; i < LAN937X_NUM_STREAM_FILTERS; i++) {
++		if (!(res->stream_filters_used[i])) {
++			*stream_idx = i;
++
++			return 0;
++		}
++	}
++	return -ENOSPC;
++}
++
++static int lan937x_check_tc_pol_availability(struct ksz_device *dev, int port,
++					     int traffic_class)
++{
++	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
++
++	if (res->tc_policers_used[traffic_class])
++		return -ENOSPC;
++
++	return 0;
++}
++
++static int lan937x_assign_tcam_counters(struct ksz_device *dev, int port,
++					u8 *countr)
++{
++	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
++	u8 i;
++
++	for (i = 0; i < LAN937x_NUM_TCAM_COUNTERS; i++) {
++		if (!(res->tcam_frm_counters[i])) {
++			*countr = i;
++
++			return 0;
++		}
++	}
++	/* Invalid Value */
++	*countr = STATS_COUNTER_NOT_ASSIGNED;
++
++	return -ENOSPC;
++}
++
++int lan937x_assign_tcam_entries(struct ksz_device *dev, int port,
++				u8 num_entry_reqd, u8 *tcam_idx)
++{
++	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
++	int i, j, count;
++
++	for (i = 0; i < LAN937X_NUM_TCAM_ENTRIES; i++) {
++		count = 0;
++		for (j = 0; j < num_entry_reqd; j++) {
++			if (i + j >= LAN937X_NUM_TCAM_ENTRIES)
++				goto out;
++
++			if (!(res->tcam_entries_used[i + j]))
++				count++;
++		}
++
++		if (count == num_entry_reqd) {
++			*tcam_idx = i;
++
++			return 0;
++		}
++	}
++out:
++	return -ENOSPC;
++}
++
++static struct lan937x_flower_rule *lan937x_rule_find(struct ksz_device *dev,
++						     int port,
++						     unsigned long cookie)
++{
++	struct lan937x_flower_rule *rule;
++	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
++
++	list_for_each_entry(rule, &blk->rules, list) {
++		if (rule->cookie == cookie)
++			return rule;
++	}
++
++	return NULL;
++}
++
++static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
++				    struct flow_cls_offload *cls,
++				    struct lan937x_flower_filter *filter)
++{
++	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
++	struct flow_dissector *dissector = rule->match.dissector;
++	struct lan937x_key *key = &filter->key;
++	bool is_bcast_dmac = false;
++	u16 n_proto_mask = 0;
++	u16 n_proto_key = 0;
++	u16 addr_type = 0;
++
++	if (dissector->used_keys &
++	    ~(BIT(FLOW_DISSECTOR_KEY_BASIC) |
++	      BIT(FLOW_DISSECTOR_KEY_CONTROL) |
++	      BIT(FLOW_DISSECTOR_KEY_VLAN) |
++	      BIT(FLOW_DISSECTOR_KEY_ETH_ADDRS) |
++	      BIT(FLOW_DISSECTOR_KEY_IPV4_ADDRS) |
++	      BIT(FLOW_DISSECTOR_KEY_IPV6_ADDRS) |
++	      BIT(FLOW_DISSECTOR_KEY_IP) |
++	      BIT(FLOW_DISSECTOR_KEY_PORTS))) {
++		NL_SET_ERR_MSG_MOD(extack, "Unsupported keys used");
++		return -EOPNOTSUPP;
++	}
++
++	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_CONTROL)) {
++		struct flow_match_control match;
++
++		flow_rule_match_control(rule, &match);
++		addr_type = match.key->addr_type;
++	}
++
++	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_BASIC)) {
++		struct flow_match_basic match;
++
++		flow_rule_match_basic(rule, &match);
++		n_proto_key = ntohs(match.key->n_proto);
++		n_proto_mask = ntohs(match.mask->n_proto);
++
++		if (n_proto_key == ETH_P_ALL) {
++			n_proto_key = 0;
++			n_proto_mask = 0;
++		}
++
++		key->ethtype.value = (n_proto_key);
++		key->ethtype.mask = (n_proto_mask);
++		key->acl_dissector_map |= ETHTYPE_DISSECTOR_PRESENT;
++
++		if (n_proto_key == ETH_P_IP) {
++			key->ipv4.proto.value = match.key->ip_proto;
++			key->ipv4.proto.mask = match.mask->ip_proto;
++			key->acl_dissector_map |= IPV4_PROTO_DISSECTOR_PRESENT;
++		}
++		if (n_proto_key == ETH_P_IPV6) {
++			key->ipv6.next_hdr.value = match.key->ip_proto;
++			key->ipv6.next_hdr.mask = match.mask->ip_proto;
++			key->acl_dissector_map |= IPV6_NXTHDR_DISSECTOR_PRESENT;
++		}
++	}
++
++	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ETH_ADDRS)) {
++		u8 bcast[] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
++		u8 null[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
++		struct flow_match_eth_addrs match;
++
++		flow_rule_match_eth_addrs(rule, &match);
++
++		if (!ether_addr_equal_masked(match.key->src, null,
++					     match.mask->src)) {
++			key->src_mac.mask = ether_addr_to_u64(match.mask->src);
++			key->src_mac.value = ether_addr_to_u64(match.key->src);
++			key->acl_dissector_map |= SRC_MAC_DISSECTOR_PRESENT;
++		}
++		is_bcast_dmac = ether_addr_equal(match.key->dst, bcast);
++		key->dst_mac.mask = ether_addr_to_u64(match.mask->dst);
++		key->dst_mac.value = ether_addr_to_u64(match.key->dst);
++		key->acl_dissector_map |= DST_MAC_DISSECTOR_PRESENT;
++	}
++
++	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_VLAN)) {
++		struct flow_match_vlan match;
++
++		flow_rule_match_vlan(rule, &match);
++		if (match.mask->vlan_id) {
++			key->vlan_id.value = match.key->vlan_id;
++			key->vlan_id.mask = match.mask->vlan_id;
++			key->acl_dissector_map |= VLAN_ID_DISSECTOR_PRESENT;
++		}
++
++		if (match.mask->vlan_priority) {
++			key->vlan_prio.value = match.key->vlan_priority;
++			key->vlan_prio.mask = match.mask->vlan_priority;
++			key->acl_dissector_map |= VLAN_PCP_DISSECTOR_PRESENT;
++		}
++	}
++
++	if (addr_type == FLOW_DISSECTOR_KEY_IPV4_ADDRS) {
++		struct flow_match_ipv4_addrs match;
++		u8 *tmp;
++
++		flow_rule_match_ipv4_addrs(rule, &match);
++
++		tmp = &key->ipv4.sip.value[0];
++		memcpy(tmp, &match.key->src, 4);
++
++		tmp = &key->ipv4.sip.mask[0];
++		memcpy(tmp, &match.mask->src, 4);
++
++		tmp = &key->ipv4.dip.value[0];
++		memcpy(tmp, &match.key->dst, 4);
++
++		tmp = &key->ipv4.dip.mask[0];
++		memcpy(tmp, &match.mask->dst, 4);
++
++		key->acl_dissector_map |= (IPV4_SRC_IP_DISSECTOR_PRESENT |
++					   IPV4_DST_IP_DISSECTOR_PRESENT);
++	}
++
++	if (addr_type == FLOW_DISSECTOR_KEY_IPV6_ADDRS) {
++		struct flow_match_ipv6_addrs match;
++		u8 *tmp;
++
++		flow_rule_match_ipv6_addrs(rule, &match);
++
++		tmp = &key->ipv6.sip.value[0];
++		memcpy(tmp, &match.key->src.s6_addr[0], 16);
++
++		tmp = &key->ipv6.sip.mask[0];
++		memcpy(tmp, &match.mask->src.s6_addr[0], 16);
++
++		tmp = &key->ipv6.dip.value[0];
++		memcpy(tmp, &match.key->dst.s6_addr[0], 16);
++
++		tmp = &key->ipv6.dip.mask[0];
++		memcpy(tmp, &match.mask->dst.s6_addr[0], 16);
++
++		key->acl_dissector_map |= (IPV6_SRC_IP_DISSECTOR_PRESENT |
++					   IPV6_DST_IP_DISSECTOR_PRESENT);
++	}
++
++	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IP)) {
++		struct flow_match_ip match;
++
++		flow_rule_match_ip(rule, &match);
++		if (n_proto_key == ETH_P_IP) {
++			key->ipv4.tos.value = match.key->tos;
++			key->ipv4.tos.mask = match.mask->tos;
++
++			key->ipv4.ttl.value = match.key->ttl;
++			key->ipv4.ttl.mask = match.mask->ttl;
++
++			key->acl_dissector_map |= (IPV4_TOS_DISSECTOR_PRESENT |
++						   IPV4_TTL_DISSECTOR_PRESENT);
++		}
++
++		if (n_proto_key == ETH_P_IPV6) {
++			key->ipv6.tc.value = match.key->tos;
++			key->ipv6.tc.mask = match.mask->tos;
++
++			key->ipv6.hop.value = match.key->ttl;
++			key->ipv6.hop.mask = match.mask->ttl;
++
++			key->acl_dissector_map |= (IPV6_TC_DISSECTOR_PRESENT |
++						   IPV6_HOP_DISSECTOR_PRESENT);
++		}
++	}
++
++	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_PORTS)) {
++		struct flow_match_ports match;
++
++		flow_rule_match_ports(rule, &match);
++
++		key->src_port.value = ntohs(match.key->src);
++		key->src_port.mask =  ntohs(match.mask->src);
++		key->dst_port.value = ntohs(match.key->dst);
++		key->dst_port.mask = ntohs(match.mask->dst);
++		key->acl_dissector_map |= (L4_SRC_PORT_DISSECTOR_PRESENT |
++					   L4_DST_PORT_DISSECTOR_PRESENT);
++	}
++
++	if (key->acl_dissector_map == DST_MAC_DISSECTOR_PRESENT &&
++	    is_bcast_dmac) {
++		filter->type = LAN937x_BCAST_FILTER;
++	} else if (key->acl_dissector_map & (VLAN_ID_DISSECTOR_PRESENT |
++					  VLAN_PCP_DISSECTOR_PRESENT)){
++		filter->type = LAN937x_VLAN_AWARE_FILTER;
++	} else {
++		filter->type = LAN937x_VLAN_UNAWARE_FILTER;
++	}
++
++	return 0;
++}
++
++static int lan937x_setup_bcast_policer(struct ksz_device *dev,
++				       struct netlink_ext_ack *extack, int port,
++				       struct lan937x_flower_rule *rule)
++{
++	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
++	struct lan937x_resrc_alloc *rsrc = rule->resrc;
++
++	if (res->broadcast_pol_used) {
++		NL_SET_ERR_MSG_MOD(extack, "Broadcast Policer already exists");
++		return -ENOSPC;
++	}
++
++	rsrc->resrc_used_mask |= BIT(LAN937X_BROADCAST_POLICER);
++
++	return 0;
++}
++
++static int lan937x_setup_action_redirect(struct ksz_device *dev,
++					 struct netlink_ext_ack *extack,
++					 int port,
++					 struct lan937x_flower_rule *rule,
++					 unsigned long destport_mask)
++{
++	struct lan937x_resrc_alloc *rsrc = rule->resrc;
++	struct lan937x_flower *flower = rule->flower;
++	int ret = 0;
++
++	flower->action.actions_presence_mask |= BIT(LAN937X_ACT_REDIRECT_FLOW);
++
++	if (!rsrc->type.tcam.n_entries) {
++		ret = lan937x_get_acl_req(flower->filter.type,
++					  &rsrc->type.tcam.parser,
++					  &rsrc->type.tcam.n_entries);
++		if (ret)
++			return ret;
++
++		ret = lan937x_assign_tcam_entries(dev, port,
++						  rsrc->type.tcam.n_entries,
++						  &rsrc->type.tcam.index);
++		if (ret) {
++			NL_SET_ERR_MSG_MOD(extack, "TCAM entry unavailable");
++			return ret;
++		}
++
++		lan937x_assign_tcam_counters(dev, port, &rsrc->type.tcam.cntr);
++	}
++	flower->action.redirect_port_mask |= destport_mask;
++	rsrc->resrc_used_mask |= BIT(LAN937X_TCAM_ENTRIES);
++
++	return ret;
++}
++
++static int lan937x_setup_action_drop(struct ksz_device *dev,
++				     struct netlink_ext_ack *extack, int port,
++				     struct lan937x_flower_rule *rule)
++{
++	struct lan937x_resrc_alloc *rsrc = rule->resrc;
++	struct lan937x_flower *flower = rule->flower;
++	u8 *n_entries = &rsrc->type.tcam.n_entries;
++	u8 *parser = &rsrc->type.tcam.parser;
++	u8 *index = &rsrc->type.tcam.index;
++	int ret = 0;
++
++	flower->action.actions_presence_mask |= BIT(LAN937X_ACT_DROP);
++
++	if (flower->action.n_actions == 1) {
++		ret = lan937x_get_acl_req(flower->filter.type,
++					  parser, n_entries);
++		if (ret)
++			return ret;
++
++		ret = lan937x_assign_tcam_entries(dev, port, *n_entries, index);
++		if (ret) {
++			NL_SET_ERR_MSG_MOD(extack, "TCAM entry unavailable");
++			return ret;
++		}
++
++		lan937x_assign_tcam_counters(dev, port, &rsrc->type.tcam.cntr);
++	}
++	rsrc->resrc_used_mask |= BIT(LAN937X_TCAM_ENTRIES);
++	return ret;
++}
++
++static int lan937x_setup_action_priority(struct ksz_device *dev,
++					 struct netlink_ext_ack *extack,
++					 int port, u32 priority,
++					 struct lan937x_flower_rule *rule)
++{
++	struct lan937x_resrc_alloc *rsrc = rule->resrc;
++	struct lan937x_flower *flower = rule->flower;
++	u8 *n_entries = &rsrc->type.tcam.n_entries;
++	u8 *parser = &rsrc->type.tcam.parser;
++	u8 *index = &rsrc->type.tcam.index;
++	int ret = 0;
++
++	flower->action.actions_presence_mask |= BIT(LAN937X_ACT_PRIORITY);
++	ret = lan937x_get_acl_req(flower->filter.type,
++				  parser, n_entries);
++	if (ret)
++		return ret;
++
++	ret = lan937x_assign_tcam_entries(dev, port, *n_entries, index);
++	if (ret) {
++		NL_SET_ERR_MSG_MOD(extack, "TCAM entry unavailable");
++		return ret;
++	}
++
++	lan937x_assign_tcam_counters(dev, port, &rsrc->type.tcam.cntr);
++	flower->action.skbedit_prio = priority;
++	rsrc->resrc_used_mask |= BIT(LAN937X_TCAM_ENTRIES);
++
++	return ret;
++}
++
++static int lan937x_setup_tc_policer(struct ksz_device *dev,
++				    struct netlink_ext_ack *extack, int port,
++				    struct lan937x_flower_rule *rule,
++				    u64 rate_bytes_per_sec, u32 burst)
++{
++	struct lan937x_resrc_alloc *rsrc = rule->resrc;
++	struct lan937x_flower *flower = rule->flower;
++	struct lan937x_flower_action *action;
++	struct lan937x_key *key;
++	int ret;
++
++	action = &flower->action;
++	action->actions_presence_mask |= BIT(LAN937X_ACT_TC_POLICE);
++
++	key = &flower->filter.key;
++	ret = lan937x_check_tc_pol_availability(dev, port,
++						key->vlan_prio.value);
++	if (ret) {
++		NL_SET_ERR_MSG_MOD(extack, "TC Policer already exists");
++		return ret;
++	}
++
++	action->police.rate_bytes_per_sec = div_u64(rate_bytes_per_sec *
++						    512, 1000000);
++	action->police.burst = burst;
++	/* Burst Setting is not supported by Queue Policer Hardware*/
++	NL_SET_ERR_MSG_MOD(extack,
++			   "Burst setting not supported by Queue Policer hw");
++	rsrc->type.tc_pol_used = key->vlan_prio.value;
++	rsrc->resrc_used_mask |= BIT(LAN937X_TC_POLICER);
++
++	return ret;
++}
++
++static int lan937x_setup_stream_policer(struct ksz_device *dev,
++					struct netlink_ext_ack *extack,
++					int port,
++					struct lan937x_flower_rule *rule,
++					u64 rate_bytes_per_sec, u32 burst,
++					u32 mtu)
++{
++	struct lan937x_resrc_alloc *rsrc = rule->resrc;
++	struct lan937x_flower *flower = rule->flower;
++	struct lan937x_flower_action *action;
++	int ret = 0;
++
++	action = &flower->action;
++	action->actions_presence_mask |= BIT(LAN937X_ACT_STREAM_POLICE);
++
++	if (!rsrc->type.strm_flt.en) {
++		ret = lan937x_assign_stream_filter(dev, port,
++						   &rsrc->type.strm_flt.index);
++		if (ret) {
++			NL_SET_ERR_MSG_MOD(extack,
++					   "Stream filter not available");
++			return ret;
++		}
++
++		ret = lan937x_get_acl_req(flower->filter.type,
++					  &rsrc->type.tcam.parser,
++					  &rsrc->type.tcam.n_entries);
++		if (ret)
++			return ret;
++
++		ret = lan937x_assign_tcam_entries(dev, port,
++						  rsrc->type.tcam.n_entries,
++						  &rsrc->type.tcam.index);
++		if (ret) {
++			NL_SET_ERR_MSG_MOD(extack, "TCAM entry not available");
++			return ret;
++		}
++
++		/* Stream policer uses PSFP counters for stats, so tcam
++		 * counter assignment is needed
++		 */
++		rsrc->type.tcam.cntr = STATS_COUNTER_NOT_ASSIGNED;
++		rsrc->type.strm_flt.en = true;
++	}
++
++	action->police.rate_bytes_per_sec = rate_bytes_per_sec;
++	action->police.burst = burst;
++	action->police.mtu = mtu;
++	rsrc->resrc_used_mask |= (BIT(LAN937X_STREAM_FILTER) |
++				  BIT(LAN937X_TCAM_ENTRIES));
++	return ret;
++}
++
++static int lan937x_flower_policer(struct ksz_device *dev,
++				  struct netlink_ext_ack *extack, int port,
++				  struct lan937x_flower_rule *rule,
++				  u64 rate_bytes_per_sec, u32 burst, u32 mtu)
++{
++	struct lan937x_flower *flower = rule->flower;
++	struct lan937x_key *key;
++	int ret;
++
++	switch (flower->filter.type) {
++	case LAN937x_BCAST_FILTER:
++		ret = lan937x_setup_bcast_policer(dev, extack, port, rule);
++		if (ret)
++			return ret;
++
++		/* Utilize the Stream Filter to Implement BCAST Policer*/
++		return lan937x_setup_stream_policer(dev, extack, port, rule,
++						    rate_bytes_per_sec, burst,
++						    mtu);
++	case LAN937x_VLAN_AWARE_FILTER:
++		key = &flower->filter.key;
++
++		/* if number of action is one and only if vlan pcp
++		 * is the only classifier then use HW INGRESS_RATE_LIMIT
++		 * register. This method is used for not to consure more
++		 * stream filter resources
++		 */
++		if (flower->action.n_actions == 1 &&
++		    key->acl_dissector_map == VLAN_PCP_DISSECTOR_PRESENT) {
++			return lan937x_setup_tc_policer(dev, extack, port, rule,
++							rate_bytes_per_sec,
++							burst);
++		}
++		/* if number of classifier is more than one then use
++		 * TCAM and stream policer
++		 */
++		fallthrough;
++	case LAN937x_VLAN_UNAWARE_FILTER:
++		return lan937x_setup_stream_policer(dev, extack, port, rule,
++						    rate_bytes_per_sec, burst,
++						    mtu);
++	default:
++		NL_SET_ERR_MSG_MOD(extack, "Unknown keys for policing");
++		return -EOPNOTSUPP;
++	}
++}
++
++static int lan937x_flower_rule_init(struct ksz_device *dev,
++				    struct lan937x_flower_rule **flower_rule)
++{
++	struct lan937x_flower_rule *t;
++
++	t = devm_kzalloc(dev->dev, sizeof(*t), GFP_KERNEL);
++	if (!t)
++		return -ENOMEM;
++
++	t->flower = devm_kzalloc(dev->dev, sizeof(*t->flower), GFP_KERNEL);
++	if (!t->flower) {
++		devm_kfree(dev->dev, t);
++		return -ENOMEM;
++	}
++
++	t->resrc = devm_kzalloc(dev->dev, sizeof(*t->resrc), GFP_KERNEL);
++	if (!t->resrc) {
++		devm_kfree(dev->dev, t->flower);
++		devm_kfree(dev->dev, t);
++		return -ENOMEM;
++	}
++
++	*flower_rule = t;
++	return 0;
++}
++
++static int lan937x_flower_parse_actions(struct ksz_device *dev,
++					struct netlink_ext_ack *extack,
++					int port, struct flow_rule *rule,
++					struct lan937x_flower_rule *flower_rule)
++{
++	const struct flow_action_entry *act;
++	struct lan937x_flower *flower;
++	int ret = 0;
++	int i;
++
++	flower = flower_rule->flower;
++	flower->action.n_actions = rule->action.num_entries;
++
++	/* For every action, identify the capability & hw resrc availability*/
++	flow_action_for_each(i, act, &rule->action) {
++		switch (act->id) {
++		case FLOW_ACTION_POLICE: {
++			if (act->police.rate_pkt_ps) {
++				NL_SET_ERR_MSG_MOD(extack,
++						   "QoS offload not support packets per second");
++				ret = -EOPNOTSUPP;
++				goto out;
++			}
++			ret = lan937x_flower_policer(dev, extack, port,
++						     flower_rule,
++						     act->police.rate_bytes_ps,
++						     act->police.burst,
++						     act->police.mtu);
++			if (ret)
++				goto out;
++			break;
++		}
++		case FLOW_ACTION_TRAP: {
++			unsigned int cpu = dsa_upstream_port(dev->ds, port);
++
++			ret = lan937x_setup_action_redirect(dev, extack,
++							    port,
++							    flower_rule,
++							    BIT(cpu));
++			break;
++		}
++		case FLOW_ACTION_REDIRECT: {
++			struct dsa_port *to_dp;
++
++			to_dp = dsa_port_from_netdev(act->dev);
++
++			ret = lan937x_setup_action_redirect(dev, extack, port,
++							    flower_rule,
++							    BIT(to_dp->index));
++			break;
++		}
++		case FLOW_ACTION_DROP:
++			ret = lan937x_setup_action_drop(dev, extack, port,
++							flower_rule);
++			break;
++		case FLOW_ACTION_PRIORITY:
++			if (act->priority >= dev->ds->num_tx_queues) {
++				NL_SET_ERR_MSG_MOD(extack,
++						   "Only priorities 0..7 are supported");
++				return -EINVAL;
++			}
++
++			ret = lan937x_setup_action_priority(dev, extack, port,
++							    act->priority,
++							    flower_rule);
++			break;
++		default:
++			NL_SET_ERR_MSG_MOD(extack, "Action not supported");
++			ret = -EOPNOTSUPP;
++			goto out;
++		}
++	}
++out:
++	return ret;
++}
++
++static int lan937x_init_tc_policer_hw(struct ksz_device *dev, int port)
++{
++	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
++	int ret, i;
++
++	ret = lan937x_port_cfg(dev, port, REG_PORT_MAC_IN_RATE_LIMIT,
++			       PORT_RATE_LIMIT, false);
++	if (ret)
++		return ret;
++
++	for (i = 0; i < LAN937X_NUM_TC; i++) {
++		ksz_pwrite8(dev, port,
++				      REG_PORT_PRI0_IN_RLIMIT_CTL + i,
++				      0x00);
++		/* Note that the update will not take effect until the
++		 * Port Queue 7 Ingress Limit ctrl Register is written.
++		 */
++		ksz_pwrite8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL,
++				      0x00);
++		res->tc_policers_used[i] = false;
++	}
++
++	return 0;
++}
++
++static int lan937x_cfg_tc_policer_hw(struct ksz_device *dev, int port,
++				     struct lan937x_resrc_alloc *resrc,
++				     u64 rate_bytes_per_sec)
++{
++	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
++	u8 code = 0;
++	int ret, i;
++
++	ret = lan937x_tc_pol_rate_to_reg(rate_bytes_per_sec, &code);
++	if (ret)
++		return ret;
++
++	/* Clear Port Rate Limit to Priority based Rate Limit */
++	ret = lan937x_port_cfg(dev, port, REG_PORT_MAC_IN_RATE_LIMIT,
++			       PORT_RATE_LIMIT, false);
++	if (ret)
++		return ret;
++
++	i = resrc->type.tc_pol_used;
++	ksz_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL + i, code);
++
++	/* Note that the update will not take effect until the Port Queue 7
++	 * Ingress Limit ctrl Register is written. When port-based rate limiting
++	 * is used a value of 0h should be written to Port Queue 7 Egress Limit
++	 * Control Register.
++	 */
++	ksz_pread8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL, &code);
++	ksz_pwrite8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL, code);
++
++	res->tc_policers_used[i] = true;
++
++	return 0;
++}
++
++static int lan937x_init_strm_filter_hw(struct ksz_device *dev, int port)
++{
++	int i;
++
++	ksz_pwrite32(dev, port, REG_PORT_RX_PSFP, 0x00);
++
++	for (i = 0; i < LAN937X_NUM_STREAM_FILTERS; i++) {
++		ksz_pwrite32(dev, port, REG_PORT_RX_QCI_PTR, i);
++
++		/* Clear the Meter Enable and Gate enable */
++		ksz_pwrite32(dev, port, REG_PORT_RX_QCI_FS_CTL, 0x00);
++	}
++
++	return 0;
++}
++
++/* The PSFP rate limiting register contains 16 bit field each for CIR and PIR
++ * The individual bits in CIR/PIR is assigned weightage in bits/sec unit.
++ * To arrive at desired frequency, set one or more registers bits, which
++ * cumulatively match the desired frequency approximately.
++ * The below logic identifies the reg value by accumulating the weights until
++ * the desired frequency is exceeded, and then looks back and removes the
++ * weights to bring it further near the desired value. This function returns a
++ * value that is greater than or equal to the desired value
++ */
++static u16 lan937x_psfp_rate_to_reg(u64 rate_bytes_per_sec)
++{
++	u64 rate_bps = (8 * rate_bytes_per_sec);
++	u64 t_rate = 0;
++	u16 regcode;
++	u8 i = 0;
++	int j;
++	u32 t;
++	const u32 regbit_weightage_bps[] = {
++		1525,		/* BIT 0*/
++		3051,		/* BIT 1*/
++		6103,		/* BIT 2*/
++		12207,		/* BIT 3*/
++		24414,		/* BIT 4*/
++		48828,		/* BIT 5*/
++		97656,		/* BIT 6*/
++		195312,		/* BIT 7*/
++		390625,		/* BIT 8*/
++		781250,		/* BIT 9*/
++		1562500,	/* BIT 10*/
++		3125000,	/* BIT 11*/
++		6250000,	/* BIT 12*/
++		12500000,	/* BIT 13*/
++		25000000,	/* BIT 14*/
++		50000000	/* BIT 15*/
++	};
++
++	/* Reg Field Size is 16 bits*/
++	while (i < 16) {
++		if (t_rate < rate_bps) {
++			/* Accumulate until desired frequency is exceeded*/
++			t_rate = t_rate + regbit_weightage_bps[i];
++			regcode |= BIT(i);
++		} else {
++			break;
++		}
++
++		i++;
++	}
++
++	if (t_rate != rate_bps) {
++		/* j tracks the last bit index accumulated */
++		j = i - 1;
++		while (j >= 0) {
++			t = t_rate - regbit_weightage_bps[j];
++			if (t >= rate_bps) {
++				/* Remove bits that are giving excessive value*/
++				t_rate = t;
++				regcode &= ~BIT(j);
++			}
++			j--;
++		}
++	}
++
++	return regcode;
++}
++
++static int lan937x_cfg_strm_policer_hw(struct ksz_device *dev, int port,
++				       struct lan937x_resrc_alloc *resrc,
++				       struct lan937x_flower_action *action)
++{
++	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
++	u32 burst;
++	u8 index;
++	u16 cir;
++	u32 val;
++	int ret;
++
++	if (!resrc->type.strm_flt.en)
++		return -EINVAL;
++
++	ksz_pwrite32(dev, port, REG_PORT_RX_PSFP, PSFP_ENABLE);
++
++	index = resrc->type.strm_flt.index;
++	ksz_pwrite32(dev, port, REG_PORT_RX_QCI_PTR, index);
++
++	ksz_pwrite8(dev, port, REG_PORT_METER_RED_INT_MSK,
++			      PORT_METER_RED_INT_MSK_ALL);
++
++	cir = lan937x_psfp_rate_to_reg(action->police.rate_bytes_per_sec);
++
++	/* fill PIR with same vaue*/
++	val = METER_SR_UPDT_RATE(cir, cir);
++
++	ksz_pwrite32(dev, port, REG_PORT_RX_QCI_METER_SR, val);
++
++	burst = action->police.burst;
++
++	/* fill Peak burst same */
++	val = METER_SR_UPDT_BURST(burst, burst);
++
++	ksz_pwrite32(dev, port, REG_PORT_RX_QCI_METER_BS, val);
++
++	/* Enable flow meter of Id (same as stream ID)*/
++	val = (FS_CTL_METER_EN |
++	       FS_UPDT_METER_IDX(index) |
++	       FS_UPDT_MTU(action->police.mtu) |
++	       FS_CTL_MAX_SDU_EN);
++	ksz_pwrite32(dev, port, REG_PORT_RX_QCI_FS_CTL, val);
++
++	res->stream_filters_used[index] = true;
++
++	return ret;
++}
++
++static int lan937x_flower_configure_hw(struct ksz_device *dev, int port,
++				       struct lan937x_flower_rule *rule)
++{
++	struct lan937x_flower_action *action = &rule->flower->action;
++	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
++	u32 actions_presence_mask = action->actions_presence_mask;
++	struct lan937x_resrc_alloc *resrc = rule->resrc;
++	u64 rate = action->police.rate_bytes_per_sec;
++	int ret;
++	u8 i;
++
++	if (resrc->resrc_used_mask & BIT(LAN937X_TCAM_ENTRIES)) {
++		ret = lan937x_acl_program_entry(dev, port, rule);
++		if (ret)
++			return ret;
++
++		if (resrc->type.tcam.cntr != STATS_COUNTER_NOT_ASSIGNED)
++			res->tcam_frm_counters[resrc->type.tcam.cntr] = true;
++	}
++
++	for (i = 0; ((actions_presence_mask != 0) &&
++		     (i < LAN937X_NUM_ACTIONS_SUPPORTED));
++	     i++) {
++		if (!(actions_presence_mask & BIT(i)))
++			continue;
++
++		actions_presence_mask &= ~BIT(i);
++
++		switch (i) {
++		case LAN937X_ACT_TC_POLICE:
++			ret = lan937x_cfg_tc_policer_hw(dev, port, resrc, rate);
++			break;
++
++		case LAN937X_ACT_STREAM_POLICE:
++			ret = lan937x_cfg_strm_policer_hw(dev, port, resrc,
++							  action);
++			break;
++
++		default:
++			break;
++		}
++
++		if (ret)
++			return ret;
++	}
++
++	return 0;
++}
++
++/* Adjust the tcam start index of all the flower rules
++ * occupying tcam rows below the deleted entry.
++ */
++static void lan937x_flower_recfg_tcam_idx(struct ksz_device *dev, int port,
++					  struct lan937x_flower_rule *rule,
++					  u8 shift_count)
++{
++	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
++	struct lan937x_resrc_alloc *resrc;
++	struct lan937x_flower_rule *nxt_rule;
++	u8 i, row;
++
++	nxt_rule = rule;
++	while (!list_is_first(&nxt_rule->list, &blk->rules)) {
++		/* get the next rule */
++		nxt_rule = list_prev_entry(nxt_rule, list);
++		resrc = nxt_rule->resrc;
++
++		/* Identify if subsequent rules use TCAM entries
++		 * If used, shift the entries by shift_count
++		 */
++		if (resrc->type.tcam.n_entries)
++			resrc->type.tcam.index = (resrc->type.tcam.index -
++						  shift_count);
++	}
++
++	/* Clear the status of freed up rows to "Available for new rule" */
++	if (-ENOSPC == lan937x_assign_tcam_entries(dev, port, 0x01, &row))
++		row = LAN937X_NUM_TCAM_ENTRIES;
++
++	for (i = 0; i < shift_count; i++) {
++		--row;
++		blk->res.tcam_entries_used[row] = false;
++	}
++}
++
++static int lan937x_flower_free_resrcs(struct ksz_device *dev, int port,
++				      struct lan937x_flower_rule *rule)
++{
++	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
++	struct lan937x_resrc_alloc *resrc = rule->resrc;
++	int ret;
++	int i;
++
++	if (resrc->resrc_used_mask & BIT(LAN937X_TC_POLICER)) {
++		i = resrc->type.tc_pol_used;
++		ksz_pwrite8(dev, port,
++				      REG_PORT_PRI0_IN_RLIMIT_CTL + i,
++				      0x00);
++
++		res->tc_policers_used[i] = false;
++	}
++
++	if (resrc->resrc_used_mask & BIT(LAN937X_TCAM_ENTRIES)) {
++		u8 n_entries = resrc->type.tcam.n_entries;
++
++		if (resrc->type.tcam.cntr != STATS_COUNTER_NOT_ASSIGNED)
++			res->tcam_frm_counters[resrc->type.tcam.cntr] = false;
++
++		if (resrc->type.tcam.n_entries) {
++			ret = lan937x_acl_free_entry(dev, port, rule);
++			if (ret)
++				return ret;
++
++			/* After deletion, shift the entries to avoid holes
++			 * in the entries
++			 */
++			lan937x_flower_recfg_tcam_idx(dev, port, rule,
++						      n_entries);
++		}
++	}
++
++	if (resrc->resrc_used_mask & BIT(LAN937X_STREAM_FILTER)) {
++		if (!(resrc->type.strm_flt.en))
++			return -EINVAL;
++
++		i = resrc->type.strm_flt.index;
++
++		/* Write the index first */
++		ksz_pwrite32(dev, port, REG_PORT_RX_QCI_PTR, i);
++
++		/* Clear the Meter,Gate enable, Max SDU, Oversize block etc */
++		ksz_pwrite32(dev, port, REG_PORT_RX_QCI_FS_CTL, 0x00);
++
++		res->stream_filters_used[i] = false;
++	}
++
++	if (resrc->resrc_used_mask & BIT(LAN937X_BROADCAST_POLICER)) {
++		if (resrc->type.broadcast_pol_en)
++			res->broadcast_pol_used = false;
++	}
++
++	return 0;
++}
++
++int lan937x_cls_flower_add(struct dsa_switch *ds, int port,
++			   struct flow_cls_offload *cls, bool ingress)
++{
++	struct ksz_device *dev = ds->priv;
++	struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
++	struct flow_rule *rule = flow_cls_offload_flow_rule(cls);
++	struct netlink_ext_ack *extack = cls->common.extack;
++	struct lan937x_flower_rule *flower_rule;
++	int ret;
++
++	if (lan937x_flower_rule_init(dev, &flower_rule))
++		return -ENOMEM;
++
++	flower_rule->cookie = cls->cookie;
++
++	/* Parse the Keys and identify the hw resources required*/
++	ret = lan937x_flower_parse_key(extack, cls,
++				       &flower_rule->flower->filter);
++	if (ret)
++		goto err;
++
++	ret = lan937x_flower_parse_actions(dev, extack, port,
++					   rule, flower_rule);
++	if (ret)
++		goto err;
++
++	/* Configure the hardware Resources */
++	ret = lan937x_flower_configure_hw(dev, port, flower_rule);
++	if (ret)
++		goto err;
++
++	devm_kfree(dev->dev, flower_rule->flower);
++	flower_rule->flower = NULL;
++
++	list_add(&flower_rule->list, &blk->rules);
++
++	cls->stats.pkts = 0x00;
++	cls->stats.drops = 0x00;
++
++	return 0;
++err:
++	devm_kfree(dev->dev, flower_rule->flower);
++	devm_kfree(dev->dev, flower_rule->resrc);
++	devm_kfree(dev->dev, flower_rule);
++	return ret;
++}
++
++int lan937x_cls_flower_del(struct dsa_switch *ds, int port,
++			   struct flow_cls_offload *cls, bool ingress)
++{
++	struct ksz_device *dev = ds->priv;
++	struct lan937x_flower_rule *rule;
++	int ret;
++
++	rule = lan937x_rule_find(dev, port, cls->cookie);
++	/* No Rules to delete*/
++	if (!rule)
++		return 0;
++
++	ret = lan937x_flower_free_resrcs(dev, port, rule);
++	if (ret)
++		return ret;
++
++	/* Delete the rule */
++	list_del(&rule->list);
++	if (rule->flower)
++		devm_kfree(dev->dev, rule->flower);
++
++	devm_kfree(dev->dev, rule->resrc);
++	devm_kfree(dev->dev, rule);
++
++	return ret;
++}
++
++static int lan937x_enable_interrupts(struct ksz_device *dev, int port)
++{
++	u8 data;
++	int ret = 0;
++
++	/* ACL FR Counters Interrupt Enable*/
++	ksz_pwrite8(dev, port,
++			      REG_ACL_PORT_INT_MASK, ACL_FR_CNTR_INTR_EN);
++
++	/* Stream Filter Counters Interrupt Enable*/
++	ksz_pwrite8(dev, port,
++			      REG_PORT_RX_CNT_OVR_INT_MSK,
++			      EN_ALL_STREAM_CNTR_INTR);
++
++	/* Enable ACL and QCI Top interrupts */
++	ksz_pread8(dev, port, REG_PORT_INT_MASK, &data);
++
++	data &= ~(PORT_ACL_INT | PORT_QCI_INT);
++	ksz_pwrite8(dev, port, REG_PORT_INT_MASK, data);
++
++	return ret;
++}
++
++int lan937x_flower_setup(struct dsa_switch *ds)
++{
++	struct ksz_device *dev = ds->priv;
++	int port, ret;
++
++	for (port = 0; port < dev->info->port_cnt; port++) {
++		struct lan937x_flr_blk *blk = lan937x_get_flr_blk(dev, port);
++		struct lan937x_p_res *res = &blk->res;
++
++		ret = lan937x_init_acl_parsers(dev, port);
++		if (ret)
++			return ret;
++
++		ret = lan937x_init_strm_filter_hw(dev, port);
++		if (ret)
++			return ret;
++
++		ret = lan937x_init_tc_policer_hw(dev, port);
++		if (ret)
++			return ret;
++
++		ret = lan937x_enable_interrupts(dev, port);
++		if (ret)
++			return ret;
++
++		INIT_LIST_HEAD(&blk->rules);
++
++		memset(res->gate_used, false, LAN937X_NUM_GATES);
++		memset(res->stream_filters_used, false,
++		       LAN937X_NUM_STREAM_FILTERS);
++		memset(res->tcam_entries_used, false, LAN937X_NUM_TCAM_ENTRIES);
++		memset(res->tc_policers_used, false, LAN937X_NUM_TC);
++
++		res->broadcast_pol_used = false;
++	}
++
++	return 0;
++}
++
++int lan937x_cls_flower_stats(struct dsa_switch *ds, int port,
++			     struct flow_cls_offload *cls, bool ingress)
++{
++	struct ksz_device *dev = ds->priv;
++	struct lan937x_resrc_alloc *resrc;
++	struct lan937x_flower_rule *rule;
++	struct flow_stats stats = {0};
++	struct lan937x_p_res *res;
++	u32 drops, pkts;
++	u8 i;
++
++	res = lan937x_get_flr_res(dev, port);
++	rule = lan937x_rule_find(dev, port, cls->cookie);
++	if (!rule)
++		return -EINVAL;
++
++	resrc = rule->resrc;
++	if (resrc->resrc_used_mask & BIT(LAN937X_TCAM_ENTRIES)) {
++		if (resrc->type.tcam.cntr != STATS_COUNTER_NOT_ASSIGNED) {
++			i = resrc->type.tcam.cntr;
++
++			ksz_pread32(dev, port,
++					      REG_ACL_PORT_FR_COUNT0 + (i * 4),
++					      &pkts);
++
++			cls->stats.pkts = 0;
++			stats.pkts = (res->tcam_match_cntr_bkup[i] +
++				      pkts - rule->stats.pkts);
++			rule->stats.pkts = res->tcam_match_cntr_bkup[i] + pkts;
++		} else if (resrc->resrc_used_mask &
++			   BIT(LAN937X_STREAM_FILTER)) {
++			i = resrc->type.strm_flt.index;
++
++			ksz_pwrite32(dev, port, REG_PORT_RX_QCI_PTR,
++					       i);
++
++			ksz_pread32(dev, port,
++					      REG_PORT_RX_QCI_FS_FM,
++					      &pkts);
++
++			ksz_pread32(dev, port,
++					      REG_PORT_RX_QCI_FS_FD,
++					      &drops);
++
++			/* Hardware Counters are 20bit counters
++			 * Counter overflow cases are handled.
++			 */
++			cls->stats.pkts = 0;
++			cls->stats.drops = 0;
++
++			stats.pkts = (res->psfp_match_cntr_bkup[i] +
++				      pkts - rule->stats.pkts);
++			stats.drops = (res->psfp_drop_cntr_bkup[i] +
++				       drops - rule->stats.drops);
++
++			rule->stats.pkts = res->psfp_match_cntr_bkup[i] + pkts;
++			rule->stats.drops = res->psfp_drop_cntr_bkup[i] + drops;
++		}
++	} else {
++		return 0;
++	}
++
++	flow_stats_update(&cls->stats, 0x0, stats.pkts, stats.drops,
++			  stats.lastused, FLOW_ACTION_HW_STATS_IMMEDIATE);
++
++	return 0;
++}
++
++irqreturn_t lan937x_qci_cntr_isr(struct ksz_device *dev, int port)
++{
++	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
++	u8 sf_cntr_sts;
++	u8 sf_int_sts;
++	u8 i;
++
++	/* Identify from which instance of Stream filter the Intr is raised */
++	ksz_pread8(dev, port, REG_PORT_RX_CNT_OVR_INT_STS,
++			     &sf_int_sts);
++
++	for (i = 0; i < LAN937X_NUM_STREAM_FILTERS; i++) {
++		if (sf_int_sts & BIT(i)) {
++			ksz_pwrite32(dev, port,
++					       REG_PORT_RX_QCI_PTR, i);
++
++			/* Identify from which counter overflowed */
++			ksz_pread8(dev, port,
++					     REG_PORT_STREAM_CNT_STS,
++					     &sf_cntr_sts);
++
++			/* Check whether Frame Match counter overflowed */
++			if (sf_cntr_sts & FILT_STR_FR_MATCH_CNT_OVR) {
++				u64 *cntr = &res->psfp_match_cntr_bkup[i];
++
++				*cntr += FR_MATCH_CNTR_MAX;
++				*cntr &= ~((u64)FR_MATCH_CNTR_MAX);
++			}
++			/* Check whether Flow Meter Drop counter overflowed */
++			if (sf_cntr_sts & FILT_STR_FR_FAIL_DROP_CNT_OVR) {
++				u64 *cntr = &res->psfp_drop_cntr_bkup[i];
++
++				*cntr += FR_DROP_CNTR_MAX;
++				*cntr &= ~((u64)FR_DROP_CNTR_MAX);
++			}
++
++			/* Clear the interrupt */
++			ksz_pwrite8(dev, port,
++					       REG_PORT_STREAM_CNT_STS,
++					       sf_cntr_sts);
++		}
++	}
++	return IRQ_HANDLED;
++}
+diff --git a/drivers/net/dsa/microchip/lan937x_flower.h b/drivers/net/dsa/microchip/lan937x_flower.h
+new file mode 100644
+index 000000000000..0dc4f4073855
+--- /dev/null
++++ b/drivers/net/dsa/microchip/lan937x_flower.h
+@@ -0,0 +1,240 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/* Microchip switch driver common header
++ *
++ * Copyright (C) 2019-2021 Microchip Technology Inc.
++ */
++#ifndef _NET_DSA_DRIVERS_LAN937X_FLOWER_H
++#define _NET_DSA_DRIVERS_LAN937X_FLOWER_H
++
++#include "lan937x_tc.h"
++#include "lan937x_acl.h"
++
++#define LAN937X_NUM_TCAM_ENTRIES	MAX_ACL_ENTRIES
++#define LAN937x_NUM_TCAM_COUNTERS	4
++#define LAN937X_NUM_STREAM_FILTERS	8
++#define LAN937X_NUM_GATES		8
++#define LAN937X_NUM_DISSECTORS_SUPPORTED acl_num_dissectors_supported
++#define STATS_COUNTER_NOT_ASSIGNED	0xFF
++
++struct lan937x_p_res {
++	bool tcam_entries_used[LAN937X_NUM_TCAM_ENTRIES];
++	bool tcam_frm_counters[LAN937x_NUM_TCAM_COUNTERS];
++	bool stream_filters_used[LAN937X_NUM_STREAM_FILTERS];
++	bool gate_used[LAN937X_NUM_GATES];
++	bool tc_policers_used[LAN937X_NUM_TC];
++	bool broadcast_pol_used;
++
++	/* The following memebers are used to maintain the Counter Value when
++	 * there is a overflow condition
++	 */
++	u64 tcam_match_cntr_bkup[LAN937x_NUM_TCAM_COUNTERS];
++	u64 psfp_match_cntr_bkup[LAN937X_NUM_STREAM_FILTERS];
++	u64 psfp_drop_cntr_bkup[LAN937X_NUM_STREAM_FILTERS];
++};
++
++/* struct lan937x_flr_blk :
++ * Flower Rule and Hw Resource Management data structure.
++ *	rules- List for holding already implemented TC Flower Rules. Each Node
++ *		is of type lan937x_flower_rule.
++ *	res - Data Structure for tracking allocated and available hardware
++ *	      resources.
++ * Memory for this data structure is allocated through dev->port->priv member.
++ */
++struct lan937x_flr_blk {
++	struct list_head rules;	/**Element type: lan937x_flower_rule*/
++	struct lan937x_p_res res;
++};
++
++enum lan937x_filter_type {
++	LAN937x_BCAST_FILTER,
++	LAN937x_VLAN_UNAWARE_FILTER,
++	LAN937x_VLAN_AWARE_FILTER,
++};
++
++enum lan937x_actions_id {
++	LAN937X_ACT_TRAFFIC_CLASS_ASSIGN,
++	LAN937X_ACT_REDIRECT_FLOW,
++	LAN937X_ACT_BCAST_POLICE,
++	LAN937X_ACT_TC_POLICE,
++	LAN937X_ACT_STREAM_POLICE,
++	LAN937X_ACT_STREAM_GATE,
++	LAN937X_ACT_DROP,
++	LAN937X_ACT_PRIORITY,
++	LAN937X_NUM_ACTIONS_SUPPORTED,
++};
++
++struct lan937x_val_mask_u64 {
++	u64 value;
++	u64 mask;
++};
++
++struct lan937x_val_mask_u16 {
++	u16 value;
++	u16 mask;
++};
++
++struct lan937x_val_mask_u8 {
++	u8 value;
++	u8 mask;
++};
++
++struct lan937x_ipv4_addr {
++	u8 value[4];
++	u8 mask[4];
++};
++
++struct lan937x_ipv6_addr {
++	u8 value[16];
++	u8 mask[16];
++};
++
++struct	lan937x_ipv4 {
++	struct lan937x_ipv4_addr sip;
++	struct lan937x_ipv4_addr dip;
++	struct lan937x_val_mask_u8 ttl;
++	struct lan937x_val_mask_u8 tos;
++	struct lan937x_val_mask_u8 proto;
++};
++
++struct	lan937x_ipv6 {
++	struct lan937x_ipv6_addr sip;
++	struct lan937x_ipv6_addr dip;
++	struct lan937x_val_mask_u8 hop;
++	struct lan937x_val_mask_u8 tc;
++	struct lan937x_val_mask_u8 next_hdr;
++};
++
++struct lan937x_key {
++	/*Bits follow lan937x_dissector_id order.*/
++	u32 acl_dissector_map;
++
++	struct {
++		struct lan937x_val_mask_u64 dst_mac;
++		struct lan937x_val_mask_u64 src_mac;
++		struct lan937x_val_mask_u16 vlan_id;
++		struct lan937x_val_mask_u16 vlan_prio;
++		struct lan937x_val_mask_u16 ethtype;
++		union{
++			struct lan937x_ipv4 ipv4;
++			struct lan937x_ipv6 ipv6;
++		};
++		struct lan937x_val_mask_u16 src_port;
++		struct lan937x_val_mask_u16 dst_port;
++	};
++};
++
++struct lan937x_flower_filter {
++	enum	lan937x_filter_type type;
++	struct  lan937x_key key;
++};
++
++struct lan937x_flower_action {
++	u8 n_actions;
++	u32 actions_presence_mask; /**bits in lan937x_actions_id order*/
++
++	struct {
++		u64 rate_bytes_per_sec;
++		u32 burst;
++		u32 mtu;
++	} police;
++
++	struct {
++		int ipv;
++		u64 base_time;
++		u64 cycle_time;
++		int n_entries;
++		struct action_gate_entry *entries;
++		struct flow_stats stats;
++	} gate;
++
++	u8 redirect_port_mask;
++	u8 skbedit_prio;
++};
++
++enum lan937x_resource_id {
++	LAN937X_TCAM_ENTRIES,
++	LAN937X_STREAM_FILTER,
++	LAN937X_PSFP_GATE,
++	LAN937X_TC_POLICER,
++	LAN937X_BROADCAST_POLICER,
++
++	LAN937X_NUM_RESOURCES,
++};
++
++struct lan937x_resrc_alloc {
++	/*Bits assigned in lan937x_resource_id order*/
++	u16 resrc_used_mask;
++
++	struct {
++		struct {
++			u8 parser;
++			u8 n_entries;
++			u8 index;
++			u8 cntr;
++		} tcam;
++
++		struct {
++			bool en;
++			u8 index;
++		} strm_flt;
++
++		struct {
++			bool en;
++			u8 index;
++		} gate;
++
++		u8 tc_pol_used;
++		u8 broadcast_pol_en;
++	} type;
++};
++
++struct lan937x_flower {
++	struct lan937x_flower_filter filter;
++	struct lan937x_flower_action action;
++};
++
++struct lan937x_stats {
++	u64 pkts;
++	u64 drops;
++};
++
++struct lan937x_flower_rule {
++	struct list_head list;
++	unsigned long cookie;
++	struct lan937x_flower *flower;
++	struct lan937x_resrc_alloc *resrc;
++	struct lan937x_stats stats;
++};
++
++/** TC Flower APIs */
++int lan937x_flower_setup(struct dsa_switch *ds);
++int lan937x_cls_flower_add(struct dsa_switch *ds, int port,
++			   struct flow_cls_offload *cls, bool ingress);
++int lan937x_init_acl_parsers(struct ksz_device *dev, int port);
++int lan937x_acl_program_entry(struct ksz_device *dev, int port,
++			      struct lan937x_flower_rule *rule);
++int lan937x_get_acl_req(enum lan937x_filter_type type,
++			u8 *parser_idx, u8 *num_entries);
++struct lan937x_flr_blk *lan937x_get_flr_blk(struct ksz_device *dev,
++					    int port);
++struct lan937x_p_res *lan937x_get_flr_res(struct ksz_device *dev,
++					  int port);
++int lan937x_assign_tcam_entries(struct ksz_device *dev,
++				int port, u8 num_entry_reqd,
++				u8 *tcam_idx);
++int lan937x_tc_pol_rate_to_reg(u64 rate_bytes_per_sec, u8 *regval);
++
++/* APIs to support TC Flower rule deletion */
++int lan937x_cls_flower_del(struct dsa_switch *ds, int port,
++			   struct flow_cls_offload *cls, bool ingress);
++int lan937x_acl_free_entry(struct ksz_device *dev, int port,
++			   struct lan937x_flower_rule *rule);
++
++/* APIs to support TC Flower statistics */
++int lan937x_cls_flower_stats(struct dsa_switch *ds, int port,
++			     struct flow_cls_offload *cls, bool ingress);
++irqreturn_t lan937x_acl_isr(struct ksz_device *dev, int port);
++irqreturn_t lan937x_qci_cntr_isr(struct ksz_device *dev, int port);
++
++#endif
++
+diff --git a/drivers/net/dsa/microchip/lan937x_main.c b/drivers/net/dsa/microchip/lan937x_main.c
+index 3e83f8ca0f09..ead6c7a84e83 100644
+--- a/drivers/net/dsa/microchip/lan937x_main.c
++++ b/drivers/net/dsa/microchip/lan937x_main.c
+@@ -19,6 +19,11 @@
+ #include "lan937x_reg.h"
+ #include "ksz_common.h"
+ #include "lan937x.h"
++#include "lan937x_ptp.h"
++#include "lan937x_devlink.h"
++#include "lan937x_tc.h"
++#include "lan937x_flower.h"
++#include "lan937x_acl.h"
+ 
+ #define LAN937x_PNIRQS 6
+ 
+@@ -27,13 +32,18 @@ static int lan937x_cfg(struct ksz_device *dev, u32 addr, u8 bits, bool set)
+ 	return regmap_update_bits(dev->regmap[0], addr, bits, set ? bits : 0);
+ }
+ 
+-static int lan937x_port_cfg(struct ksz_device *dev, int port, int offset,
++int lan937x_port_cfg(struct ksz_device *dev, int port, int offset,
+ 			    u8 bits, bool set)
+ {
+ 	return regmap_update_bits(dev->regmap[0], PORT_CTRL_ADDR(port, offset),
+ 				  bits, set ? bits : 0);
+ }
+ 
++int lan937x_cfg32(struct ksz_device *dev, u32 addr, u32 bits, bool set)
++{
++        return regmap_update_bits(dev->regmap[2], addr, bits, set ? bits : 0);
++}
++
+ static int lan937x_enable_spi_indirect_access(struct ksz_device *dev)
+ {
+ 	u16 data16;
+@@ -786,6 +796,20 @@ int lan937x_setup(struct dsa_switch *ds)
+ 	lan937x_cfg(dev, REG_SW_GLOBAL_OUTPUT_CTRL__1,
+ 		    (SW_CLK125_ENB | SW_CLK25_ENB), true);
+ 
++	ret = lan937x_ptp_init(dev);
++        if (ret)
++                return ret;
++
++	lan937x_tc_queue_init(ds);
++
++        ret = lan937x_devlink_init(ds);
++        if (ret)
++                goto error_ptp_deinit;
++
++        ret = lan937x_flower_setup(ds);
++        if (ret)
++                return ret;
++
+ 	return 0;
+ 
+ out_pirq:
+@@ -797,6 +821,10 @@ int lan937x_setup(struct dsa_switch *ds)
+ 		lan937x_girq_free(dev);
+ 
+ 	return ret;
++
++error_ptp_deinit:
++        lan937x_ptp_deinit(dev);
++        return ret;
+ }
+ 
+ void lan937x_teardown(struct dsa_switch *ds)
+@@ -817,6 +845,184 @@ void lan937x_switch_exit(struct ksz_device *dev)
+ 	lan937x_reset_switch(dev);
+ }
+ 
++int lan937x_port_mirror_add(struct dsa_switch *ds, int port,
++                                   struct dsa_mall_mirror_tc_entry *mirror,
++                                   bool ingress, struct netlink_ext_ack *extack)
++{
++        struct ksz_device *dev = ds->priv;
++        int ret, p;
++        u8 data;
++
++        /* Limit to one sniffer port
++         * Check if any of the port is already set for sniffing
++         * If yes, instruct the user to remove the previous entry & exit
++         */
++        for (p = 0; p < dev->info->port_cnt; p++) {
++                /* Skip the current sniffing port */
++                if (p == mirror->to_local_port)
++                        continue;
++
++                ksz_pread8(dev, p, P_MIRROR_CTRL, &data);
++
++                if (data & PORT_MIRROR_SNIFFER) {
++                        NL_SET_ERR_MSG_MOD(extack,
++                                           "Sniffer port is already configured, delete existing rules & retry");
++                        return -EBUSY;
++                }
++        }
++        /* Configure ingress/egress mirroring */
++        if (ingress)
++                ret = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX,
++                                       true);
++        else
++                ret = lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX,
++                                       true);
++        if (ret < 0)
++                return ret;
++        /* Configure sniffer port as other ports do not have
++         * PORT_MIRROR_SNIFFER is set
++         */
++        ret = lan937x_port_cfg(dev, mirror->to_local_port, P_MIRROR_CTRL,
++                               PORT_MIRROR_SNIFFER, true);
++        if (ret < 0)
++                return ret;
++
++        return lan937x_cfg(dev, S_MIRROR_CTRL, SW_MIRROR_RX_TX, false);
++}
++
++void lan937x_port_mirror_del(struct dsa_switch *ds, int port,
++                                    struct dsa_mall_mirror_tc_entry *mirror)
++{
++        struct ksz_device *dev = ds->priv;
++        bool in_use = false;
++        u8 data;
++        int p;
++
++        /* clear ingress/egress mirroring port */
++        if (mirror->ingress)
++                lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_RX,
++                                 false);
++        else
++                lan937x_port_cfg(dev, port, P_MIRROR_CTRL, PORT_MIRROR_TX,
++                                 false);
++        /* Check if any of the port is still referring to sniffer port */
++        for (p = 0; p < dev->info->port_cnt; p++) {
++                ksz_pread8(dev, p, P_MIRROR_CTRL, &data);
++
++                if ((data & (PORT_MIRROR_RX | PORT_MIRROR_TX))) {
++                        in_use = true;
++                        break;
++                }
++        }
++
++        /* delete sniffing if there are no other mirroring rule exist */
++        if (!in_use)
++                lan937x_port_cfg(dev, mirror->to_local_port, P_MIRROR_CTRL,
++                                 PORT_MIRROR_SNIFFER, false);
++}
++
++int lan937x_tc_pol_rate_to_reg(u64 rate_bytes_per_sec, u8 *regval)
++{
++	u32 rate_kbps = div_u64(8 * rate_bytes_per_sec, 1000);
++	u16 code = 0x00;
++
++	if (rate_kbps >= 2000) {
++		code = (rate_kbps / 1000);
++	} else if (rate_kbps == 1000) {
++		code = RLIMIT_REG_CODE_1MBPS;
++	} else if (rate_kbps <= 1280) {
++		code = RLIMIT_REG_CODE_1280KBPS;
++	} else if (rate_kbps <= 1920) {
++		code = RLIMIT_REG_CODE_1920KBPS;
++	} else {
++		/* All values in rate_boundaries are in kbps*/
++		const u16 rate_boundaries[] = {
++			/* [0]*/	256,	320,	384,	448,	512,
++			/* [5]*/	576,	640,	804,	768,	832,
++			/* [10]*/	896,	960,
++		};
++		u8 i;
++
++		for (i = 0; i < 12; i++) {
++			if (rate_kbps < rate_boundaries[i]) {
++				/* 256 kbps is the lowest limited rate.
++				 * Incrementing reg value by one step results in
++				 * setting the rate to next subsequent boundary
++				 */
++				code = RLIMIT_REG_CODE_256KBPS + i;
++				break;
++			}
++		}
++	}
++
++	if (!code)
++		return -EINVAL;
++
++	*regval = code;
++
++	return 0;
++}
++
++int lan937x_port_policer_add(struct dsa_switch *ds, int port,
++				    struct dsa_mall_policer_tc_entry *policer)
++{
++	struct ksz_device *dev = ds->priv;
++	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
++	u8 code = 0;
++	int ret, i;
++
++	/* Port Policing and Traffic class Policing is mutually exclusive
++	 * behavior of one Ingress Rate Limiting Hw
++	 */
++	for (i = 0; i < LAN937X_NUM_TC; i++) {
++		if (res->tc_policers_used[i])
++			return -ENOSPC;
++	}
++
++	ret = lan937x_tc_pol_rate_to_reg(policer->rate_bytes_per_sec, &code);
++	if (ret)
++		return ret;
++
++	ret = lan937x_port_cfg(dev, port, REG_PORT_MAC_IN_RATE_LIMIT,
++			       PORT_RATE_LIMIT, true);
++	if (ret)
++		return ret;
++
++	ksz_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL, code);
++
++	/* Note that the update will not take effect until the Port Queue 7
++	 * Ingress Limit ctrl Register is written. When port-based rate limiting
++	 * is used a value of 0h should be written to Port Queue 7 Egress Limit
++	 * Control Register.
++	 */
++	ksz_pwrite8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL, 0x00);
++
++	for (i = 0; i < LAN937X_NUM_TC; i++)
++		res->tc_policers_used[i] = true;
++
++	return 0;
++}
++
++void lan937x_port_policer_del(struct dsa_switch *ds, int port)
++{
++	struct ksz_device *dev = ds->priv;
++	struct lan937x_p_res *res = lan937x_get_flr_res(dev, port);
++	u8 i;
++
++	/*Update Default Value to Rate Limit : 00*/
++	ksz_pwrite8(dev, port, REG_PORT_PRI0_IN_RLIMIT_CTL, 0x00);
++
++	/* Note that the update will not take effect until the Port Queue 7
++	 * Ingress Limit ctrl Register is written. When port-based rate limiting
++	 * is used a value of 0h should be written to Port Queue 7 Egress Limit
++	 * Control Register
++	 */
++	ksz_pwrite8(dev, port, REG_PORT_PRI7_IN_RLIMIT_CTL, 0x00);
++
++	for (i = 0; i < LAN937X_NUM_TC; i++)
++		res->tc_policers_used[i] = false;
++}
++
+ MODULE_AUTHOR("Arun Ramadoss <arun.ramadoss@microchip.com>");
+ MODULE_DESCRIPTION("Microchip LAN937x Series Switch DSA Driver");
+ MODULE_LICENSE("GPL");
+diff --git a/drivers/net/dsa/microchip/lan937x_ptp.c b/drivers/net/dsa/microchip/lan937x_ptp.c
+new file mode 100644
+index 000000000000..403b9d9aceff
+--- /dev/null
++++ b/drivers/net/dsa/microchip/lan937x_ptp.c
+@@ -0,0 +1,1250 @@
++// SPDX-License-Identifier: GPL-2.0
++/* Microchip LAN937X PTP Implementation
++ * Copyright (C) 2019-2020 Microchip Technology Inc.
++ */
++
++#include <linux/kernel.h>
++#include "ksz_common.h"
++#include "lan937x_reg.h"
++#include "lan937x.h"
++#include "lan937x_ptp.h"
++#include "ksz_common.h"
++#include <linux/ptp_classify.h>
++#include <linux/ptp_clock_kernel.h>
++#include <linux/irqreturn.h>
++
++#define ptp_clock_info_to_dev(d) \
++	container_of((d), struct ksz_device, ptp_caps)
++#define sync_to_port(work) \
++		container_of((work), struct lan937x_port_ptp_shared, sync_work)
++#define pdelayreq_to_port(work) \
++	   container_of((work), struct lan937x_port_ptp_shared, pdelayreq_work)
++#define pdelayrsp_to_port(work) \
++	   container_of((work), struct lan937x_port_ptp_shared, pdelayrsp_work)
++#define ptp_shared_to_ksz_port(t) \
++		container_of((t), struct ksz_port, ptp_shared)
++#define ptp_shared_to_ksz_device(t) \
++		container_of((t), struct ksz_device, ptp_shared)
++
++#define MAX_DRIFT_CORR 6250000
++
++#define KSZ_PTP_INC_NS 40  /* HW clock is incremented every 40 ns (by 40) */
++#define KSZ_PTP_SUBNS_BITS 32  /* Number of bits in sub-nanoseconds counter */
++
++static int _lan937x_ptp_gettime(struct ksz_device *dev, struct timespec64 *ts);
++
++/* PPS Support */
++#define PPS_LED_1	0
++#define PPS_LED_2	1
++
++#define LAN937x_PPS_TOU 2   /* currently fixed to trigger output unit 2 */
++
++static int lan937x_ptp_tou_index(struct ksz_device *dev, u8 index,
++				 u32 pps_led_index)
++{
++	u32 data;
++	int ret;
++
++	data = ((index << PTP_TOU_INDEX_S) |
++		(pps_led_index << PTP_GPIO_INDEX_S));
++
++	ret = lan937x_cfg32(dev, REG_PTP_UNIT_INDEX__4, data, true);
++
++	return ret;
++}
++
++static int lan937x_ptp_tou_reset(struct ksz_device *dev)
++{
++	int ret;
++
++	/* Reset trigger unit */
++	ret = lan937x_cfg32(dev, REG_PTP_CTRL_STAT__4, TRIG_RESET, true);
++	if (ret)
++		return ret;
++
++	/* Clear reset */
++	ret = lan937x_cfg32(dev, REG_PTP_CTRL_STAT__4,
++			    (TRIG_RESET | TRIG_ENABLE), false);
++	if (ret)
++		return ret;
++
++	return 0;
++}
++
++static int lan937x_ptp_tou_cycle_count_set(struct ksz_device *dev, u16 count)
++{
++	u32 data;
++	int ret;
++
++	ret = ksz_read32(dev, REG_TRIG_CYCLE_CNT, &data);
++	if (ret)
++		return ret;
++
++	data &= ~(TRIG_CYCLE_CNT_M << TRIG_CYCLE_CNT_S);
++	data |= (count & TRIG_CYCLE_CNT_M) << TRIG_CYCLE_CNT_S;
++
++	ret = ksz_write32(dev, REG_TRIG_CYCLE_CNT, data);
++	if (ret)
++		return ret;
++
++	return 0;
++}
++
++static int lan937x_set_tou_target_time(struct ksz_device *dev)
++{
++	struct timespec64 now, pps_start, diff;
++	int ret;
++
++	/* Read current time */
++	ret = _lan937x_ptp_gettime(dev, &now);
++	if (ret)
++		return ret;
++
++	/* Determine and write start time of PPS */
++	pps_start.tv_sec = now.tv_sec + 1;
++	pps_start.tv_nsec = 0;
++	diff = timespec64_sub(pps_start, now);
++
++	/* Reserve at least 1ms for programming and activating */
++	if (diff.tv_nsec < 1000000)
++		pps_start.tv_sec++;
++
++	ret = ksz_write32(dev, REG_TRIG_TARGET_NANOSEC, pps_start.tv_nsec);
++	if (ret)
++		return ret;
++
++	ret = ksz_write32(dev, REG_TRIG_TARGET_SEC, pps_start.tv_sec);
++	if (ret)
++		return ret;
++
++	return 0;
++}
++
++static int lan937x_ptp_tou_gpio(struct ksz_device *dev, u32 pps_led_index)
++{
++	u32 data;
++	int ret;
++
++	/* Set the Led Override register */
++	ret = ksz_read32(dev, REG_SW_GLOBAL_LED_OVR__4, &data);
++	if (ret)
++		return ret;
++
++	if (pps_led_index == PPS_LED_2)
++		data |= LED_OVR_2;
++	else
++		data |= LED_OVR_1;
++
++	ret = ksz_write32(dev, REG_SW_GLOBAL_LED_OVR__4, data);
++	if (ret)
++		return ret;
++
++	/* Set the Led Source register */
++	ret = ksz_read32(dev, REG_SW_GLOBAL_LED_SRC__4, &data);
++	if (ret)
++		return ret;
++
++	if (pps_led_index == PPS_LED_2)
++		data |= LED_SRC_PTP_GPIO_2;
++	else
++		data |= LED_SRC_PTP_GPIO_1;
++
++	ret = ksz_write32(dev, REG_SW_GLOBAL_LED_SRC__4, data);
++	if (ret)
++		return ret;
++
++	return 0;
++}
++
++static int lan937x_ptp_enable_pps(struct ksz_device *dev, int on)
++{
++	u32 pps_led_index = 0;
++	u32 data;
++	int ret;
++
++	if (dev->ptp_tou_mode != KSZ_PTP_TOU_PPS &&
++	    dev->ptp_tou_mode != KSZ_PTP_TOU_IDLE)
++		return -EBUSY;
++
++	//get the pps led no, numbering is -1 from dts tree
++	if (!(of_property_read_u32(dev->dev->of_node, "pps_led_index",
++				   &pps_led_index))) {
++		if (pps_led_index == 1 || pps_led_index == 2)
++			pps_led_index -= 1;
++		else
++			return -EINVAL;
++	}
++
++	/* Set the tou index register */
++	ret = lan937x_ptp_tou_index(dev, LAN937x_PPS_TOU, pps_led_index);
++	if (ret)
++		return ret;
++
++	/* Reset trigger unit  */
++	ret = lan937x_ptp_tou_reset(dev);
++	if (ret)
++		return ret;
++
++	if (!on) {
++		dev->ptp_tou_mode = KSZ_PTP_TOU_IDLE;
++		return 0; /* success */
++	}
++
++	/* set periodic pulse pattern */
++	data = (TRIG_POS_PERIOD << TRIG_PATTERN_S) |
++	       (pps_led_index << TRIG_GPO_S);
++	ret = ksz_write32(dev, REG_TRIG_CTRL__4, data);
++	if (ret)
++		return ret;
++
++	/* Set cycle width (1 s) */
++	ret = ksz_write32(dev, REG_TRIG_CYCLE_WIDTH, NSEC_PER_SEC);
++	if (ret)
++		return ret;
++
++	/* Set cycle count (infinite) */
++	ret = lan937x_ptp_tou_cycle_count_set(dev, 0);
++	if (ret)
++		return ret;
++
++	/* Set pulse with (20 ms / 8 ns) */
++	data = (20000000 / 8);
++	ret = ksz_write32(dev, REG_TRIG_PULSE_WIDTH__4, data);
++	if (ret)
++		return ret;
++
++	/* Set target time */
++	ret = lan937x_set_tou_target_time(dev);
++	if (ret)
++		return ret;
++
++	/* Configure GPIO pins */
++	ret = lan937x_ptp_tou_gpio(dev, pps_led_index);
++	if (ret)
++		return ret;
++
++	/* Activate trigger unit */
++	ret = lan937x_cfg32(dev, REG_PTP_CTRL_STAT__4, (GPIO_OUT | TRIG_ENABLE),
++			    true);
++	if (ret)
++		return ret;
++
++	dev->ptp_tou_mode = KSZ_PTP_TOU_PPS;
++	return 0;
++}
++
++/*Time Stamping support - accessing the register */
++static int lan937x_ptp_enable_mode(struct ksz_device *dev, bool enable)
++{
++	u16 data;
++	int ret;
++
++	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
++	if (ret)
++		return ret;
++
++	/* Enable PTP mode */
++	if (enable)
++		data |= PTP_ENABLE;
++	else
++		data &= ~PTP_ENABLE;
++
++	ret = ksz_write16(dev, REG_PTP_MSG_CONF1, data);
++	if (ret)
++		return ret;
++
++	if (enable) {
++		/* Schedule cyclic call of ksz_ptp_do_aux_work() */
++		ret = ptp_schedule_worker(dev->ptp_clock, 0);
++		if (ret)
++			goto error_disable_mode;
++	} else {
++		ptp_cancel_worker_sync(dev->ptp_clock);
++	}
++
++	return 0;
++
++error_disable_mode:
++	ksz_write16(dev, REG_PTP_MSG_CONF1, data & ~PTP_ENABLE);
++	return ret;
++}
++
++/* The function is return back the capability of timestamping feature when
++ * requested through ethtool -T <interface> utility
++ */
++int lan937x_get_ts_info(struct dsa_switch *ds, int port,
++			struct ethtool_ts_info *ts)
++{
++	struct ksz_device *dev = ds->priv;
++
++	ts->so_timestamping = SOF_TIMESTAMPING_TX_HARDWARE |
++			      SOF_TIMESTAMPING_RX_HARDWARE |
++			      SOF_TIMESTAMPING_RAW_HARDWARE;
++
++	ts->tx_types = (1 << HWTSTAMP_TX_OFF) | (1 << HWTSTAMP_TX_ON);
++
++	ts->rx_filters =
++		(1 << HWTSTAMP_FILTER_NONE) | (1 << HWTSTAMP_FILTER_ALL);
++
++	ts->phc_index = ptp_clock_index(dev->ptp_clock);
++
++	return 0;
++}
++
++int lan937x_hwtstamp_get(struct dsa_switch *ds, int port, struct ifreq *ifr)
++{
++	struct ksz_device *dev = ds->priv;
++	struct hwtstamp_config config;
++
++	config.flags = 0;
++
++	if (dev->ports[port].hwts_tx_en)
++		config.tx_type = HWTSTAMP_TX_ON;
++	else
++		config.tx_type = HWTSTAMP_TX_OFF;
++
++	if (test_bit(LAN937X_HWTS_EN, &dev->ptp_shared.state))
++		config.rx_filter = HWTSTAMP_FILTER_ALL;
++	else
++		config.rx_filter = HWTSTAMP_FILTER_NONE;
++
++	return copy_to_user(ifr->ifr_data, &config,
++			    sizeof(struct hwtstamp_config)) ?
++		       -EFAULT :
++		       0;
++}
++
++static int lan937x_set_hwtstamp_config(struct ksz_device *dev, int port,
++				       struct hwtstamp_config *config)
++{
++	struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
++	struct ksz_port *prt = &dev->ports[port];
++	bool rx_on;
++
++	/* reserved for future extensions */
++	if (config->flags)
++		return -EINVAL;
++
++	switch (config->tx_type) {
++	case HWTSTAMP_TX_OFF:
++		prt->hwts_tx_en = false;
++		break;
++	case HWTSTAMP_TX_ON:
++		prt->hwts_tx_en = true;
++		break;
++	default:
++		return -ERANGE;
++	}
++
++	switch (config->rx_filter) {
++	case HWTSTAMP_FILTER_NONE:
++		rx_on = false;
++		break;
++	default:
++		rx_on = true;
++		break;
++	}
++
++	if (rx_on != test_bit(LAN937X_HWTS_EN, &ptp_shared->state)) {
++		int ret;
++
++		clear_bit(LAN937X_HWTS_EN, &dev->ptp_shared.state);
++
++		ret = lan937x_ptp_enable_mode(dev, rx_on);
++		if (ret)
++			return ret;
++
++		if (rx_on)
++			set_bit(LAN937X_HWTS_EN, &ptp_shared->state);
++	}
++
++	return 0;
++}
++
++int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct ifreq *ifr)
++{
++	struct ksz_device *dev = ds->priv;
++	struct hwtstamp_config config;
++	int ret;
++
++	mutex_lock(&dev->ptp_mutex);
++
++	ret = copy_from_user(&config, ifr->ifr_data, sizeof(config));
++	if (ret)
++		goto error_return;
++
++	ret = lan937x_set_hwtstamp_config(dev, port, &config);
++	if (ret)
++		goto error_return;
++
++	/* Save the chosen configuration to be returned later. */
++	ret = copy_to_user(ifr->ifr_data, &config, sizeof(config));
++
++error_return:
++	mutex_unlock(&dev->ptp_mutex);
++	return ret;
++}
++
++void lan937x_port_txtstamp(struct dsa_switch *ds, int port, struct sk_buff *skb)
++{
++	struct ksz_device *dev = ds->priv;
++	struct ksz_port *prt = &dev->ports[port];
++	struct ptp_header *hdr;
++	struct sk_buff *clone;
++	unsigned int type;
++	u8 ptp_msg_type;
++
++	if (!prt->hwts_tx_en)
++		return;
++
++	type = ptp_classify_raw(skb);
++	if (type == PTP_CLASS_NONE)
++		return;
++
++	hdr = ptp_parse_header(skb, type);
++	if (!hdr)
++		return;
++
++	ptp_msg_type = ptp_get_msgtype(hdr, type);
++
++	switch (ptp_msg_type) {
++	case PTP_MSGTYPE_PDELAY_REQ:
++	case PTP_MSGTYPE_PDELAY_RESP:
++	case PTP_MSGTYPE_SYNC:
++		break;
++
++	default:
++		return;
++	}
++
++	clone = skb_clone_sk(skb);
++	if (!clone)
++		return;
++
++	KSZ_SKB_CB(skb)->clone = clone;
++	KSZ_SKB_CB(clone)->ptp_type = type;
++	KSZ_SKB_CB(clone)->ptp_msg_type = ptp_msg_type;
++}
++
++//These are function related to the ptp clock info
++static int lan937x_ptp_enable(struct ptp_clock_info *ptp,
++			      struct ptp_clock_request *req, int on)
++{
++	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
++	int ret;
++
++	switch (req->type) {
++	case PTP_CLK_REQ_PPS:
++		mutex_lock(&dev->ptp_mutex);
++		ret = lan937x_ptp_enable_pps(dev, on);
++		mutex_unlock(&dev->ptp_mutex);
++		break;
++
++	default:
++		ret = -EINVAL;
++		break;
++	}
++
++	return ret;
++}
++
++static int _lan937x_ptp_gettime(struct ksz_device *dev, struct timespec64 *ts)
++{
++	u32 nanoseconds;
++	u32 seconds;
++	u16 data16;
++	u8 phase;
++	int ret;
++
++	/* Copy current PTP clock into shadow registers */
++	ret = ksz_read16(dev, REG_PTP_CLK_CTRL, &data16);
++	if (ret)
++		return ret;
++
++	data16 |= PTP_READ_TIME;
++
++	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
++	if (ret)
++		return ret;
++
++	/* Read from shadow registers */
++	ret = ksz_read8(dev, REG_PTP_RTC_SUB_NANOSEC__2, &phase);
++	if (ret)
++		return ret;
++
++	ret = ksz_read32(dev, REG_PTP_RTC_NANOSEC, &nanoseconds);
++	if (ret)
++		return ret;
++
++	ret = ksz_read32(dev, REG_PTP_RTC_SEC, &seconds);
++	if (ret)
++		return ret;
++
++	ts->tv_sec = seconds;
++	ts->tv_nsec = nanoseconds + phase * 8;
++
++	return 0;
++}
++
++int lan937x_ptp_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)
++{
++	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
++	int ret;
++
++	mutex_lock(&dev->ptp_mutex);
++	ret = _lan937x_ptp_gettime(dev, ts);
++	mutex_unlock(&dev->ptp_mutex);
++
++	return ret;
++}
++
++static int lan937x_ptp_settime(struct ptp_clock_info *ptp,
++			       const struct timespec64 *ts)
++{
++	struct ksz_device *dev = container_of(ptp, struct ksz_device, ptp_caps);
++	struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
++	u16 data16;
++	int ret;
++
++	mutex_lock(&dev->ptp_mutex);
++
++	/* Write to shadow registers */
++
++	/* clock phase */
++	ret = ksz_read16(dev, REG_PTP_RTC_SUB_NANOSEC__2, &data16);
++	if (ret)
++		goto error_return;
++
++	data16 &= ~PTP_RTC_SUB_NANOSEC_M;
++
++	ret = ksz_write16(dev, REG_PTP_RTC_SUB_NANOSEC__2, data16);
++	if (ret)
++		goto error_return;
++
++	/* nanoseconds */
++	ret = ksz_write32(dev, REG_PTP_RTC_NANOSEC, ts->tv_nsec);
++	if (ret)
++		goto error_return;
++
++	/* seconds */
++	ret = ksz_write32(dev, REG_PTP_RTC_SEC, ts->tv_sec);
++	if (ret)
++		goto error_return;
++
++	/* Load PTP clock from shadow registers */
++	ret = ksz_read16(dev, REG_PTP_CLK_CTRL, &data16);
++	if (ret)
++		goto error_return;
++
++	data16 |= PTP_LOAD_TIME;
++
++	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
++	if (ret)
++		goto error_return;
++
++	switch (dev->ptp_tou_mode) {
++	case KSZ_PTP_TOU_IDLE:
++		break;
++
++	case KSZ_PTP_TOU_PPS:
++		ret = lan937x_ptp_enable_pps(dev, true);
++		if (ret)
++			goto error_return;
++		break;
++	}
++
++	spin_lock_bh(&ptp_shared->ptp_clock_lock);
++	ptp_shared->ptp_clock_time = *ts;
++	spin_unlock_bh(&ptp_shared->ptp_clock_lock);
++
++error_return:
++	mutex_unlock(&dev->ptp_mutex);
++
++	return ret;
++}
++
++static int lan937x_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
++{
++	struct ksz_device *dev = ptp_clock_info_to_dev(ptp);
++	u16 data16;
++	int ret;
++
++	mutex_lock(&dev->ptp_mutex);
++
++	if (scaled_ppm) {
++		/* basic calculation:
++		 * s32 ppb = scaled_ppm_to_ppb(scaled_ppm);
++		 * s64 adj = div_s64(((s64)ppb * KSZ_PTP_INC_NS) << KSZ_PTP_SUBNS_BITS,
++		 * NSEC_PER_SEC);
++		 */
++
++		/* more precise calculation (avoids shifting out precision) */
++		s64 ppb, adj;
++		u32 data32;
++
++		/* see scaled_ppm_to_ppb() in ptp_clock.c for details */
++		ppb = 1 + scaled_ppm;
++		ppb *= 125;
++		ppb *= KSZ_PTP_INC_NS;
++		ppb <<= KSZ_PTP_SUBNS_BITS - 13;
++		adj = div_s64(ppb, NSEC_PER_SEC);
++
++		data32 = abs(adj);
++		data32 &= BIT_MASK(30) - 1;
++		if (adj >= 0)
++			data32 |= PTP_RATE_DIR;
++
++		ret = ksz_write32(dev, REG_PTP_SUBNANOSEC_RATE, data32);
++		if (ret)
++			goto error_return;
++	}
++
++	ret = ksz_read16(dev, REG_PTP_CLK_CTRL, &data16);
++	if (ret)
++		goto error_return;
++
++	if (scaled_ppm)
++		data16 |= PTP_CLK_ADJ_ENABLE;
++	else
++		data16 &= ~PTP_CLK_ADJ_ENABLE;
++
++	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
++	if (ret)
++		goto error_return;
++
++error_return:
++	mutex_unlock(&dev->ptp_mutex);
++	return ret;
++}
++
++static int lan937x_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
++{
++	struct ksz_device *dev = container_of(ptp, struct ksz_device, ptp_caps);
++	struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
++	struct timespec64 delta64 = ns_to_timespec64(delta);
++	s32 sec, nsec;
++	u16 data16;
++	int ret;
++
++	mutex_lock(&dev->ptp_mutex);
++
++	/* do not use ns_to_timespec64(),
++	 * both sec and nsec are subtracted by hw
++	 */
++	sec = div_s64_rem(delta, NSEC_PER_SEC, &nsec);
++
++	ret = ksz_write32(dev, REG_PTP_RTC_NANOSEC, abs(nsec));
++	if (ret)
++		goto error_return;
++
++	/* contradictory to the data sheet, seconds are also considered */
++	ret = ksz_write32(dev, REG_PTP_RTC_SEC, abs(sec));
++	if (ret)
++		goto error_return;
++
++	ret = ksz_read16(dev, REG_PTP_CLK_CTRL, &data16);
++	if (ret)
++		goto error_return;
++
++	data16 |= PTP_STEP_ADJ;
++	if (delta < 0)
++		data16 &= ~PTP_STEP_DIR; /* 0: subtract */
++	else
++		data16 |= PTP_STEP_DIR; /* 1: add */
++
++	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data16);
++	if (ret)
++		goto error_return;
++
++	switch (dev->ptp_tou_mode) {
++	case KSZ_PTP_TOU_IDLE:
++		break;
++
++	case KSZ_PTP_TOU_PPS:
++		ret = lan937x_ptp_enable_pps(dev, true);
++		if (ret)
++			goto error_return;
++		break;
++	}
++
++	spin_lock_bh(&ptp_shared->ptp_clock_lock);
++	ptp_shared->ptp_clock_time = timespec64_add(ptp_shared->ptp_clock_time,
++						    delta64);
++	spin_unlock_bh(&ptp_shared->ptp_clock_lock);
++
++error_return:
++	mutex_unlock(&dev->ptp_mutex);
++	return ret;
++}
++
++/*  Function is pointer to the do_aux_work in the ptp_clock capability */
++static long lan937x_ptp_do_aux_work(struct ptp_clock_info *ptp)
++{
++	struct ksz_device *dev = container_of(ptp, struct ksz_device, ptp_caps);
++	struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
++	struct timespec64 ts;
++
++	mutex_lock(&dev->ptp_mutex);
++	_lan937x_ptp_gettime(dev, &ts);
++	mutex_unlock(&dev->ptp_mutex);
++
++	spin_lock_bh(&ptp_shared->ptp_clock_lock);
++	ptp_shared->ptp_clock_time = ts;
++	spin_unlock_bh(&ptp_shared->ptp_clock_lock);
++
++	return HZ; /* reschedule in 1 second */
++}
++
++static int lan937x_ptp_start_clock(struct ksz_device *dev)
++{
++	struct ksz_device_ptp_shared *ptp_shared = &dev->ptp_shared;
++	u16 data;
++	int ret;
++
++	ret = ksz_read16(dev, REG_PTP_CLK_CTRL, &data);
++	if (ret)
++		return ret;
++
++	/* Enable PTP clock */
++	data |= PTP_CLK_ENABLE;
++	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data);
++	if (ret)
++		return ret;
++
++	spin_lock_bh(&ptp_shared->ptp_clock_lock);
++	ptp_shared->ptp_clock_time.tv_sec = 0;
++	ptp_shared->ptp_clock_time.tv_nsec = 0;
++	spin_unlock_bh(&ptp_shared->ptp_clock_lock);
++
++	return 0;
++}
++
++static int lan937x_ptp_stop_clock(struct ksz_device *dev)
++{
++	u16 data;
++	int ret;
++
++	ret = ksz_read16(dev, REG_PTP_CLK_CTRL, &data);
++	if (ret)
++		return ret;
++
++	/* Disable PTP clock */
++	data &= ~PTP_CLK_ENABLE;
++	ret = ksz_write16(dev, REG_PTP_CLK_CTRL, data);
++	if (ret)
++		return ret;
++
++	return 0;
++}
++
++static int lan937x_ptp_8021as(struct ksz_device *dev, bool enable)
++{
++	u16 data;
++	int ret;
++
++	ret = ksz_read16(dev, REG_PTP_MSG_CONF1, &data);
++	if (ret)
++		return ret;
++
++	if (enable)
++		data |= PTP_802_1AS;
++	else
++		data &= ~PTP_802_1AS;
++
++	return ksz_write16(dev, REG_PTP_MSG_CONF1, data);
++}
++
++/* Function to enable/disable Port PTP interrupt */
++static int lan937x_ptp_enable_ptp_int(struct ksz_device *dev, int port,
++				      bool enable)
++{
++	u32 addr = PORT_CTRL_ADDR(port, REG_PORT_INT_MASK);
++	u8 data;
++	int ret;
++
++	ret = ksz_read8(dev, addr, &data);
++	if (ret)
++		return ret;
++
++	/* PORT_PTP_INT bit is active low */
++	if (enable)
++		data &= ~PORT_PTP_INT;
++	else
++		data |= PORT_PTP_INT;
++
++	return ksz_write8(dev, addr, data);
++}
++
++/* Function to enable/disable Individual message interrupt */
++static int lan937x_ptp_enable_msg_int(struct ksz_device *dev, int port,
++				      u16 mask, bool enable)
++{
++	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_ENABLE__2);
++	u16 data;
++	int ret;
++
++	ret = ksz_read16(dev, addr, &data);
++	if (ret)
++		return ret;
++
++	/* PTP msg interrupts are active high (1 means enabled)*/
++	if (enable)
++		data |= mask;
++	else
++		data &= ~mask;
++
++	return ksz_write16(dev, addr, data);
++}
++
++static void lan937x_sync_txtstamp_skb(struct ksz_device *dev,
++				      struct ksz_port *prt, struct sk_buff *skb)
++{
++	struct skb_shared_hwtstamps hwtstamps = {};
++	int ret;
++
++	skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
++
++	/* timeout must include tstamp latency, IRQ latency and time for
++	 * reading the time stamp.
++	 */
++	ret = wait_for_completion_timeout(&prt->tstamp_sync_comp,
++					  msecs_to_jiffies(100));
++	if (!ret)
++		return;
++
++	hwtstamps.hwtstamp = prt->tstamp_sync;
++	skb_complete_tx_timestamp(skb, &hwtstamps);
++}
++
++static void lan937x_pdelayreq_txtstamp_skb(struct ksz_device *dev,
++					   struct ksz_port *prt,
++					   struct sk_buff *skb)
++{
++	struct skb_shared_hwtstamps hwtstamps = {};
++	int ret;
++
++	skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
++
++	/* timeout must include tstamp latency, IRQ latency and time for
++	 * reading the time stamp.
++	 */
++	ret = wait_for_completion_timeout(&prt->tstamp_pdelayreq_comp,
++					  msecs_to_jiffies(100));
++	if (!ret)
++		return;
++
++	hwtstamps.hwtstamp = prt->tstamp_pdelayreq;
++	skb_complete_tx_timestamp(skb, &hwtstamps);
++}
++
++static void lan937x_pdelayrsp_txtstamp_skb(struct ksz_device *dev,
++					   struct ksz_port *prt,
++					   struct sk_buff *skb)
++{
++	struct skb_shared_hwtstamps hwtstamps = {};
++	int ret;
++
++	skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
++
++	/* timeout must include tstamp latency, IRQ latency and time for
++	 * reading the time stamp.
++	 */
++	ret = wait_for_completion_timeout(&prt->tstamp_pdelayrsp_comp,
++					  msecs_to_jiffies(100));
++	if (!ret)
++		return;
++
++	hwtstamps.hwtstamp = prt->tstamp_pdelayrsp;
++	skb_complete_tx_timestamp(skb, &hwtstamps);
++}
++
++/* Deferred work is necessary for time stamped messages. This cannot
++ * be done from atomic context as we have to wait for the hardware interrupt.
++ */
++static void lan937x_sync_deferred_xmit(struct kthread_work *work)
++{
++	struct lan937x_port_ptp_shared *prt_ptp_shared = sync_to_port(work);
++	struct ksz_port *prt = ptp_shared_to_ksz_port(prt_ptp_shared);
++	struct ksz_device_ptp_shared *ptp_shared = prt_ptp_shared->dev;
++	struct ksz_device *dev = ptp_shared_to_ksz_device(ptp_shared);
++	int port = prt - dev->ports;
++	struct sk_buff *skb;
++
++	while ((skb = skb_dequeue(&prt_ptp_shared->sync_queue)) != NULL) {
++		struct sk_buff *clone = KSZ_SKB_CB(skb)->clone;
++
++		reinit_completion(&prt->tstamp_sync_comp);
++
++		/* Transfer skb to the host port. */
++		dsa_enqueue_skb(skb, dsa_to_port(dev->ds, port)->slave);
++
++		lan937x_sync_txtstamp_skb(dev, prt, clone);
++	}
++}
++
++static void lan937x_pdelayreq_deferred_xmit(struct kthread_work *work)
++{
++	struct lan937x_port_ptp_shared *prt_ptp_shared =
++		pdelayreq_to_port(work);
++	struct ksz_port *prt = ptp_shared_to_ksz_port(prt_ptp_shared);
++	struct ksz_device_ptp_shared *ptp_shared = prt_ptp_shared->dev;
++	struct ksz_device *dev = ptp_shared_to_ksz_device(ptp_shared);
++	int port = prt - dev->ports;
++	struct sk_buff *skb;
++
++	while ((skb = skb_dequeue(&prt_ptp_shared->pdelayreq_queue)) != NULL) {
++		struct sk_buff *clone = KSZ_SKB_CB(skb)->clone;
++
++		reinit_completion(&prt->tstamp_pdelayreq_comp);
++
++		/* Transfer skb to the host port. */
++		dsa_enqueue_skb(skb, dsa_to_port(dev->ds, port)->slave);
++
++		lan937x_pdelayreq_txtstamp_skb(dev, prt, clone);
++	}
++}
++
++static void lan937x_pdelayrsp_deferred_xmit(struct kthread_work *work)
++{
++	struct lan937x_port_ptp_shared *prt_ptp_shared =
++		pdelayrsp_to_port(work);
++	struct ksz_port *prt = ptp_shared_to_ksz_port(prt_ptp_shared);
++	struct ksz_device_ptp_shared *ptp_shared = prt_ptp_shared->dev;
++	struct ksz_device *dev = ptp_shared_to_ksz_device(ptp_shared);
++	int port = prt - dev->ports;
++	struct sk_buff *skb;
++
++	while ((skb = skb_dequeue(&prt_ptp_shared->pdelayrsp_queue)) != NULL) {
++		struct sk_buff *clone = KSZ_SKB_CB(skb)->clone;
++
++		reinit_completion(&prt->tstamp_pdelayrsp_comp);
++
++		/* Transfer skb to the host port. */
++		dsa_enqueue_skb(skb, dsa_to_port(dev->ds, port)->slave);
++
++		lan937x_pdelayrsp_txtstamp_skb(dev, prt, clone);
++	}
++}
++
++/* Function is to  enable the Message Interrupt and initialize the worker queue
++ * for processing the Interrupt routine
++ */
++static int lan937x_ptp_sync_msg_en(struct ksz_device *dev, int port)
++{
++	struct ksz_port *prt = &dev->ports[port];
++	struct lan937x_port_ptp_shared *ptp_shared = &prt->ptp_shared;
++	struct dsa_port *dp = dsa_to_port(dev->ds, port);
++	int ret;
++
++	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_SYNC_INT, true);
++	if (ret)
++		return ret;
++
++	init_completion(&prt->tstamp_sync_comp);
++	skb_queue_head_init(&ptp_shared->sync_queue);
++	kthread_init_work(&ptp_shared->sync_work, lan937x_sync_deferred_xmit);
++	ptp_shared->sync_worker =
++		kthread_create_worker(0, "%s_sync", dp->slave->name);
++
++	if (IS_ERR(ptp_shared->sync_worker)) {
++		ret = PTR_ERR(ptp_shared->sync_worker);
++		goto error_disable_interrupt;
++	}
++
++	return 0;
++
++error_disable_interrupt:
++	lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_SYNC_INT, false);
++	return ret;
++}
++
++static int lan937x_ptp_xdelayreq_msg_en(struct ksz_device *dev, int port)
++{
++	struct ksz_port *prt = &dev->ports[port];
++	struct lan937x_port_ptp_shared *ptp_shared = &prt->ptp_shared;
++	struct dsa_port *dp = dsa_to_port(dev->ds, port);
++	int ret;
++
++	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_XDELAY_REQ_INT,
++					 true);
++	if (ret)
++		return ret;
++
++	init_completion(&prt->tstamp_pdelayreq_comp);
++	skb_queue_head_init(&ptp_shared->pdelayreq_queue);
++	kthread_init_work(&ptp_shared->pdelayreq_work,
++			  lan937x_pdelayreq_deferred_xmit);
++
++	ptp_shared->pdelayreq_worker =
++		kthread_create_worker(0, "%s_req_xmit", dp->slave->name);
++
++	if (IS_ERR(ptp_shared->pdelayreq_worker)) {
++		ret = PTR_ERR(ptp_shared->pdelayreq_worker);
++		goto error_disable_interrupt;
++	}
++
++	return 0;
++
++error_disable_interrupt:
++	lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_XDELAY_REQ_INT, false);
++	return ret;
++}
++
++static int lan937x_ptp_pdelayresp_msg_en(struct ksz_device *dev, int port)
++{
++	struct ksz_port *prt = &dev->ports[port];
++	struct lan937x_port_ptp_shared *ptp_shared = &prt->ptp_shared;
++	struct dsa_port *dp = dsa_to_port(dev->ds, port);
++	int ret;
++
++	ret = lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_PDELAY_RESP_INT,
++					 true);
++	if (ret)
++		return ret;
++
++	init_completion(&prt->tstamp_pdelayrsp_comp);
++	skb_queue_head_init(&ptp_shared->pdelayrsp_queue);
++	kthread_init_work(&ptp_shared->pdelayrsp_work,
++			  lan937x_pdelayrsp_deferred_xmit);
++
++	ptp_shared->pdelayrsp_worker =
++		kthread_create_worker(0, "%s_rsp_xmit", dp->slave->name);
++
++	if (IS_ERR(ptp_shared->pdelayrsp_worker)) {
++		ret = PTR_ERR(ptp_shared->pdelayrsp_worker);
++		goto error_disable_interrupt;
++	}
++
++	return 0;
++
++error_disable_interrupt:
++	lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_PDELAY_RESP_INT, false);
++	return ret;
++}
++
++static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
++{
++	struct dsa_port *dp = dsa_to_port(dev->ds, port);
++	struct lan937x_port_ptp_shared *ptp_shared;
++	struct ksz_port *prt = &dev->ports[port];
++	int ret;
++
++	ptp_shared = &prt->ptp_shared;
++
++	if (port == dev->cpu_port)
++		return 0;
++
++	/* Set rx and tx latency to 0 (will be handled by user space) */
++	ret = ksz_write16(dev, PORT_CTRL_ADDR(port, REG_PTP_PORT_RX_DELAY__2),
++			  0);
++	if (ret)
++		return ret;
++
++	ret = ksz_write16(dev, PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_DELAY__2),
++			  0);
++	if (ret)
++		return ret;
++
++	ret = lan937x_ptp_enable_ptp_int(dev, port, true);
++	if (ret)
++		return ret;
++
++	/* ksz_port::ptp_shared is used in tagging driver */
++	ptp_shared->dev = &dev->ptp_shared;
++	dp->priv = ptp_shared;
++
++	ret = lan937x_ptp_sync_msg_en(dev, port);
++	if (ret)
++		goto error_disable_ptp_int;
++
++	ret = lan937x_ptp_xdelayreq_msg_en(dev, port);
++	if (ret)
++		goto error_disable_ptp_int;
++
++	ret = lan937x_ptp_pdelayresp_msg_en(dev, port);
++	if (ret)
++		goto error_disable_ptp_int;
++
++	return 0;
++
++error_disable_ptp_int:
++	lan937x_ptp_enable_ptp_int(dev, port, false);
++	return ret;
++}
++
++static void lan937x_ptp_port_deinit(struct ksz_device *dev, int port)
++{
++	struct lan937x_port_ptp_shared *ptp_shared =
++		&dev->ports[port].ptp_shared;
++
++	if (port == dev->cpu_port)
++		return;
++
++	kthread_destroy_worker(ptp_shared->sync_worker);
++	kthread_destroy_worker(ptp_shared->pdelayreq_worker);
++	kthread_destroy_worker(ptp_shared->pdelayrsp_worker);
++
++	lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_PDELAY_RESP_INT, false);
++	lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_XDELAY_REQ_INT, false);
++	lan937x_ptp_enable_msg_int(dev, port, PTP_PORT_SYNC_INT, false);
++	lan937x_ptp_enable_ptp_int(dev, port, false);
++}
++
++static int lan937x_ptp_ports_init(struct ksz_device *dev)
++{
++	int port;
++	int ret;
++
++	for (port = 0; port < dev->info->port_cnt; port++) {
++		ret = lan937x_ptp_port_init(dev, port);
++		if (ret)
++			goto error_deinit;
++	}
++
++	return 0;
++
++error_deinit:
++	while (port-- > 0)
++		lan937x_ptp_port_deinit(dev, port);
++	return ret;
++}
++
++static void lan937x_ptp_ports_deinit(struct ksz_device *dev)
++{
++	int port;
++
++	for (port = 0; port < dev->info->port_cnt; port++)
++		lan937x_ptp_port_deinit(dev, port);
++}
++
++int lan937x_ptp_init(struct ksz_device *dev)
++{
++	int ret;
++
++	mutex_init(&dev->ptp_mutex);
++	spin_lock_init(&dev->ptp_shared.ptp_clock_lock);
++
++	dev->ptp_caps = (struct ptp_clock_info) {
++		.owner		= THIS_MODULE,
++		.name		= "Microchip Clock",
++		.max_adj	= MAX_DRIFT_CORR,
++		.enable		= lan937x_ptp_enable,
++		.gettime64	= lan937x_ptp_gettime,
++		.settime64	= lan937x_ptp_settime,
++		.adjfine	= lan937x_ptp_adjfine,
++		.adjtime	= lan937x_ptp_adjtime,
++		.do_aux_work	= lan937x_ptp_do_aux_work,
++		.n_alarm	= 0,
++		.n_ext_ts	= 0,
++		.n_per_out	= 0,
++		.pps		= 1
++	};
++
++	/* Start hardware counter (will overflow after 136 years) */
++	ret = lan937x_ptp_start_clock(dev);
++	if (ret)
++		return ret;
++
++	/* Register the PTP Clock */
++	dev->ptp_clock = ptp_clock_register(&dev->ptp_caps, dev->dev);
++	if (IS_ERR_OR_NULL(dev->ptp_clock)) {
++		ret = PTR_ERR(dev->ptp_clock);
++		goto error_stop_clock;
++	}
++
++	/* Init switch ports */
++	ret = lan937x_ptp_ports_init(dev);
++	if (ret)
++		goto error_unregister_clock;
++
++	/*Enable 802.1as mode */
++	ret = lan937x_ptp_8021as(dev, true);
++	if (ret)
++		goto error_ports_deinit;
++
++	return 0;
++
++error_ports_deinit:
++	lan937x_ptp_ports_deinit(dev);
++error_unregister_clock:
++	ptp_clock_unregister(dev->ptp_clock);
++error_stop_clock:
++	lan937x_ptp_stop_clock(dev);
++	return ret;
++}
++
++void lan937x_ptp_deinit(struct ksz_device *dev)
++{
++	lan937x_ptp_ports_deinit(dev);
++	lan937x_ptp_enable_mode(dev, false);
++	ptp_clock_unregister(dev->ptp_clock);
++	lan937x_ptp_stop_clock(dev);
++}
++
++/* Interrupt Service Routine for PTP
++ * It reads the 32 bit timestamp value from the register and reconstruct it to
++ * timestamp and post the complete signal
++ */
++irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port)
++{
++	u32 addr = PORT_CTRL_ADDR(port, REG_PTP_PORT_TX_INT_STATUS__2);
++	struct ksz_port *prt = &dev->ports[port];
++	u32 tstamp_raw;
++	ktime_t tstamp;
++	u32 regaddr;
++	u16 data;
++	int ret;
++
++	ret = ksz_read16(dev, addr, &data);
++	if (ret)
++		return IRQ_NONE;
++
++	if (data & PTP_PORT_XDELAY_REQ_INT) {
++		regaddr = PORT_CTRL_ADDR(port, REG_PTP_PORT_XDELAY_TS);
++
++		ret = ksz_read32(dev, regaddr, &tstamp_raw);
++		if (ret)
++			return IRQ_NONE;
++
++		tstamp = ksz_decode_tstamp(tstamp_raw);
++
++		prt->tstamp_pdelayreq =
++			ksz_tstamp_reconstruct(&dev->ptp_shared, tstamp);
++		complete(&prt->tstamp_pdelayreq_comp);
++	}
++
++	if (data & PTP_PORT_PDELAY_RESP_INT) {
++		regaddr = PORT_CTRL_ADDR(port, REG_PTP_PORT_PDRESP_TS);
++
++		ret = ksz_read32(dev, regaddr, &tstamp_raw);
++		if (ret)
++			return IRQ_NONE;
++
++		tstamp = ksz_decode_tstamp(tstamp_raw);
++
++		prt->tstamp_pdelayrsp =
++			ksz_tstamp_reconstruct(&dev->ptp_shared, tstamp);
++		complete(&prt->tstamp_pdelayrsp_comp);
++	}
++
++	if (data & PTP_PORT_SYNC_INT) {
++		regaddr = PORT_CTRL_ADDR(port, REG_PTP_PORT_SYNC_TS);
++
++		ret = ksz_read32(dev, regaddr, &tstamp_raw);
++		if (ret)
++			return IRQ_NONE;
++
++		tstamp = ksz_decode_tstamp(tstamp_raw);
++
++		prt->tstamp_sync =
++			ksz_tstamp_reconstruct(&dev->ptp_shared, tstamp);
++		complete(&prt->tstamp_sync_comp);
++	}
++
++	//Clear the interrupts W1C
++	ret = ksz_write16(dev, addr, data);
++	if (ret)
++		return IRQ_NONE;
++
++	return IRQ_HANDLED;
++}
+diff --git a/drivers/net/dsa/microchip/lan937x_ptp.h b/drivers/net/dsa/microchip/lan937x_ptp.h
+new file mode 100644
+index 000000000000..466adb2564f3
+--- /dev/null
++++ b/drivers/net/dsa/microchip/lan937x_ptp.h
+@@ -0,0 +1,73 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/* Microchip LAN937X PTP Implementation
++ * Copyright (C) 2021 Microchip Technology Inc.
++ */
++
++#ifndef _NET_DSA_DRIVERS_LAN937X_PTP_H
++#define _NET_DSA_DRIVERS_LAN937X_PTP_H
++
++#include <linux/irqreturn.h>
++#include <linux/types.h>
++#include "ksz_common.h"
++
++#if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
++
++#include <linux/ptp_clock_kernel.h>
++
++int lan937x_get_ts_info(struct dsa_switch *ds, int port,
++			struct ethtool_ts_info *ts);
++int lan937x_hwtstamp_get(struct dsa_switch *ds, int port, struct ifreq *ifr);
++int lan937x_hwtstamp_set(struct dsa_switch *ds, int port, struct ifreq *ifr);
++void lan937x_port_txtstamp(struct dsa_switch *ds, int port,
++			   struct sk_buff *skb);
++irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev, int port);
++int lan937x_ptp_init(struct ksz_device *dev);
++void lan937x_ptp_deinit(struct ksz_device *dev);
++int lan937x_ptp_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts);
++
++#else
++struct lan937x_ptp_data {
++	struct mutex lock; //dummy data
++};
++
++static inline irqreturn_t lan937x_ptp_port_interrupt(struct ksz_device *dev,
++						     int port)
++{
++	return IRQ_NONE;
++}
++
++static inline int lan937x_ptp_init(struct ksz_device *dev)
++{
++	return 0;
++}
++
++static inline void lan937x_ptp_deinit(struct ksz_device *dev)
++{
++}
++
++static inline int lan937x_get_ts_info(struct dsa_switch *ds, int port,
++				      struct ethtool_ts_info *ts)
++{
++	return -EOPNOTSUPP;
++}
++
++static inline int lan937x_hwtstamp_get(struct dsa_switch *ds, int port,
++				       struct ifreq *ifr)
++{
++	return -EOPNOTSUPP;
++}
++
++static inline int lan937x_hwtstamp_set(struct dsa_switch *ds, int port,
++				       struct ifreq *ifr)
++{
++	return -EOPNOTSUPP;
++}
++
++static inline void lan937x_port_txtstamp(struct dsa_switch *ds, int port,
++					 struct sk_buff *skb)
++{
++}
++
++#endif /* End of CONFIG_NET_DSA_MICROCHIOP_LAN937X_PTP */
++
++#endif
+diff --git a/drivers/net/dsa/microchip/lan937x_reg.h b/drivers/net/dsa/microchip/lan937x_reg.h
+index 5bc16a4c4441..478b4e57d08e 100644
+--- a/drivers/net/dsa/microchip/lan937x_reg.h
++++ b/drivers/net/dsa/microchip/lan937x_reg.h
+@@ -37,6 +37,14 @@
+ #define SW_CLK125_ENB			BIT(1)
+ #define SW_CLK25_ENB			BIT(0)
+ 
++#define REG_SW_GLOBAL_LED_OVR__4        0x0120
++#define LED_OVR_2                       BIT(1)
++#define LED_OVR_1                       BIT(0)
++
++#define REG_SW_GLOBAL_LED_SRC__4        0x0128
++#define LED_SRC_PTP_GPIO_1              BIT(3)
++#define LED_SRC_PTP_GPIO_2              BIT(2)
++
+ /* 3 - Operation Control */
+ #define REG_SW_OPERATION		0x0300
+ 
+@@ -62,12 +70,15 @@
+ #define SW_FAST_AGING			BIT(1)
+ #define SW_LINK_AUTO_AGING		BIT(0)
+ 
++#define REG_SW_LUE_CTRL_3               0x0313
+ #define REG_SW_AGE_PERIOD__1		0x0313
+ #define SW_AGE_PERIOD_7_0_M		GENMASK(7, 0)
+ 
+ #define REG_SW_AGE_PERIOD__2		0x0320
++#define SW_AGE_PERIOD_M			0xFFF
+ #define SW_AGE_PERIOD_19_8_M		GENMASK(19, 8)
+ 
++
+ #define REG_SW_MAC_CTRL_0		0x0330
+ #define SW_NEW_BACKOFF			BIT(7)
+ #define SW_PAUSE_UNH_MODE		BIT(1)
+@@ -86,6 +97,12 @@
+ #define SW_MIB_COUNTER_FLUSH		BIT(7)
+ #define SW_MIB_COUNTER_FREEZE		BIT(6)
+ 
++#define REG_SW_MRI_CTRL_0               0x0370
++#define SW_IGMP_SNOOP                   BIT(6)
++#define SW_IPV6_MLD_OPTION              BIT(3)
++#define SW_IPV6_MLD_SNOOP               BIT(2)
++#define SW_MIRROR_RX_TX                 BIT(0)
++
+ /* 4 - LUE */
+ #define REG_SW_ALU_STAT_CTRL__4		0x041C
+ 
+@@ -94,6 +111,208 @@
+ #define ALU_V_USE_FID			BIT(30)
+ #define ALU_V_PORT_MAP			0xFF
+ 
++/* 5 - PTP Clock */
++#define REG_PTP_CLK_CTRL                0x0500
++
++#define PTP_STEP_ADJ                    BIT(6)
++#define PTP_STEP_DIR                    BIT(5)
++#define PTP_READ_TIME                   BIT(4)
++#define PTP_LOAD_TIME                   BIT(3)
++#define PTP_CLK_ADJ_ENABLE              BIT(2)
++#define PTP_CLK_ENABLE                  BIT(1)
++#define PTP_CLK_RESET                   BIT(0)
++
++#define REG_PTP_RTC_SUB_NANOSEC__2      0x0502
++
++#define PTP_RTC_SUB_NANOSEC_M           0x0007
++
++#define REG_PTP_RTC_NANOSEC             0x0504
++#define REG_PTP_RTC_NANOSEC_H           0x0504
++#define REG_PTP_RTC_NANOSEC_L           0x0506
++
++#define REG_PTP_RTC_SEC                 0x0508
++#define REG_PTP_RTC_SEC_H               0x0508
++#define REG_PTP_RTC_SEC_L               0x050A
++
++#define REG_PTP_SUBNANOSEC_RATE         0x050C
++#define REG_PTP_SUBNANOSEC_RATE_H       0x050C
++
++#define PTP_RATE_DIR                    BIT(31)
++#define PTP_TMP_RATE_ENABLE             BIT(30)
++
++#define REG_PTP_SUBNANOSEC_RATE_L       0x050E
++
++#define REG_PTP_RATE_DURATION           0x0510
++#define REG_PTP_RATE_DURATION_H         0x0510
++#define REG_PTP_RATE_DURATION_L         0x0512
++
++#define REG_PTP_MSG_CONF1               0x0514
++
++#define PTP_802_1AS                     BIT(7)
++#define PTP_ENABLE                      BIT(6)
++#define PTP_ETH_ENABLE                  BIT(5)
++#define PTP_IPV4_UDP_ENABLE             BIT(4)
++#define PTP_IPV6_UDP_ENABLE             BIT(3)
++#define PTP_TC_P2P                      BIT(2)
++#define PTP_MASTER                      BIT(1)
++#define PTP_1STEP                       BIT(0)
++
++#define REG_PTP_MSG_CONF2               0x0516
++
++#define PTP_UNICAST_ENABLE              BIT(12)
++#define PTP_ALTERNATE_MASTER            BIT(11)
++#define PTP_ALL_HIGH_PRIO               BIT(10)
++#define PTP_SYNC_CHECK                  BIT(9)
++#define PTP_DELAY_CHECK                 BIT(8)
++#define PTP_PDELAY_CHECK                BIT(7)
++#define PTP_DROP_SYNC_DELAY_REQ         BIT(5)
++#define PTP_DOMAIN_CHECK                BIT(4)
++#define PTP_UDP_CHECKSUM                BIT(2)
++
++#define REG_PTP_DOMAIN_VERSION          0x0518
++#define PTP_VERSION_M                   0xFF00
++#define PTP_DOMAIN_M                    0x00FF
++
++#define REG_PTP_UNIT_INDEX__4           0x0520
++
++#define PTP_UNIT_M                      0xF
++
++#define PTP_GPIO_INDEX_S                16
++#define PTP_TSI_INDEX_S                 8
++#define PTP_TOU_INDEX_S                 0
++
++#define REG_PTP_TRIG_STATUS__4          0x0524
++
++#define TRIG_ERROR_S                    16
++#define TRIG_DONE_S                     0
++
++#define REG_PTP_INT_STATUS__4           0x0528
++
++#define TRIG_INT_S                      16
++#define TS_INT_S                        0
++
++#define TRIG_UNIT_M                     0x7
++#define TS_UNIT_M                       0x3
++
++#define REG_PTP_CTRL_STAT__4            0x052C
++
++#define GPIO_IN                         BIT(7)
++#define GPIO_OUT                        BIT(6)
++#define TS_INT_ENABLE                   BIT(5)
++#define TRIG_ACTIVE                     BIT(4)
++#define TRIG_ENABLE                     BIT(3)
++#define TRIG_RESET                      BIT(2)
++#define TS_ENABLE                       BIT(1)
++#define TS_RESET                        BIT(0)
++
++#define GPIO_CTRL_M                     (GPIO_IN | GPIO_OUT)
++
++#define TRIG_CTRL_M                     \
++        (TRIG_ACTIVE | TRIG_ENABLE | TRIG_RESET)
++
++#define TS_CTRL_M                       \
++        (TS_INT_ENABLE | TS_ENABLE | TS_RESET)
++
++#define REG_TRIG_TARGET_NANOSEC         0x0530
++#define REG_TRIG_TARGET_SEC             0x0534
++
++#define REG_TRIG_CTRL__4                0x0538
++
++#define TRIG_CASCADE_ENABLE             BIT(31)
++#define TRIG_CASCADE_TAIL               BIT(30)
++#define TRIG_CASCADE_UPS_M              0xF
++#define TRIG_CASCADE_UPS_S              26
++#define TRIG_NOW                        BIT(25)
++#define TRIG_NOTIFY                     BIT(24)
++#define TRIG_EDGE                       BIT(23)
++#define TRIG_PATTERN_S                  20
++#define TRIG_PATTERN_M                  0x7
++#define TRIG_NEG_EDGE                   0
++#define TRIG_POS_EDGE                   1
++#define TRIG_NEG_PULSE                  2
++#define TRIG_POS_PULSE                  3
++#define TRIG_NEG_PERIOD                 4
++#define TRIG_POS_PERIOD                 5
++#define TRIG_REG_OUTPUT                 6
++#define TRIG_GPO_S                      16
++#define TRIG_GPO_M                      0xF
++#define TRIG_CASCADE_ITERATE_CNT_M      0xFFFF
++
++#define REG_TRIG_CYCLE_WIDTH            0x053C
++
++#define REG_TRIG_CYCLE_CNT              0x0540
++
++#define TRIG_CYCLE_CNT_M                0xFFFF
++#define TRIG_CYCLE_CNT_S                16
++#define TRIG_BIT_PATTERN_M              0xFFFF
++
++#define REG_TRIG_ITERATE_TIME           0x0544
++
++#define REG_TRIG_PULSE_WIDTH__4         0x0548
++
++#define TRIG_PULSE_WIDTH_M              0x00FFFFFF
++
++#define REG_TS_CTRL_STAT__4             0x0550
++
++#define TS_EVENT_DETECT_M               0xF
++#define TS_EVENT_DETECT_S               17
++#define TS_EVENT_OVERFLOW               BIT(16)
++#define TS_GPI_M                        0xF
++#define TS_GPI_S                        8
++#define TS_DETECT_RISE                  BIT(7)
++#define TS_DETECT_FALL                  BIT(6)
++#define TS_DETECT_S                     6
++#define TS_CASCADE_TAIL                 BIT(5)
++#define TS_CASCADE_UPS_M                0xF
++#define TS_CASCADE_UPS_S                1
++#define TS_CASCADE_ENABLE               BIT(0)
++
++#define DETECT_RISE                     (TS_DETECT_RISE >> TS_DETECT_S)
++#define DETECT_FALL                     (TS_DETECT_FALL >> TS_DETECT_S)
++
++#define REG_TS_EVENT_0_NANOSEC          0x0554
++#define REG_TS_EVENT_0_SEC              0x0558
++#define REG_TS_EVENT_0_SUB_NANOSEC      0x055C
++
++#define REG_TS_EVENT_1_NANOSEC          0x0560
++#define REG_TS_EVENT_1_SEC              0x0564
++#define REG_TS_EVENT_1_SUB_NANOSEC      0x0568
++
++#define REG_TS_EVENT_2_NANOSEC          0x056C
++#define REG_TS_EVENT_2_SEC              0x0570
++#define REG_TS_EVENT_2_SUB_NANOSEC      0x0574
++
++#define REG_TS_EVENT_3_NANOSEC          0x0578
++#define REG_TS_EVENT_3_SEC              0x057C
++#define REG_TS_EVENT_3_SUB_NANOSEC      0x0580
++
++#define REG_TS_EVENT_4_NANOSEC          0x0584
++#define REG_TS_EVENT_4_SEC              0x0588
++#define REG_TS_EVENT_4_SUB_NANOSEC      0x058C
++
++#define REG_TS_EVENT_5_NANOSEC          0x0590
++#define REG_TS_EVENT_5_SEC              0x0594
++#define REG_TS_EVENT_5_SUB_NANOSEC      0x0598
++
++#define REG_TS_EVENT_6_NANOSEC          0x059C
++#define REG_TS_EVENT_6_SEC              0x05A0
++#define REG_TS_EVENT_6_SUB_NANOSEC      0x05A4
++
++#define REG_TS_EVENT_7_NANOSEC          0x05A8
++#define REG_TS_EVENT_7_SEC              0x05AC
++#define REG_TS_EVENT_7_SUB_NANOSEC      0x05B0
++
++#define TS_EVENT_EDGE_M                 0x1
++#define TS_EVENT_EDGE_S                 30
++#define TS_EVENT_NANOSEC_M              (BIT(30) - 1)
++
++#define TS_EVENT_SUB_NANOSEC_M          0x7
++
++#define TS_EVENT_SAMPLE                 \
++        (REG_TS_EVENT_1_NANOSEC - REG_TS_EVENT_0_NANOSEC)
++
++#define PORT_CTRL_ADDR(port, addr)      ((addr) | (((port) + 1) << 12))
++
+ /* 7 - VPhy */
+ #define REG_VPHY_IND_ADDR__2		0x075C
+ #define REG_VPHY_IND_DATA__2		0x0760
+@@ -170,9 +389,20 @@
+ #define PORT_BACK_PRESSURE		BIT(3)
+ #define PORT_PASS_ALL			BIT(0)
+ 
++#define REG_PORT_MAC_IN_RATE_LIMIT      0x0403
++#define PORT_RATE_LIMIT                 BIT(6)
++
+ #define PORT_MAX_FR_SIZE		0x404
+ #define FR_MIN_SIZE		1522
+ 
++#define REG_PORT_PRI0_IN_RLIMIT_CTL     0x0410
++#define REG_PORT_PRI7_IN_RLIMIT_CTL     0x0417
++
++#define RLIMIT_REG_CODE_256KBPS         104
++#define RLIMIT_REG_CODE_1MBPS           1
++#define RLIMIT_REG_CODE_1280KBPS        102
++#define RLIMIT_REG_CODE_1920KBPS        103
++
+ /* 8 - Classification and Policing */
+ #define REG_PORT_MRI_PRIO_CTRL		0x0801
+ #define PORT_HIGHEST_PRIO		BIT(7)
+@@ -185,6 +415,33 @@
+ 
+ #define P_PRIO_CTRL			REG_PORT_MRI_PRIO_CTRL
+ 
++/* C - PTP */
++
++#define REG_PTP_PORT_RX_DELAY__2        0x0C00
++#define REG_PTP_PORT_TX_DELAY__2        0x0C02
++#define REG_PTP_PORT_ASYM_DELAY__2      0x0C04
++
++#define REG_PTP_PORT_XDELAY_TS          0x0C08
++#define REG_PTP_PORT_XDELAY_TS_H        0x0C08
++#define REG_PTP_PORT_XDELAY_TS_L        0x0C0A
++
++#define REG_PTP_PORT_SYNC_TS            0x0C0C
++#define REG_PTP_PORT_SYNC_TS_H          0x0C0C
++#define REG_PTP_PORT_SYNC_TS_L          0x0C0E
++
++#define REG_PTP_PORT_PDRESP_TS          0x0C10
++#define REG_PTP_PORT_PDRESP_TS_H        0x0C10
++#define REG_PTP_PORT_PDRESP_TS_L        0x0C12
++
++#define REG_PTP_PORT_TX_INT_STATUS__2   0x0C14
++#define REG_PTP_PORT_TX_INT_ENABLE__2   0x0C16
++
++#define PTP_PORT_SYNC_INT               BIT(15)
++#define PTP_PORT_XDELAY_REQ_INT         BIT(14)
++#define PTP_PORT_PDELAY_RESP_INT        BIT(13)
++
++#define REG_PTP_PORT_LINK_DELAY__4      0x0C18
++
+ /* The port number as per the datasheet */
+ #define RGMII_2_PORT_NUM		5
+ #define RGMII_1_PORT_NUM		6
+@@ -199,4 +456,195 @@
+ 
+ #define LAN937X_TAG_LEN			2
+ 
++/* 8 - Classification and Policing */
++#define REG_PORT_MRI_MIRROR_CTRL        0x0800
++#define PORT_MIRROR_RX                  BIT(6)
++#define PORT_MIRROR_TX                  BIT(5)
++#define PORT_MIRROR_SNIFFER             BIT(1)
++
++#define REG_PORT_MRI_PRIO_CTRL          0x0801
++#define PORT_HIGHEST_PRIO               BIT(7)
++#define PORT_OR_PRIO                    BIT(6)
++#define PORT_MAC_PRIO_ENABLE            BIT(4)
++#define PORT_VLAN_PRIO_ENABLE           BIT(3)
++#define PORT_802_1P_PRIO_ENABLE         BIT(2)
++#define PORT_DIFFSERV_PRIO_ENABLE       BIT(1)
++#define PORT_ACL_PRIO_ENABLE            BIT(0)
++
++#define REG_PORT_MRI_MAC_CTRL           0x0802
++#define PORT_USER_PRIO_CEILING          BIT(7)
++#define PORT_DROP_NON_VLAN              BIT(4)
++#define PORT_DROP_TAG                   BIT(3)
++#define PORT_BASED_PRIO_M               KS_PRIO_M
++#define PORT_BASED_PRIO_S               0
++
++#define REG_PORT_RX_AUTH_CTL            0x0803
++
++#define REG_PORT_MRI_TC_MAP__4          0x0808
++
++#define REG_PORT_RX_QCI_PTR                     0x0850
++#define REG_PORT_RX_PSFP                        0x0854
++#define REG_PORT_RX_QCI_METER_CTL               0x0860
++#define REG_PORT_RX_QCI_METER_SR                0x0864
++#define REG_PORT_RX_QCI_METER_BS                0x0868
++#define REG_PORT_RX_QCI_FS_CTL                  0x0870
++#define REG_PORT_RX_QCI_FS_FM                   0x0874
++#define REG_PORT_RX_QCI_FS_FPG                  0x0878
++#define REG_PORT_RX_QCI_FS_FNPG                 0x087C
++#define REG_PORT_RX_QCI_FS_FPMAX                0x0880
++#define REG_PORT_RX_QCI_FS_FNPMAX               0x0884
++#define REG_PORT_RX_QCI_FS_FD                   0x0888
++#define REG_PORT_STREAM_CNT_STS                 0x088C
++#define REG_PORT_METER_RED_INT_MSK              0x08C7
++#define REG_PORT_RX_CNT_OVR_INT_STS             0x08C1
++#define REG_PORT_RX_CNT_OVR_INT_MSK             0x08C2
++
++#define EN_ALL_STREAM_CNTR_INTR                 0x00
++/* RX_AUTH_CTRL register defines*/
++/* 10b: Pass Mode. Authentication is disabled. When ACL is enabled, all traffic
++ * that misses the ACL rules is forwarded; otherwise ACL actions apply.
++ */
++#define AUTH_CTL_ACL_PASS_MODE                          BIT(1)
++#define AUTH_CTL_ACL_ENABLE                             BIT(2)
++
++/* PSFP register field defines*/
++#define FS_CTL_OVR_SIZE_FRAME_BLOCK_EN          BIT(1)
++#define FS_CTL_METER_EN                         BIT(11)
++#define FS_CTL_GATE_EN                          BIT(7)
++#define FS_CTL_MAX_SDU_EN                       BIT(3)
++#define FS_CTL_METER_IDX_MSK                    0x07
++#define FS_CTL_METER_IDX_POS                    8
++#define FS_CTL_MAX_SDU_MASK                     0xFFFF
++#define FS_CTL_MAX_SDU_POS                      16
++#define PSFP_ENABLE                             BIT(0)
++#define METER_SR_MASK                           0xFFFF
++#define METER_SR_CIR_POS                        16
++#define METER_BS_MASK                           0xFFFF
++#define METER_BS_CBS_POS                        16
++#define PORT_METER_RED_INT_MSK_ALL              0xFF
++
++/* REG_PORT_STREAM_CNT_STS access defines*/
++#define FILT_STR_FR_MATCH_CNT_OVR               BIT(5)
++#define FR_MATCH_CNTR_MAX               ((1 << 20) - 1)
++
++#define FILT_STR_FR_FAIL_DROP_CNT_OVR           BIT(0)
++#define FR_DROP_CNTR_MAX                ((1 << 20) - 1)
++
++/* defines to update Stream Policer Burst and Rate*/
++#define METER_SR_UPDT_RATE(C, P) ((((C) & METER_SR_MASK) << METER_SR_CIR_POS) |\
++                                  ((P) & METER_SR_MASK))
++
++#define METER_SR_UPDT_BURST(C, P) ((((C) & METER_BS_MASK) << METER_BS_CBS_POS) \
++                                   | ((P) & METER_BS_MASK))
++
++/* defines to update Stream filter parameters*/
++#define FS_UPDT_METER_IDX(IDX)  (((IDX) & FS_CTL_METER_IDX_MSK)\
++                                 << FS_CTL_METER_IDX_POS)
++
++#define FS_UPDT_MTU(MTU)        (((MTU) & FS_CTL_MAX_SDU_MASK)\
++                                 << FS_CTL_MAX_SDU_POS)
++
++/* TCAM/ACL Register space*/
++/* ACL Registers START */
++#define ACL_CTRL_BASE_ADDR  (0x600)
++#define ACL_CTRL_PORT_BASE_ADDR(port) ((port) * 0x1000)
++/* Reg Base address */                                               /*size */
++#define REG_ACL_PORT_ADR                (ACL_CTRL_BASE_ADDR + 0x00)  /* 96b */
++#define REG_ACL_PORT_AAR                (ACL_CTRL_BASE_ADDR + 0x60)  /* 08b */
++#define REG_ACL_PORT_ABER               (ACL_CTRL_BASE_ADDR + 0x68)  /* 14b */
++#define REG_ACL_PORT_ARACR              (ACL_CTRL_BASE_ADDR + 0x78)  /* 04b */
++#define REG_ACL_PORT_PCTRL              (ACL_CTRL_BASE_ADDR + 0x7C)  /* 04b */
++#define REG_ACL_PORT_FR_COUNT0          (ACL_CTRL_BASE_ADDR + 0x80)  /* 04b */
++#define REG_ACL_PORT_FR_COUNT1          (ACL_CTRL_BASE_ADDR + 0x84)  /* 04b */
++#define REG_ACL_PORT_FR_COUNT2          (ACL_CTRL_BASE_ADDR + 0x88)  /* 04b */
++#define REG_ACL_PORT_FR_COUNT3          (ACL_CTRL_BASE_ADDR + 0x8C)  /* 04b */
++#define REG_ACL_PORT_NMATCH             (ACL_CTRL_BASE_ADDR + 0x94)  /* 08b */
++#define REG_ACL_PORT_INT_STS            (ACL_CTRL_BASE_ADDR + 0xA0)  /* 01b */
++#define REG_ACL_PORT_INT_MASK           (ACL_CTRL_BASE_ADDR + 0xA2)  /* 01b */
++#define REG_ACL_PORT_SPARE              (ACL_CTRL_BASE_ADDR + 0xC0)  /* 04b */
++#define REG_ACL_PORT_TCAM_BIST0         (ACL_CTRL_BASE_ADDR + 0xD0)  /* 02b */
++#define REG_ACL_PORT_TCAM_BIST1         (ACL_CTRL_BASE_ADDR + 0xD2)  /* 01b */
++#define REG_ACL_PORT_TCAM_BIST2         (ACL_CTRL_BASE_ADDR + 0xD3)  /* 01b */
++#define REG_ACL_PORT_TCAM_BIST3         (ACL_CTRL_BASE_ADDR + 0xD4)  /* 01b */
++#define REG_ACL_PORT_TCAM_BITMAP        (ACL_CTRL_BASE_ADDR + 0xE0)  /* 16b */
++
++/** REG_ACL_PORT_INT_STS register defines**/
++#define ACL_FR_COUNT_MAX_VALUE                  0xFFFFFFFF
++#define ACL_FR_COUNT_OVR0                       BIT(1)
++#define ACL_FR_COUNT_OVR1                       BIT(2)
++#define ACL_FR_COUNT_OVR2                       BIT(3)
++#define ACL_FR_COUNT_OVR3                       BIT(4)
++
++#define ACL_FR_CNTR_INTR_EN                     0x10
++
++/* Parser control register defines */
++#define PCTRL_TWO_FORMAT_TWO_PARSER_EACH        (BIT(29) | BIT(30))
++#define PCTRL_KEYTYPE0_MULTI_FMT                BIT(27)
++#define PCTRL_KEYTYPE1_MULTI_FMT                BIT(26)
++#define PCTRL_KEYTYPE2_MULTI_FMT                BIT(25)
++#define PCTRL_KEYTYPE3_MULTI_FMT                BIT(24)
++#define PCTRL_KEYTYPE0_UNIV_FMT                 0
++#define PCTRL_KEYTYPE1_UNIV_FMT                 0
++#define PCTRL_KEYTYPE2_UNIV_FMT                 0
++#define PCTRL_KEYTYPE3_UNIV_FMT                 0
++#define PCTRL_KEY2_VLAN_TAG_EN                  BIT(17)
++#define PCTRL_KEY3_VLAN_TAG_EN                  BIT(16)
++#define PCTRL_KEY1_VLAN_TAG_EN                  BIT(18)
++#define PCTRL_KEY0_VLAN_TAG_EN                  BIT(19)
++
++/* 9 - Shaping */
++#define REG_PORT_MTI_QUEUE_INDEX__4     0x0900
++
++#define REG_PORT_MTI_QUEUE_CTRL_0__4    0x0904
++#define MTI_PVID_REPLACE                BIT(0)
++
++#define REG_PORT_MTI_QUEUE_CTRL_0       0x0914
++
++#define MTI_SCHEDULE_MODE_M             0x3
++#define MTI_SCHEDULE_MODE_S             6
++#define MTI_SCHEDULE_STRICT_PRIO        0
++#define MTI_SCHEDULE_WRR                2
++#define MTI_SHAPING_M                   0x3
++#define MTI_SHAPING_S                   4
++#define MTI_SHAPING_OFF                 0
++#define MTI_SHAPING_SRP                 1
++#define MTI_SHAPING_TIME_AWARE          2
++
++#define REG_PORT_MTI_QUEUE_CTRL_1       0x0915
++
++#define MTI_TX_RATIO_M                  (BIT(7) - 1)
++
++#define REG_PORT_MTI_QUEUE_CTRL_2__2    0x0916
++#define REG_PORT_MTI_HI_WATER_MARK      0x0916
++#define REG_PORT_MTI_QUEUE_CTRL_3__2    0x0918
++#define REG_PORT_MTI_LO_WATER_MARK      0x0918
++#define REG_PORT_MTI_QUEUE_CTRL_4__2    0x091A
++#define REG_PORT_MTI_CREDIT_INCREMENTA0 0x091A
++#define REG_PORT_MTI_CREDIT_INCREMENT   0x091C
++#define REG_PORT_TAS_CTL__1             0x0920
++
++#define TAS_CUT_THROUGH                 BIT(7)
++
++#define REG_PORT_TAS_EVENT_INDEX__1     0x0923
++
++#define REG_PORT_TAS_EVENT__4           0x0924
++
++#define TAS_GATE_CMD_S                  24
++#define TAS_GATE_CYCLE_M                ((1 << TAS_GATE_CMD_S) - 1)
++
++#define REG_PORT_TAS_TRIG_NSEC__4       0x0928
++#define REG_PORT_TAS_TRIG_SEC__4        0x092C
++#define REG_PORT_TAS_CYCLE_TIME__4      0x0930
++
++#define REG_PORT_TAS_GCL_LAST_INDEX__2  0x0934
++
++#define REG_PORT_TAS_GATE_CTRL__1       0x0936
++
++#define TAS_CFG_CHANGE                  BIT(7)
++#define TAS_GATE_ENABLE                 BIT(6)
++#define TAS_OPER_GCL_READ               BIT(5)
++
++#define P_MIRROR_CTRL                   REG_PORT_MRI_MIRROR_CTRL
++#define S_MIRROR_CTRL                   REG_SW_MRI_CTRL_0
++
+ #endif
+diff --git a/drivers/net/dsa/microchip/lan937x_tas.c b/drivers/net/dsa/microchip/lan937x_tas.c
+new file mode 100644
+index 000000000000..cbdb6df9b54b
+--- /dev/null
++++ b/drivers/net/dsa/microchip/lan937x_tas.c
+@@ -0,0 +1,119 @@
++// SPDX-License-Identifier: GPL-2.0
++/* Microchip lan937x dev ops functions
++ * Copyright (C) 2021 Microchip Technology Inc.
++ */
++#include <net/dsa.h>
++#include <net/switchdev.h>
++#include "lan937x_reg.h"
++#include "ksz_common.h"
++#include "lan937x.h"
++#include "lan937x_tc.h"
++#include "lan937x_ptp.h"
++#include "lan937x_tas.h"
++
++static bool lan937x_tas_validate_gcl(struct tc_taprio_qopt_offload *qopt)
++{
++	u8 i;
++
++	/* cycle time can only be 32bit */
++	if (qopt->cycle_time > (u32)-1)
++		return -EOPNOTSUPP;
++
++	/* Only set command is supported */
++	for (i = 0; i < qopt->num_entries; ++i)
++		if (qopt->entries[i].command != TC_TAPRIO_CMD_SET_GATES)
++			return -EOPNOTSUPP;
++
++	return 0;
++}
++
++static void lan937x_tas_set_basetime(struct ksz_device *dev, ktime_t base_time,
++				     u32 cycle_time,
++				     struct timespec64 *new_base_ts)
++{
++	ktime_t new_base_time;
++	ktime_t current_time;
++	struct timespec64 ts;
++
++	lan937x_ptp_gettime(&dev->ptp_caps, &ts);
++
++	current_time = timespec64_to_ktime(ts);
++	new_base_time = base_time;
++
++	if (base_time < current_time) {
++		u64 nr_of_cycles = current_time - base_time;
++		u32 add_cycles = 1;
++
++		/*Reserve 1ms for programming and activating */
++		if (cycle_time < 1000000)
++			add_cycles = DIV_ROUND_UP(1000000, cycle_time);
++
++		do_div(nr_of_cycles, cycle_time);
++		new_base_time += cycle_time * (nr_of_cycles + add_cycles);
++	}
++
++	*new_base_ts = ktime_to_timespec64(new_base_time);
++}
++
++int lan937x_setup_tc_taprio(struct dsa_switch *ds, int port,
++			    struct tc_taprio_qopt_offload *qopt)
++{
++	struct ksz_device *dev = ds->priv;
++	struct timespec64 base_ts;
++	u32 cycle_cnt;
++	int ret = 0;
++	u32 event;
++	u8 i;
++
++	if (!qopt->enable) {
++		ret = lan937x_port_cfg(dev, port, REG_PORT_TAS_GATE_CTRL__1,
++				       TAS_GATE_ENABLE, false);
++		return ret;
++	}
++
++	/* Validate GCL */
++	ret = lan937x_tas_validate_gcl(qopt);
++	if (ret)
++		return ret;
++
++	/* Enable Gating */
++	ret = lan937x_port_cfg(dev, port, REG_PORT_TAS_GATE_CTRL__1,
++			       TAS_GATE_ENABLE, true);
++	if (ret)
++		return ret;
++
++	/* Schedule entry */
++	for (i = 0; i < qopt->num_entries; i++) {
++		ksz_pwrite8(dev, port, REG_PORT_TAS_EVENT_INDEX__1,
++				      i);
++
++		/*1 Cycle count equals 12ns. 1/83.3Mhz*/
++		event = qopt->entries[i].gate_mask << TAS_GATE_CMD_S;
++		cycle_cnt = qopt->entries[i].interval / 12;
++		event |= (cycle_cnt & TAS_GATE_CYCLE_M);
++
++		ksz_pwrite32(dev, port, REG_PORT_TAS_EVENT__4, event);
++	}
++
++	/* Last schedule entry */
++	ksz_pwrite16(dev, port, REG_PORT_TAS_GCL_LAST_INDEX__2,
++			       qopt->num_entries - 1);
++
++	/*PTP Cycle time*/
++	ksz_pwrite32(dev, port, REG_PORT_TAS_CYCLE_TIME__4,
++			       qopt->cycle_time);
++
++	/*PTP Base time */
++	lan937x_tas_set_basetime(dev, qopt->base_time, qopt->cycle_time,
++				 &base_ts);
++
++	ksz_pwrite32(dev, port, REG_PORT_TAS_TRIG_SEC__4,
++			       base_ts.tv_sec);
++
++	ksz_pwrite32(dev, port, REG_PORT_TAS_TRIG_NSEC__4,
++			       base_ts.tv_nsec);
++
++	/*Set the config change bit */
++	return lan937x_port_cfg(dev, port, REG_PORT_TAS_GATE_CTRL__1,
++				TAS_CFG_CHANGE, true);
++}
+diff --git a/drivers/net/dsa/microchip/lan937x_tas.h b/drivers/net/dsa/microchip/lan937x_tas.h
+new file mode 100644
+index 000000000000..b1df7adc97ed
+--- /dev/null
++++ b/drivers/net/dsa/microchip/lan937x_tas.h
+@@ -0,0 +1,20 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/* Microchip lan937x Time aware schedular functions
++ * Copyright (C) 2021 Microchip Technology Inc.
++ */
++#ifndef _LAN937x_TAS_H
++#define _LAN937x_TAS_H
++
++#if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_TAS)
++
++int lan937x_setup_tc_taprio(struct dsa_switch *ds, int port,
++			    struct tc_taprio_qopt_offload *admin);
++#else
++static inline int lan937x_setup_tc_taprio(struct dsa_switch *ds, int port,
++					  struct tc_taprio_qopt_offload *admin)
++{
++	return -EOPNOTSUPP;
++}
++#endif
++
++#endif
+diff --git a/drivers/net/dsa/microchip/lan937x_tc.c b/drivers/net/dsa/microchip/lan937x_tc.c
+new file mode 100644
+index 000000000000..e611731dd147
+--- /dev/null
++++ b/drivers/net/dsa/microchip/lan937x_tc.c
+@@ -0,0 +1,110 @@
++// SPDX-License-Identifier: GPL-2.0
++/* Microchip lan937x dev ops functions
++ * Copyright (C) 2021 Microchip Technology Inc.
++ */
++#include <net/dsa.h>
++#include <net/switchdev.h>
++#include "lan937x_reg.h"
++#include "ksz_common.h"
++#include "lan937x.h"
++#include "lan937x_tc.h"
++#include "lan937x_tas.h"
++
++#define LAN937X_CBS_ENABLE ((MTI_SCHEDULE_STRICT_PRIO << MTI_SCHEDULE_MODE_S) | \
++			    (MTI_SHAPING_SRP << MTI_SHAPING_S))
++#define LAN937X_CBS_DISABLE ((MTI_SCHEDULE_WRR << MTI_SCHEDULE_MODE_S) |\
++			     (MTI_SHAPING_OFF << MTI_SHAPING_S))
++
++/* Bandwidth is calculated by idle slope/transmission speed. Then the Bandwidth
++ * is converted to Hex-decimal using the successive multiplication method. On
++ * every step, integer part is taken and decimal part is carry forwarded.
++ */
++static int cinc_cal(s32 idle_slope, s32 send_slope)
++{
++	int cinc = 0;
++	u32 txrate;
++	u32 rate;
++	u8 temp;
++	u8 i;
++
++	txrate = idle_slope - send_slope;
++
++	rate = idle_slope;
++
++	/* 24 bit register */
++	for (i = 0; i < 6; i++) {
++		rate = rate * 16;
++
++		temp = rate / txrate;
++
++		rate %= txrate;
++
++		cinc = ((cinc << 4) | temp);
++	}
++
++	return cinc;
++}
++
++static int lan937x_setup_tc_cbs(struct dsa_switch *ds, int port,
++				struct tc_cbs_qopt_offload *qopt)
++{
++	struct ksz_device *dev = ds->priv;
++	u32 bw;
++
++	if (qopt->queue > LAN937X_NUM_TC)
++		return -EINVAL;
++
++	/* Queue Selection */
++	ksz_pwrite32(dev, port, REG_PORT_MTI_QUEUE_INDEX__4,
++			       qopt->queue);
++
++	if (!qopt->enable) {
++		ksz_pwrite8(dev, port, REG_PORT_MTI_QUEUE_CTRL_0,
++				LAN937X_CBS_DISABLE);
++		return 0;
++	}
++
++	ksz_pwrite8(dev, port, REG_PORT_MTI_QUEUE_CTRL_0,
++			      LAN937X_CBS_ENABLE);
++
++	/* High Credit */
++	ksz_pwrite16(dev, port, REG_PORT_MTI_HI_WATER_MARK,
++			       qopt->hicredit);
++
++	/* Low Credit */
++	ksz_pwrite16(dev, port, REG_PORT_MTI_LO_WATER_MARK,
++			       qopt->locredit);
++
++	/* Credit Increment Register */
++	bw = cinc_cal(qopt->idleslope, qopt->sendslope);
++
++	ksz_pwrite32(dev, port, REG_PORT_MTI_CREDIT_INCREMENT, bw);
++
++	return 0;
++}
++
++int lan937x_setup_tc(struct dsa_switch *ds, int port,
++		     enum tc_setup_type type, void *type_data)
++{
++	switch (type) {
++	case TC_SETUP_QDISC_CBS:
++		return lan937x_setup_tc_cbs(ds, port, type_data);
++	case TC_SETUP_QDISC_TAPRIO:
++		return lan937x_setup_tc_taprio(ds, port, type_data);
++	default:
++		return -EOPNOTSUPP;
++	}
++}
++
++void lan937x_tc_queue_init(struct dsa_switch *ds)
++{
++	struct ksz_device *dev = ds->priv;
++	int port;
++
++	ds->num_tx_queues = LAN937X_NUM_TC;
++
++	for (port = 0; port < dev->info->port_cnt; port++) {
++		lan937x_port_cfg(dev, port, REG_PORT_CTRL_0,
++				 PORT_QUEUE_SPLIT_ENABLE, true);
++	}
++}
+diff --git a/drivers/net/dsa/microchip/lan937x_tc.h b/drivers/net/dsa/microchip/lan937x_tc.h
+new file mode 100644
+index 000000000000..ecf3aa1dff25
+--- /dev/null
++++ b/drivers/net/dsa/microchip/lan937x_tc.h
+@@ -0,0 +1,17 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/* Microchip LAN937X TC Implementation
++ * Copyright (C) 2021 Microchip Technology Inc.
++ */
++
++#ifndef _NET_DSA_DRIVERS_LAN937X_TC_H
++#define _NET_DSA_DRIVERS_LAN937X_TC_H
++
++#include <net/pkt_cls.h>
++
++#define LAN937X_NUM_TC 8
++
++void lan937x_tc_queue_init(struct dsa_switch *ds);
++
++int lan937x_setup_tc(struct dsa_switch *ds, int port, enum tc_setup_type type,
++		     void *type_data);
++#endif
+diff --git a/include/linux/dsa/ksz_common.h b/include/linux/dsa/ksz_common.h
+new file mode 100644
+index 000000000000..8b90cf11e9ae
+--- /dev/null
++++ b/include/linux/dsa/ksz_common.h
+@@ -0,0 +1,71 @@
++#ifndef _NET_DSA_KSZ_COMMON_H_
++#define _NET_DSA_KSZ_COMMON_H_
++
++#include <linux/bitfield.h>
++#include <linux/bits.h>
++#include <linux/ktime.h>
++#include <linux/kthread.h>
++#include <linux/net_tstamp.h>
++#include <linux/ptp_classify.h>
++#include <linux/skbuff.h>
++#include <linux/spinlock.h>
++#include <linux/time64.h>
++#include <net/dsa.h>
++
++/* All time stamps from the KSZ consist of 2 bits for seconds and 30 bits for
++ * nanoseconds. This is NOT the same as 32 bits for nanoseconds.
++ */
++#define KSZ_TSTAMP_SEC_MASK  GENMASK(31, 30)
++#define KSZ_TSTAMP_NSEC_MASK GENMASK(29, 0)
++
++#define KSZ9477_HWTS_EN  0
++#define LAN937X_HWTS_EN  0
++
++struct ksz_device_ptp_shared {
++	/* protects ptp_clock_time (user space (various syscalls)
++	 * vs. softirq in ksz9477_rcv_timestamp()).
++	 */
++	spinlock_t ptp_clock_lock;
++	/* approximated current time, read once per second from hardware */
++	struct timespec64 ptp_clock_time;
++	unsigned long state;
++};
++
++struct lan937x_port_ptp_shared {
++	struct ksz_device_ptp_shared *dev;
++	struct kthread_worker *sync_worker;
++	struct kthread_worker *pdelayreq_worker;
++	struct kthread_worker *pdelayrsp_worker;
++	struct kthread_work sync_work;
++	struct sk_buff_head sync_queue;
++	struct kthread_work pdelayreq_work;
++	struct sk_buff_head pdelayreq_queue;
++	struct kthread_work pdelayrsp_work;
++	struct sk_buff_head pdelayrsp_queue;
++};
++
++/* net/dsa/tag_ksz.c */
++static inline ktime_t ksz_decode_tstamp(u32 tstamp)
++{
++	u64 ns = FIELD_GET(KSZ_TSTAMP_SEC_MASK, tstamp) * NSEC_PER_SEC +
++		 FIELD_GET(KSZ_TSTAMP_NSEC_MASK, tstamp);
++
++	return ns_to_ktime(ns);
++}
++
++ktime_t ksz_tstamp_reconstruct(struct ksz_device_ptp_shared *ksz,
++				   ktime_t tstamp);
++
++struct ksz_skb_cb {
++	struct sk_buff *clone;
++	unsigned int ptp_type;
++	/* Do not cache pointer to PTP header between ksz9477_ptp_port_txtstamp
++	 * and ksz9xxx_xmit() (will become invalid during dsa_realloc_skb()).
++	 */
++	u8 ptp_msg_type;
++};
++
++#define KSZ_SKB_CB(skb) \
++	((struct ksz_skb_cb *)((skb)->cb))
++
++#endif /* _NET_DSA_KSZ_COMMON_H_ */
+diff --git a/include/net/dsa.h b/include/net/dsa.h
+index b902b31bebce..3d98a472139b 100644
+--- a/include/net/dsa.h
++++ b/include/net/dsa.h
+@@ -55,6 +55,7 @@ struct phylink_link_state;
+ #define DSA_TAG_PROTO_RTL8_4T_VALUE		25
+ #define DSA_TAG_PROTO_RZN1_A5PSW_VALUE		26
+ #define DSA_TAG_PROTO_LAN937X_VALUE		27
++#define DSA_TAG_PROTO_LAN937X_CASCADE_VALUE     28
+ 
+ enum dsa_tag_protocol {
+ 	DSA_TAG_PROTO_NONE		= DSA_TAG_PROTO_NONE_VALUE,
+@@ -85,6 +86,7 @@ enum dsa_tag_protocol {
+ 	DSA_TAG_PROTO_RTL8_4T		= DSA_TAG_PROTO_RTL8_4T_VALUE,
+ 	DSA_TAG_PROTO_RZN1_A5PSW	= DSA_TAG_PROTO_RZN1_A5PSW_VALUE,
+ 	DSA_TAG_PROTO_LAN937X		= DSA_TAG_PROTO_LAN937X_VALUE,
++	DSA_TAG_PROTO_LAN937X_CASCADE   = DSA_TAG_PROTO_LAN937X_CASCADE_VALUE,
+ };
+ 
+ struct dsa_switch;
+@@ -334,6 +336,9 @@ struct dsa_port {
+ 	/* List of VLANs that CPU and DSA ports are members of. */
+ 	struct mutex		vlans_lock;
+ 	struct list_head	vlans;
++
++	/* Added for ptp */
++	void *priv;
+ };
+ 
+ /* TODO: ideally DSA ports would have a single dp->link_dp member,
+diff --git a/net/dsa/tag_ksz.c b/net/dsa/tag_ksz.c
+index 38fa19c1e2d5..d05b00970486 100644
+--- a/net/dsa/tag_ksz.c
++++ b/net/dsa/tag_ksz.c
+@@ -4,8 +4,11 @@
+  * Copyright (c) 2017 Microchip Technology
+  */
+ 
++#include <linux/dsa/ksz_common.h>
++#include <linux/etherdevice.h>
+ #include <linux/etherdevice.h>
+ #include <linux/list.h>
++#include <linux/slab.h>
+ #include <net/dsa.h>
+ #include "dsa_priv.h"
+ 
+@@ -15,15 +18,15 @@
+ 
+ static struct sk_buff *ksz_common_rcv(struct sk_buff *skb,
+ 				      struct net_device *dev,
+-				      unsigned int port, unsigned int len)
++				      unsigned int port, unsigned int len, u8 device)
+ {
+-	skb->dev = dsa_master_find_slave(dev, 0, port);
++	skb->dev = dsa_master_find_slave(dev, device, port);
+ 	if (!skb->dev)
+ 		return NULL;
+ 
+ 	pskb_trim_rcsum(skb, skb->len - len);
+ 
+-	dsa_default_offload_fwd_mark(skb);
++	skb->offload_fwd_mark = true;
+ 
+ 	return skb;
+ }
+@@ -70,7 +73,7 @@ static struct sk_buff *ksz8795_rcv(struct sk_buff *skb, struct net_device *dev)
+ {
+ 	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
+ 
+-	return ksz_common_rcv(skb, dev, tag[0] & 7, KSZ_EGRESS_TAG_LEN);
++	return ksz_common_rcv(skb, dev, tag[0] & 7, KSZ_EGRESS_TAG_LEN, 0);
+ }
+ 
+ static const struct dsa_device_ops ksz8795_netdev_ops = {
+@@ -143,7 +146,7 @@ static struct sk_buff *ksz9477_rcv(struct sk_buff *skb, struct net_device *dev)
+ 	if (tag[0] & KSZ9477_PTP_TAG_INDICATION)
+ 		len += KSZ9477_PTP_TAG_LEN;
+ 
+-	return ksz_common_rcv(skb, dev, port, len);
++	return ksz_common_rcv(skb, dev, port, len, 0);
+ }
+ 
+ static const struct dsa_device_ops ksz9477_netdev_ops = {
+@@ -207,55 +210,221 @@ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_KSZ9893);
+  * tag0 : zero-based value represents port
+  *	  (eg, 0x00=port1, 0x02=port3, 0x07=port8)
+  */
++#define LAN937X_CASCADE_TAG_LEN		3
+ #define LAN937X_EGRESS_TAG_LEN		2
++#define LAN937X_PTP_TAG_LEN		4
++
++#define LAN937X_PTP_TAG_INDICATION	BIT(7)
++#define LAN937X_CASCADE_CHIP            BIT(6)
+ 
+ #define LAN937X_TAIL_TAG_BLOCKING_OVERRIDE	BIT(11)
+ #define LAN937X_TAIL_TAG_LOOKUP			BIT(12)
+ #define LAN937X_TAIL_TAG_VALID			BIT(13)
+ #define LAN937X_TAIL_TAG_PORT_MASK		7
+ 
++ktime_t ksz_tstamp_reconstruct(struct ksz_device_ptp_shared *ksz, ktime_t tstamp)
++{
++	struct timespec64 ts = ktime_to_timespec64(tstamp);
++	struct timespec64 ptp_clock_time;
++	struct timespec64 diff;
++
++	spin_lock_bh(&ksz->ptp_clock_lock);
++	ptp_clock_time = ksz->ptp_clock_time;
++	spin_unlock_bh(&ksz->ptp_clock_lock);
++
++	/* calculate full time from partial time stamp */
++	ts.tv_sec = (ptp_clock_time.tv_sec & ~3) | ts.tv_sec;
++
++	/* find nearest possible point in time */
++	diff = timespec64_sub(ts, ptp_clock_time);
++	if (diff.tv_sec > 2)
++		ts.tv_sec -= 4;
++	else if (diff.tv_sec < -2)
++		ts.tv_sec += 4;
++
++	return timespec64_to_ktime(ts);
++}
++EXPORT_SYMBOL(ksz_tstamp_reconstruct);
++
++static void lan937x_xmit_timestamp(struct sk_buff *skb)
++{
++	u32 tstamp_raw = 0;
++
++	put_unaligned_be32(tstamp_raw, skb_put(skb, LAN937X_PTP_TAG_LEN));
++}
++
++static struct sk_buff *lan937x_defer_xmit(struct dsa_port *dp,
++					  struct sk_buff *skb)
++{
++	struct lan937x_port_ptp_shared *ptp_shared = dp->priv;
++	struct sk_buff *clone = KSZ_SKB_CB(skb)->clone;
++	u8 ptp_msg_type;
++
++	if (!clone)
++		return skb;  /* no deferred xmit for this packet */
++
++	/* Use cached PTP msg type from ksz9477_ptp_port_txtstamp().  */
++	ptp_msg_type = KSZ_SKB_CB(clone)->ptp_msg_type;
++	switch (ptp_msg_type) {
++	case PTP_MSGTYPE_SYNC:
++		skb_queue_tail(&ptp_shared->sync_queue, skb_get(skb));
++		kthread_queue_work(ptp_shared->sync_worker, &ptp_shared->sync_work);
++		break;
++
++	case PTP_MSGTYPE_PDELAY_REQ:
++		skb_queue_tail(&ptp_shared->pdelayreq_queue, skb_get(skb));
++		kthread_queue_work(ptp_shared->pdelayreq_worker, &ptp_shared->pdelayreq_work);
++		break;
++
++	case PTP_MSGTYPE_PDELAY_RESP:
++		skb_queue_tail(&ptp_shared->pdelayrsp_queue, skb_get(skb));
++		kthread_queue_work(ptp_shared->pdelayrsp_worker, &ptp_shared->pdelayrsp_work);
++		break;
++
++	default:
++		kfree_skb(clone);
++		KSZ_SKB_CB(skb)->clone = NULL;
++		return skb;
++	}
++
++	return NULL;
++}
++
++static void lan937x_rcv_timestamp(struct sk_buff *skb, u8 *tag,
++				  struct net_device *dev, unsigned int port)
++{
++	struct skb_shared_hwtstamps *hwtstamps = skb_hwtstamps(skb);
++	struct dsa_switch *ds = dev->dsa_ptr->ds;
++	struct lan937x_port_ptp_shared *port_ptp_shared;
++	u8 *tstamp_raw = tag - KSZ9477_PTP_TAG_LEN;
++	ktime_t tstamp;
++
++	port_ptp_shared = dsa_to_port(ds, port)->priv;
++	if (!port_ptp_shared)
++		return;
++
++	/* convert time stamp and write to skb */
++	tstamp = ksz_decode_tstamp(get_unaligned_be32(tstamp_raw));
++	memset(hwtstamps, 0, sizeof(*hwtstamps));
++	hwtstamps->hwtstamp = ksz_tstamp_reconstruct(port_ptp_shared->dev, tstamp);
++}
++
++static u16 lan937x_common_tt_fmt(struct net_device *dev, struct dsa_port *dp,
++				 struct sk_buff *skb)
++{
++	struct lan937x_port_ptp_shared *port_ptp_shared = dp->priv;
++	struct ksz_device_ptp_shared *ptp_shared = port_ptp_shared->dev;
++	u16 queue_mapping = skb_get_queue_mapping(skb);
++	u8 prio = netdev_txq_to_tc(dev, queue_mapping);
++	const struct ethhdr *hdr = eth_hdr(skb);
++	u16 val = 0;
++
++	/* Tag encoding */
++	if (test_bit(LAN937X_HWTS_EN, &ptp_shared->state))
++		lan937x_xmit_timestamp(skb);
++
++	/* priority */
++	val |= (prio << 8);
++
++	if (is_link_local_ether_addr(hdr->h_dest))
++		val |= LAN937X_TAIL_TAG_BLOCKING_OVERRIDE;
++
++	/* Tail tag valid bit - This bit should always be set by the CPU */
++	val |= LAN937X_TAIL_TAG_VALID;
++
++	return val;
++}
++
+ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
+ 				    struct net_device *dev)
+ {
+ 	struct dsa_port *dp = dsa_slave_to_port(dev);
+-	const struct ethhdr *hdr = eth_hdr(skb);
+ 	__be16 *tag;
+ 	u16 val;
+ 
++	/* FIXME: confirm putting this first will not harm anyone */
+ 	if (skb->ip_summed == CHECKSUM_PARTIAL && skb_checksum_help(skb))
+ 		return NULL;
+ 
++	val = lan937x_common_tt_fmt(dev, dp, skb);
++	val |= BIT(dp->index);
++
+ 	tag = skb_put(skb, LAN937X_EGRESS_TAG_LEN);
+ 
+-	val = BIT(dp->index);
++	put_unaligned_be16(val, tag);
+ 
+-	if (is_link_local_ether_addr(hdr->h_dest))
+-		val |= LAN937X_TAIL_TAG_BLOCKING_OVERRIDE;
++	return lan937x_defer_xmit(dp, skb);
++}
+ 
+-	/* Tail tag valid bit - This bit should always be set by the CPU */
+-	val |= LAN937X_TAIL_TAG_VALID;
++static struct sk_buff *lan937x_rcv(struct sk_buff *skb, struct net_device *dev)
++{
++	/* Tag decoding */
++	u8 *tag = skb_tail_pointer(skb) - KSZ_EGRESS_TAG_LEN;
++	unsigned int port = tag[0] & LAN937X_TAIL_TAG_PORT_MASK;
++	unsigned int len = KSZ_EGRESS_TAG_LEN;
++	u8 device = 0;
+ 
+-	put_unaligned_be16(val, tag);
++	/* Extra 4-bytes PTP timestamp */
++	if (tag[0] & LAN937X_PTP_TAG_INDICATION) {
++		lan937x_rcv_timestamp(skb, tag, dev, port);
++		len += KSZ9477_PTP_TAG_LEN;
++	}
+ 
+-	return skb;
++	if (tag[0] & LAN937X_CASCADE_CHIP)
++		device = 1;
++
++	return ksz_common_rcv(skb, dev, port, len, device);
+ }
+ 
+ static const struct dsa_device_ops lan937x_netdev_ops = {
+ 	.name	= "lan937x",
+ 	.proto	= DSA_TAG_PROTO_LAN937X,
+ 	.xmit	= lan937x_xmit,
+-	.rcv	= ksz9477_rcv,
+-	.needed_tailroom = LAN937X_EGRESS_TAG_LEN,
++	.rcv	= lan937x_rcv,
++	.needed_tailroom = LAN937X_EGRESS_TAG_LEN + LAN937X_PTP_TAG_LEN,
+ };
+ 
+ DSA_TAG_DRIVER(lan937x_netdev_ops);
+ MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_LAN937X);
+ 
++static struct sk_buff *lan937x_cascade_xmit(struct sk_buff *skb,
++					    struct net_device *dev)
++{
++	struct dsa_port *dp = dsa_slave_to_port(dev);
++	__be32 *tag_32;
++	u32 val_32 = 0;
++
++	if (skb->ip_summed == CHECKSUM_PARTIAL && skb_checksum_help(skb))
++		return NULL;
++
++	tag_32 = skb_put(skb, LAN937X_CASCADE_TAG_LEN);
++
++	val_32 = (lan937x_common_tt_fmt(dev, dp, skb) << 8);
++
++	val_32 |= BIT((dp->index + (8 * dp->ds->index)));
++
++	put_unaligned_be24(val_32, tag_32);
++
++	return lan937x_defer_xmit(dp, skb);
++}
++
++static const struct dsa_device_ops cascade_netdev_ops = {
++	.name	= "lan937x_cascade",
++	.proto	= DSA_TAG_PROTO_LAN937X_CASCADE,
++	.xmit	= lan937x_cascade_xmit,
++	.rcv	= lan937x_rcv,
++	.needed_tailroom = LAN937X_CASCADE_TAG_LEN + LAN937X_PTP_TAG_LEN,
++};
++
++DSA_TAG_DRIVER(cascade_netdev_ops);
++MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_LAN937X_CASCADE);
++
+ static struct dsa_tag_driver *dsa_tag_driver_array[] = {
+ 	&DSA_TAG_DRIVER_NAME(ksz8795_netdev_ops),
+ 	&DSA_TAG_DRIVER_NAME(ksz9477_netdev_ops),
+ 	&DSA_TAG_DRIVER_NAME(ksz9893_netdev_ops),
+ 	&DSA_TAG_DRIVER_NAME(lan937x_netdev_ops),
++	&DSA_TAG_DRIVER_NAME(cascade_netdev_ops),
+ };
+ 
+ module_dsa_tag_drivers(dsa_tag_driver_array);
+-- 
+2.34.1
+

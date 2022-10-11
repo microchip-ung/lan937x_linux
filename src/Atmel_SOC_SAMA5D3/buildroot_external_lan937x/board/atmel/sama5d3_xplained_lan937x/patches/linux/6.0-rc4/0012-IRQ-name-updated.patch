@@ -1,0 +1,44 @@
+From dcf0fb39771becf91314518da1ec2f9d676437be Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Wed, 28 Sep 2022 17:03:49 +0530
+Subject: [PATCH 12/15] IRQ name updated
+
+IRQ name updated to include device index for cascading.
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/dsa/microchip/lan937x_flower.c | 4 ++--
+ drivers/net/dsa/microchip/lan937x_ptp.c    | 2 +-
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/dsa/microchip/lan937x_flower.c b/drivers/net/dsa/microchip/lan937x_flower.c
+index ea25a1a6a803..b97241318dcc 100644
+--- a/drivers/net/dsa/microchip/lan937x_flower.c
++++ b/drivers/net/dsa/microchip/lan937x_flower.c
+@@ -1129,8 +1129,8 @@ int lan937x_flower_setup(struct dsa_switch *ds)
+ 
+ 		res->broadcast_pol_used = false;
+ 
+-		snprintf(prt->acl_dev_name, sizeof(prt->acl_dev_name), "ACL-%d", port);
+-		snprintf(prt->qci_dev_name, sizeof(prt->qci_dev_name), "QCI-%d", port);
++		snprintf(prt->acl_dev_name, sizeof(prt->acl_dev_name), "ACL-%d:%2x", dev->smi_index, port);
++		snprintf(prt->qci_dev_name, sizeof(prt->qci_dev_name), "QCI-%d:%2x", dev->smi_index, port);
+ 	}
+ 
+ 	return 0;
+diff --git a/drivers/net/dsa/microchip/lan937x_ptp.c b/drivers/net/dsa/microchip/lan937x_ptp.c
+index 2885d2f48e13..48b6ff654b83 100644
+--- a/drivers/net/dsa/microchip/lan937x_ptp.c
++++ b/drivers/net/dsa/microchip/lan937x_ptp.c
+@@ -1065,7 +1065,7 @@ static int lan937x_ptp_port_init(struct ksz_device *dev, int port)
+ 	if (ret)
+ 		goto error_disable_ptp_int;
+ 
+-	snprintf(prt->ptp_dev_name, sizeof(prt->ptp_dev_name), "PTP-%d", port);
++	snprintf(prt->ptp_dev_name, sizeof(prt->ptp_dev_name), "PTP-%d:%2x", dev->smi_index, port);
+ 
+ 	return 0;
+ 
+-- 
+2.34.1
+
