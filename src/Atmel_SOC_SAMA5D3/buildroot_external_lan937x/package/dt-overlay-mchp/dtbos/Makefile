@@ -2,10 +2,8 @@ ARCH?=arm
 CC?=$(CROSS_COMPILE)gcc
 DTC_OPTIONS?=-@
 DTC_OPTIONS += -Wno-unit_address_vs_reg -Wno-graph_child_address -Wno-pwms_property
-#KERNEL_DIR?=../linux
-KERNEL_DIR?=/home/che-lt-i67786lx/Workspace/net-next
-KERNEL_BUILD_DIR?=/home/che-lt-i67786lx/Workspace/linux-DSA/lan_937x_linux_dsa/src/Atmel_SOC_SAMA5D3/buildroot-at91/output/build/linux-custom
-#KERNEL_BUILD_DIR?=/home/che-lt-i67786lx/Workspace/linux-DSA/lan_937x_linux_dsa/src/Atmel_SOC_SAMA5D3/mmc-dt-build/build/linux-custom
+KERNEL_DIR?=$(LINUX_DIR)
+KERNEL_BUILD_DIR?=$(KERNEL_DIR)
 DTC?=$(KERNEL_BUILD_DIR)/scripts/dtc/dtc
 BDIR?=sama5d3_eds
 
