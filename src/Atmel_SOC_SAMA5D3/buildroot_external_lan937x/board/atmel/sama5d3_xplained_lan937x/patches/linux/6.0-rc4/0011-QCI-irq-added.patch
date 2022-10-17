@@ -1,0 +1,152 @@
+From fd4e75443980a286358d4475d0de9b29a9198106 Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Mon, 26 Sep 2022 17:15:14 +0530
+Subject: [PATCH 11/15] QCI irq added
+
+added qci irq based on latest trafford implementation.
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/dsa/microchip/ksz_common.h     |  2 +
+ drivers/net/dsa/microchip/lan937x_flower.c |  1 +
+ drivers/net/dsa/microchip/lan937x_main.c   | 65 +++++++++++++++++++++-
+ drivers/net/dsa/microchip/lan937x_reg.h    |  1 +
+ 4 files changed, 68 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/dsa/microchip/ksz_common.h b/drivers/net/dsa/microchip/ksz_common.h
+index 704a6a6f2969..55d411c42c0f 100644
+--- a/drivers/net/dsa/microchip/ksz_common.h
++++ b/drivers/net/dsa/microchip/ksz_common.h
+@@ -106,6 +106,7 @@ struct ksz_port {
+ 
+ 	void * priv;
+ 	char acl_dev_name[16];
++	char qci_dev_name[16];
+ #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
+ 	char ptp_dev_name[16];
+ 	bool hwts_tx_en;
+@@ -162,6 +163,7 @@ struct ksz_device {
+ 	u16 cut_through_enable;
+ 	int ptp_irq[PHY_MAX_ADDR];
+ 	int acl_irq[PHY_MAX_ADDR];
++	int qci_irq[PHY_MAX_ADDR];
+ #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
+        struct ptp_clock_info ptp_caps;
+        struct ptp_clock *ptp_clock;
+diff --git a/drivers/net/dsa/microchip/lan937x_flower.c b/drivers/net/dsa/microchip/lan937x_flower.c
+index 3437d72a28ce..ea25a1a6a803 100644
+--- a/drivers/net/dsa/microchip/lan937x_flower.c
++++ b/drivers/net/dsa/microchip/lan937x_flower.c
+@@ -1130,6 +1130,7 @@ int lan937x_flower_setup(struct dsa_switch *ds)
+ 		res->broadcast_pol_used = false;
+ 
+ 		snprintf(prt->acl_dev_name, sizeof(prt->acl_dev_name), "ACL-%d", port);
++		snprintf(prt->qci_dev_name, sizeof(prt->qci_dev_name), "QCI-%d", port);
+ 	}
+ 
+ 	return 0;
+diff --git a/drivers/net/dsa/microchip/lan937x_main.c b/drivers/net/dsa/microchip/lan937x_main.c
+index ca7a82469273..d4e1b8281f2b 100644
+--- a/drivers/net/dsa/microchip/lan937x_main.c
++++ b/drivers/net/dsa/microchip/lan937x_main.c
+@@ -264,6 +264,65 @@ static int lan937x_sw_mdio_write(struct mii_bus *bus, int addr, int regnum,
+ 	return lan937x_internal_phy_write(dev, addr, regnum, val);
+ }
+ 
++static irqreturn_t lan937x_qci_thread_fn(int irq, void *dev_id)
++{
++	struct ksz_port *port = dev_id;
++	irqreturn_t ret = IRQ_NONE;
++	struct ksz_device *dev;
++
++	dev = port->ksz_dev;
++
++	if (lan937x_qci_cntr_isr(dev, port->num) != IRQ_NONE)
++		ret = IRQ_HANDLED;
++
++	return ret;
++}
++
++static void lan937x_irq_qci_free(struct ksz_device *dev, int cnt)
++{
++	struct dsa_switch *ds = dev->ds;
++	int qci;
++
++	for (qci = 0; qci < cnt; qci++)
++		if (BIT(qci) & ds->phys_mii_mask)
++			irq_dispose_mapping(dev->qci_irq[qci]);
++}
++
++static int lan937x_irq_qci_setup(struct ksz_device *dev)
++{
++	struct dsa_switch *ds = dev->ds;
++	struct ksz_port *port;
++	int ret = 0;
++	int qci;
++	int irq;
++
++	for (qci = 0; qci < KSZ_MAX_NUM_PORTS; qci++) {
++		if (BIT(qci) & ds->phys_mii_mask) {
++			irq = irq_find_mapping(dev->ports[qci].pirq.domain,
++					       PORT_SRC_QCI_INT);
++			if (irq < 0)
++				goto out;
++
++			dev->qci_irq[qci] = irq;
++			port = &dev->ports[qci];
++
++			ret = request_threaded_irq(irq, NULL, lan937x_qci_thread_fn,
++						   IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
++						   port->qci_dev_name, port);
++			if (ret)
++				goto out;
++		}
++	}
++
++	return ret;
++
++out:
++	ret = irq;
++	lan937x_irq_qci_free(dev, qci);
++
++	return ret;
++}
++
+ static irqreturn_t lan937x_acl_thread_fn(int irq, void *dev_id)
+ {
+ 	struct ksz_port *port = dev_id;
+@@ -303,7 +362,7 @@ static int lan937x_irq_acl_setup(struct ksz_device *dev)
+ 			if (irq < 0)
+ 				goto out;
+ 
+-			dev->ptp_irq[acl] = irq;
++			dev->acl_irq[acl] = irq;
+ 			port = &dev->ports[acl];
+ 
+ 			ret = request_threaded_irq(irq, NULL, lan937x_acl_thread_fn,
+@@ -1053,6 +1112,10 @@ int lan937x_setup(struct dsa_switch *ds)
+ 	if (ret)
+ 		return ret;
+ 
++	ret = lan937x_irq_qci_setup(dev);
++	if (ret)
++		return ret;
++
+ 	return 0;
+ 
+ out_pirq:
+diff --git a/drivers/net/dsa/microchip/lan937x_reg.h b/drivers/net/dsa/microchip/lan937x_reg.h
+index bb01e7ec3d36..f059b3da6866 100644
+--- a/drivers/net/dsa/microchip/lan937x_reg.h
++++ b/drivers/net/dsa/microchip/lan937x_reg.h
+@@ -361,6 +361,7 @@
+ #define PORT_SRC_ACL_INT		0
+ #define PORT_SRC_PHY_INT		1
+ #define PORT_SRC_PTP_INT		2
++#define PORT_SRC_QCI_INT		4
+ 
+ #define REG_PORT_CTRL_0			0x0020
+ 
+-- 
+2.34.1
+

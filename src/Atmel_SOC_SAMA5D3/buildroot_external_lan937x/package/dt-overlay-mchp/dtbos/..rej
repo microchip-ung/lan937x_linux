@@ -1,0 +1,674 @@
+--- Makefile
++++ Makefile
+@@ -17,6 +17,7 @@ SAMA5D2_ICP_DTBO_OBJECTS:= $(patsubst %.dtso,%.dtbo,$(wildcard sama5d2_icp/*.dts
+ SAMA5D2_PTC_DTBO_OBJECTS:= $(patsubst %.dtso,%.dtbo,$(wildcard sama5d2_ptc_ek/*.dtso))
+ SAMA5D2_XPLAINED_DTBO_OBJECTS:= $(patsubst %.dtso,%.dtbo,$(wildcard sama5d2_xplained/*.dtso))
+ SAMA5D2_XPLAINED_GRTS_DTBO_OBJECTS:= $(patsubst %.dtso,%.dtbo,$(wildcard sama5d2_xplained_grts/*.dtso))
++SAMA5D3_EDS_DTBO_OBJECTS:= $(patsubst %.dtso,%.dtbo,$(wildcard sama5d3_eds/*.dtso))
+ SAMA5D3_XPLAINED_DTBO_OBJECTS:= $(patsubst %.dtso,%.dtbo,$(wildcard sama5d3_xplained/*.dtso))
+ SAMA5D4_XPLAINED_DTBO_OBJECTS:= $(patsubst %.dtso,%.dtbo,$(wildcard sama5d4_xplained/*.dtso))
+ SAMA7G5EK_DTBO_OBJECTS:= $(patsubst %.dtso,%.dtbo,$(wildcard sama7g5ek/*.dtso))
+@@ -48,6 +49,8 @@ sama5d2_xplained_dtbos: $(SAMA5D2_XPLAINED_DTBO_OBJECTS)
+ 
+ sama5d2_xplained_grts_dtbos: $(SAMA5D2_XPLAINED_GRTS_DTBO_OBJECTS)
+ 
++sama5d3_eds_dtbos: $(SAMA5D3_EDS_DTBO_OBJECTS)
++
+ sama5d3_xplained_dtbos: $(SAMA5D3_XPLAINED_DTBO_OBJECTS)
+ 
+ sama5d4_xplained_dtbos: $(SAMA5D4_XPLAINED_DTBO_OBJECTS)
+--- sama5d3_eds.its
++++ sama5d3_eds.its
+@@ -0,0 +1,164 @@
++// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
++/*
++ * sama5d3_eds.its - Flattened Image Tree file for SAMA5D3 Ethernet
++ * Development System board
++ *
++ * Copyright (C) 2022 Microchip Technology, Inc. and its subsidiaries
++ * Author: Jerry Ray <jerry.ray@microchip.com>
++ *
++ */
++/dts-v1/;
++
++/ {
++	description = "Microchip SAMA5D3-EDS FIT Image";
++	#address-cells = <1>;
++
++	images {
++		kernel {
++			description = "Linux kernel";
++			data = /incbin/("./zImage");
++			type = "kernel";
++			arch = "arm";
++			os = "linux";
++			compression = "none";
++			load = <0x22000000>;
++			entry = <0x22000000>;
++			hash-1 {
++				algo = "crc32";
++			};
++			hash-2 {
++				algo = "sha1";
++			};
++		};
++
++		base_fdt {
++			description = "Flattened Device Tree blob";
++			data = /incbin/("./at91-sama5d3_eds.dtb");
++			type = "flat_dt";
++			arch = "arm";
++			compression = "none";
++			load = <0x23000000>;
++			hash-1 {
++				algo = "crc32";
++			};
++			hash-2 {
++				algo = "sha1";
++			};
++		};
++
++		fdt_lan9303 {
++			description = "Device Tree blob lan9303 overlay";
++			data = /incbin/("./sama5d3_eds/sama5d3_eds_lan9303.dtbo");
++			type = "flat_dt";
++			arch = "arm";
++			compression = "none";
++			load = <0x23120000>;
++			hash-1 {
++				algo = "crc32";
++			};
++			hash-2 {
++				algo = "sha1";
++			};
++		};
++
++		fdt_lan9354 {
++			description = "Device Tree blob lan9354 overlay";
++			data = /incbin/("./sama5d3_eds/sama5d3_eds_lan9354.dtbo");
++			type = "flat_dt";
++			arch = "arm";
++			compression = "none";
++			load = <0x23130000>;
++			hash-1 {
++				algo = "crc32";
++			};
++			hash-2 {
++				algo = "sha1";
++			};
++		};
++
++		fdt_lan9370 {
++			description = "Device Tree blob lan9370 overlay";
++			data = /incbin/("./sama5d3_eds/sama5d3_eds_lan9370.dtbo");
++			type = "flat_dt";
++			arch = "arm";
++			compression = "none";
++			load = <0x23140000>;
++			hash-1 {
++				algo = "crc32";
++			};
++			hash-2 {
++				algo = "sha1";
++			};
++		};
++
++		fdt_lan9374 {
++			description = "Device Tree blob lan9374 overlay";
++			data = /incbin/("./sama5d3_eds/sama5d3_eds_lan9374.dtbo");
++			type = "flat_dt";
++			arch = "arm";
++			compression = "none";
++			load = <0x23150000>;
++			hash-1 {
++				algo = "crc32";
++			};
++			hash-2 {
++				algo = "sha1";
++			};
++		};
++
++		fdt_vsc8541 {
++			description = "Device Tree blob vsc8541 PHY overlay";
++			data = /incbin/("./sama5d3_eds/sama5d3_eds_vsc8541.dtbo");
++			type = "flat_dt";
++			arch = "arm";
++			compression = "none";
++			load = <0x23160000>;
++			hash-1 {
++				algo = "crc32";
++			};
++			hash-2 {
++				algo = "sha1";
++			};
++		};
++	};
++
++	configurations {
++		default = "kernel_dtb";
++
++		kernel_dtb {
++			description = "Linux kernel and base FDT blob for SAMA5D3_EDS board";
++			kernel = "kernel";
++			fdt = "base_fdt";
++		};
++
++		base_dtb {
++			description = "FDT blob for the SAMA5D3_EDS base board";
++			fdt = "base_fdt";
++		};
++
++		lan9303 {
++			description = "FDT overlay blob for LAN9303 RMII add-on board";
++			fdt = "fdt_lan9303";
++		};
++
++		lan9354 {
++			description = "FDT overlay blob for LAN9354 RMII add-on board";
++			fdt = "fdt_lan9354";
++		};
++
++		lan9370 {
++			description = "FDT overlay blob for lan9370 RMII add-on board";
++			fdt = "fdt_lan9370";
++		};
++
++		lan9374 {
++			description = "FDT overlay blob for lan9374 RGMII add-on board";
++			fdt = "fdt_lan9374";
++		};
++
++		vsc8541 {
++			description = "FDT overlay blob for vsc8541 PHY RGMII add-on board";
++			fdt = "fdt_vsc8541";
++		};
++	};
++};
+--- sama5d3_eds_lan9303.dtso
++++ sama5d3_eds_lan9303.dtso
+@@ -0,0 +1,77 @@
++// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
++/*
++ * sama5d3_eds_lan9303.dtso - Device Tree file for SAMA5D3 EDS board
++ * overlay blob for the LAN9303 RMII addon board.
++ *
++ * Copyright (C) 2022 Microchip Technology, Inc. and its subsidiaries
++ *   Author:	 2022 Jerry Ray <jerry.ray@microchip.com>
++ *
++ * AC320004-4 - LAN9303 PHY SWITCH DAUGHTER BOARD
++ * https://www.microchip.com/en-us/development-tool/AC320004-4
++ *
++ */
++/dts-v1/;
++/plugin/;
++
++#include "dt-bindings/interrupt-controller/irq.h"
++#include "dt-bindings/pinctrl/at91.h"
++
++
++&macb0 {
++	status = "disabled";
++};
++
++&macb1 {
++	phy-handle = <&lan9303switch>;
++	phy-mode = "rmii";
++	status = "okay";
++
++	fixed-link {
++		speed = <100>;
++		full-duplex;
++	};
++
++	mdio {
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		lan9303switch: ethernet-phy@0 {
++			compatible = "smsc,lan9303-mdio";
++			reg = <0>;
++			dsa,member = <0 0>;
++			interrupt-parent = <&pioB>;
++			interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
++			pinctrl-0 = <&pinctrl_spi_irqn>;
++			status = "okay";
++
++			ports {
++				#address-cells = <1>;
++				#size-cells = <0>;
++				port@0 {
++					reg = <0>;
++					phy-mode = "rmii";
++					label = "cpu";
++					ethernet = <&macb1>;
++					fixed-link {
++						speed = <100>;
++						full-duplex;
++					};
++				};
++				port@1 { /* external port 1 */
++					reg = <1>;
++					max-speed = <100>;
++					label = "lan1";
++				};
++				port@2 { /* external port 2 */
++					reg = <2>;
++					max-speed = <100>;
++					label = "lan2";
++				};
++			};
++		};
++	};
++};
++
++&{/} {
++	model = "SAMA5D3-EDS: LAN9303";
++};
+--- sama5d3_eds_lan9354.dtso
++++ sama5d3_eds_lan9354.dtso
+@@ -0,0 +1,76 @@
++// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
++/*
++ * sama5d3_eds_lan9354.dtso - Device Tree file for SAMA5D3 EDS board
++ * overlay blob for the LAN9354 RMII addon board.
++ *
++ * Copyright (C) 2022 Microchip Technology, Inc. and its subsidiaries
++ *   Author:	 2022 Jerry Ray <jerry.ray@microchip.com>
++ *
++ * 3-Port 10/100 Managed Ethernet Switch with RMII
++ * https://www.microchip.com/en-us/product/LAN9354
++ *
++ */
++/dts-v1/;
++/plugin/;
++
++#include "dt-bindings/interrupt-controller/irq.h"
++#include "dt-bindings/pinctrl/at91.h"
++
++&macb0 {
++	status = "disabled";
++};
++
++&macb1 {
++	phy-handle = <&lan9354switch>;
++	phy-mode = "rmii";
++	status = "okay";
++
++	fixed-link {
++		speed = <100>;
++		full-duplex;
++	};
++
++	mdio {
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		lan9354switch: ethernet-phy@0 {
++			compatible = "microchip,lan9354-mdio";
++			reg = <0>;
++			dsa,member = <0 0>;
++			interrupt-parent = <&pioB>;
++			interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
++			pinctrl-0 = <&pinctrl_spi_irqn>;
++			status = "okay";
++
++			ports {
++				#address-cells = <1>;
++				#size-cells = <0>;
++				port@0 {
++					reg = <0>;
++					phy-mode = "rmii";
++					label = "cpu";
++					ethernet = <&macb1>;
++					fixed-link {
++						speed = <100>;
++						full-duplex;
++					};
++				};
++				port@1 { /* external port 1 */
++					reg = <1>;
++					max-speed = <100>;
++					label = "lan1";
++				};
++				port@2 { /* external port 2 */
++					reg = <2>;
++					max-speed = <100>;
++					label = "lan2";
++				};
++			};
++		};
++	};
++};
++
++&{/} {
++	model = "SAMA5D3-EDS: LAN9354";
++};
+--- sama5d3_eds_lan9370.dtso
++++ sama5d3_eds_lan9370.dtso
+@@ -0,0 +1,110 @@
++// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
++/*
++ * sama5d3_eds_lan9370.dtso - Device Tree file for SAMA5D3 EDS board
++ * overlay blob for the LAN9370 RMII addon board.
++ *
++ * Copyright (C) 2022 Microchip Technology, Inc. and its subsidiaries
++ *   Author:	 2022 Jerry Ray <jerry.ray@microchip.com>
++ *
++ * 5-Port 100BASE-T1 Gigabit Ethernet Switch
++ * https://www.microchip.com/en-us/development-tool/EV64C55A
++ *
++ */
++/dts-v1/;
++/plugin/;
++
++#include "dt-bindings/interrupt-controller/irq.h"
++#include "dt-bindings/pinctrl/at91.h"
++
++&macb0 {
++	status = "disabled";
++};
++
++&macb1 {
++	phy-mode = "rmii";
++	status = "okay";
++
++	fixed-link {
++		speed = <100>;
++		full-duplex;
++	};
++};
++
++&spi1 {
++	#address-cells = <1>;
++	#size-cells = <0>;
++	status = "okay";
++
++	lan9370: lan9370@3 {
++		compatible = "microchip,lan9370";
++		reg = <3>;
++		spi-max-frequency = <44000000>;
++		interrupt-parent = <&pioB>;
++		interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
++		pinctrl-0 = <&pinctrl_spi_irqn>;
++		led-t1-sel = <0731777704>;    /* Note this value is octal. */
++		status = "okay";
++
++		ports {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			port@0 {
++				reg = <0x0>;
++				phy-handle = <&t1phy0>;
++				phy-mode = "internal";
++				label = "lan1";
++			};
++			port@1 {
++				reg = <0x1>;
++				phy-handle = <&t1phy1>;
++				phy-mode = "internal";
++				label = "lan2";
++			};
++			port@2 {
++				reg = <0x2>;
++				phy-handle = <&t1phy2>;
++				phy-mode = "internal";
++				label = "lan3";
++			};
++			port@3 {
++				reg = <0x3>;
++				phy-handle = <&t1phy3>;
++				phy-mode = "internal";
++				label = "lan4";
++			};
++			port@4 {
++				reg = <4>;
++				phy-mode = "rmii";
++				label = "cpu";
++				ethernet = <&macb1>;
++				fixed-link {
++					speed = <100>;
++					full-duplex;
++				};
++			};
++		};
++
++		mdio {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "microchip,lan937x-mdio";
++
++			t1phy0: ethernet-phy@0{
++				reg = <0x0>;
++			};
++			t1phy1: ethernet-phy@1{
++				reg = <0x1>;
++			};
++			t1phy2: ethernet-phy@2{
++				reg = <0x2>;
++			};
++			t1phy3: ethernet-phy@3{
++				reg = <0x3>;
++			};
++		};
++	};
++};
++
++&{/} {
++	model = "SAMA5D3-EDS: LAN9370";
++};
+--- sama5d3_eds_lan9374.dtso
++++ sama5d3_eds_lan9374.dtso
+@@ -0,0 +1,158 @@
++// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
++/*
++ * sama5d3_eds_lan9374.dtso - Device Tree file for SAMA5D3 EDS board
++ * overlay blob for the LAN9374 RGMII addon board.
++ *
++ * Copyright (C) 2022 Microchip Technology, Inc. and its subsidiaries
++ *   Author:	 2022 Jerry Ray <jerry.ray@microchip.com>
++ *
++ * 8-Port 100BASE-T1 Gigabit Ethernet Switch
++ * https://www.microchip.com/en-us/product/LAN9374
++ *
++ */
++/dts-v1/;
++/plugin/;
++
++#include "dt-bindings/gpio/gpio.h"
++#include "dt-bindings/interrupt-controller/irq.h"
++#include "dt-bindings/pinctrl/at91.h"
++
++&macb0 {
++	phy-mode = "rgmii-id";
++	status = "okay";
++
++	fixed-link {
++		speed = <1000>;
++		full-duplex;
++	};
++};
++
++&macb1 {
++	status = "disabled";
++};
++
++&pinctrl {
++	pinctrl_rgmii_rstn: rgmii_rstn {
++		atmel,pins =
++			<AT91_PIOD 18 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP_DEGLITCH>;
++	};
++
++	pinctrl_spi_irqn: spi_irqn {
++		atmel,pins =
++			<AT91_PIOB 28 AT91_PERIPH_GPIO AT91_PINCTRL_DEGLITCH>;
++	};
++};
++
++&spi0 {
++	#address-cells = <1>;
++	#size-cells = <0>;
++	status = "okay";
++
++	lan9374: lan9374@0 {
++		compatible = "microchip,lan9374";
++		reg = <0>;
++		pinctrl-0 = <&pinctrl_rgmii_rstn>;
++		pinctrl-1 = <&pinctrl_spi_irqn>;
++		interrupt-parent = <&pioB>;
++		interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
++		resetb-gpios = <&pioD 18 GPIO_ACTIVE_LOW>;
++		spi-max-frequency = <44000000>;
++		led-t1-sel = <07754321077>;    /* Note this value is octal. */
++		status = "okay";
++
++		ports {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			port@0 {
++				reg = <0>;
++				phy-handle=<&t1phy0>;
++				phy-mode = "internal";
++				label = "lan1";
++			};
++			port@1 {
++				reg = <1>;
++				phy-handle=<&t1phy1>;
++				phy-mode = "internal";
++				label = "lan2";
++			};
++			port@2 {
++				reg = <2>;
++				phy-handle=<&t1phy2>;
++				phy-mode = "internal";
++				label = "lan4";
++			};
++			port@3 {
++				reg = <3>;
++				phy-handle=<&t1phy3>;
++				phy-mode = "internal";
++				label = "lan6";
++			};
++			port@5 {
++				reg = <5>;
++				phy-mode = "rgmii-id";
++				rx-internal-delay-ps = <2000>;
++				tx-internal-delay-ps = <2000>;
++				ethernet = <&macb0>;
++				fixed-link {
++					speed = <1000>;
++					full-duplex;
++				};
++			};
++			port@4 {
++				reg = <4>;
++				phy-mode = "rgmii-id";
++				tx-internal-delay-ps = <2000>;
++				rx-internal-delay-ps = <2000>;
++				label = "lan7";
++				fixed-link {
++					speed = <1000>;
++					full-duplex;
++				};
++			};
++			port@6 {
++				reg = <6>;
++				phy-handle=<&t1phy4>;
++				phy-mode = "internal";
++				label = "lan5";
++			};
++			port@7 {
++				reg = <7>;
++				phy-handle=<&t1phy5>;
++				phy-mode = "internal";
++				label = "lan3";
++			};
++		};
++
++		mdio {
++			#address-cells = <1>;
++			#size-cells = <0>;
++
++			t1phy0: ethernet-phy@0{
++				reg = <0x0>;
++			};
++			t1phy1: ethernet-phy@1{
++				reg = <0x1>;
++			};
++			t1phy2: ethernet-phy@2{
++				reg = <0x2>;
++			};
++			t1phy3: ethernet-phy@3{
++				reg = <0x3>;
++			};
++			t1phy4: ethernet-phy@6{
++				reg = <0x6>;
++			};
++			t1phy5: ethernet-phy@7{
++				reg = <0x7>;
++			};
++		};
++	};
++};
++
++&usart0 {
++	status = "disabled";    /* Conflicts with using pioD 18 as GPIO */
++};
++
++&{/} {
++	model = "SAMA5D3-EDS: LAN9374";
++};
+--- sama5d3_eds_vsc8541.dtso
++++ sama5d3_eds_vsc8541.dtso
+@@ -0,0 +1,52 @@
++// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
++/*
++ * sama5d3_eds_lan9374.dtso - Device Tree file for SAMA5D3 EDS board
++ * overlay blob for the VSC8541 RGMII PHY addon board.
++ *
++ * Copyright (C) 2022 Microchip Technology, Inc. and its subsidiaries
++ *   Author:	 2022 Jerry Ray <jerry.ray@microchip.com>
++ *
++ * Single-port 1000BASE-Tx Gigabit Ethernet PHY
++ * https://www.microchip.com/en-us/product/VSC8541
++ *
++ */
++/dts-v1/;
++/plugin/;
++
++#include "dt-bindings/gpio/gpio.h"
++#include "dt-bindings/interrupt-controller/irq.h"
++#include "dt-bindings/pinctrl/at91.h"
++
++&macb0 {
++	phy-mode = "rgmii-id";
++	phy-handle = <&vsc8541>;
++	status = "okay";
++
++	mdio {
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		vsc8541: ethernet-phy@3 {
++			reg = <0x3>;
++			compatible = "ethernet-phy-id0007.0771";
++			pinctrl-0 = <&pinctrl_rgmii_rstn>;
++			pinctrl-1 = <&pinctrl_spi_irqn>;
++			interrupt-parent = <&pioB>;
++			interrupts = <28 IRQ_TYPE_EDGE_FALLING>;
++			resetb-gpios = <&pioD 18 GPIO_ACTIVE_LOW>;
++			status = "okay";
++		};
++	};
++};
++
++&macb1 {
++	status = "disabled";
++};
++
++&usart0 {
++	status = "disabled";    /* Conflicts with using pioD 18 as GPIO */
++};
++
++&{/} {
++	model = "SAMA5D3-EDS: VSC8541";
++};

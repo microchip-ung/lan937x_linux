@@ -1,1 +1,1 @@
-#LINUX_OVERRIDE_SRCDIR = "$(SRC_HOME)/kernels/masternet-next"
+DT_OVERLAY_MCHP_OVERRIDE_SRCDIR = "$(BR2_EXTERNAL_LAN937x_PATH)/package/dt-overlay-mchp/dtbos"

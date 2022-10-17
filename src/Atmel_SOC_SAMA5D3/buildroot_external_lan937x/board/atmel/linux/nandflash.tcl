@@ -235,10 +235,10 @@ if {! [info exists boardFamily]} {
 
    set bootstrapFile   "$env(O)/at91bootstrap.bin"
    set ubootFile       "$env(O)/u-boot.bin"
-   set kernelFile      "$env(O)/zImage"
+   set kernelFile      "$env(O)/sama5d3_eds.itb"
    set rootfsFile      "$env(O)/rootfs.ubi"
-   set ubootEnvFile	  "$env(O)/ubootEnvtFileNandFlash.bin"
-   
+   set ubootEnvFile    "$env(O)/ubootEnvtFileNandFlash.bin"
+   set build_uboot_env "yes"
 
    set i 1
    foreach arg $::argv {
@@ -247,8 +247,6 @@ if {! [info exists boardFamily]} {
          4 { set boardFamily $arg }
          5 { set dtbFile "$env(O)/$arg" }
          6 { set videoMode $arg }
-         7 { set build_uboot_env $arg}
-         8 { set program $arg}
       }
       incr i
     }
@@ -294,19 +292,15 @@ if {! [file exists $rootfsFile]} {
 set bootStrapAddr	0x00000000
 set ubootAddr		0x00040000
 set ubootEnvAddr	0x00100000
-set dtbAddr		0x00180000
-set kernelAddr		0x00200000
+set kernelAddr		0x00180000
 set rootfsAddr		0x00800000
 
-## u-boot variable
-set kernelLoadAddr [get_kernel_load_addr $boardFamily]
-set dtbLoadAddr	[get_dtb_load_addr $boardFamily]
-
 ## NandFlash Mapping
+set chip "_chip=lan9370";
 set kernelSize	[format "0x%08X" [expr (([file size $kernelFile] + 1023) / 1024) * 1024]]
-set dtbSize	[format "0x%08X" [expr (([file size $dtbFile] + 1023) / 1024) * 1024]]
-set loadDts "load_dts=nand read $dtbLoadAddr $dtbAddr $dtbSize; bootz $kernelLoadAddr - $dtbLoadAddr"
-set bootCmd "bootcmd=nand read $kernelLoadAddr $kernelAddr $kernelSize; run prep_boot; run load_dts"
+set loadDts "load_dts=nand read 0x21000000 0x00180000 0x680000";
+set bootChip "boot_chip=bootm 0x21000000#kernel_dtb#lan9321";
+set bootCmd "bootcmd=run prep_boot; run load_dts; run boot_chip";
 set rootfsSize	[format "0x%08X" [file size $rootfsFile]]
 
 lappend u_boot_variables \
@@ -315,17 +309,18 @@ lappend u_boot_variables \
     "stdin=serial" \
     "stdout=serial" \
     "stderr=serial" \
-    "bootargs=console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,768k(uboot)ro,256k(env),256k(env_redundant),512k(dtb),6M(kernel)ro,-(rootfs) rootfstype=ubifs ubi.mtd=6 root=ubi0:rootfs rw $videoMode" \
-    "_bootargs=console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,768k(uboot)ro,256k(env),256k(env_redundant),512k(dtb),6M(kernel)ro,-(rootfs) rootfstype=ubifs ubi.mtd=6 root=ubi0:rootfs rw $videoMode phymode=0x1E" \
+    "bootargs=console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,768k(uboot)ro,256k(env),256k(env_redundant),6656k(itb)ro,-(rootfs) rootfstype=ubifs ubi.mtd=5 root=ubi0:rootfs rw $videoMode phymode=0x1E" \
+    "_bootargs=console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,768k(uboot)ro,256k(env),256k(env_redundant),6656k(itb)ro,-(rootfs) rootfstype=ubifs ubi.mtd=5 root=ubi0:rootfs rw $videoMode phymode=0x1E" \
     "ethaddr=00:10:A1:93:74:10" \
     "ipaddr=192.168.0.111" \
     "serverip=192.168.0.100" \
     "subst_var=0" \
     "prep_boot=setenv -f subst_var 1; setenv -f bootargs \"\${_bootargs}\"" \
+    "$bootChip" \
     "$loadDts" \
-    "$bootCmd"
+    "$bootCmd" \
 
-if {$program == "yes"} {
+
    ##  Start flashing procedure  ##################################################
    puts "-I- === Initialize the NAND access ==="
    NANDFLASH::Init
@@ -345,9 +340,9 @@ if {$program == "yes"} {
       NANDFLASH::sendBootFile $bootstrapFile
    }
 
-   puts "-I- === Load u-boot in the next sectors ==="
-   send_file {NandFlash} "$ubootFile" $ubootAddr 0 
-}
+puts "-I- === Load u-boot in the next sectors ==="
+send_file {NandFlash} "$ubootFile" $ubootAddr 0 
+
 
 if {$build_uboot_env == "yes"} {
    puts "-I- === Load the u-boot environment variables ==="
@@ -356,24 +351,23 @@ if {$build_uboot_env == "yes"} {
    puts -nonewline $fh [set_uboot_env u_boot_variables]
    puts "-I- Generated u-boot environment variables"
    puts "-I- === END ==="
-   close $fh
+    close $fh
+    puts "-I- === Load the u-boot environment variables ==="
+    send_file {NandFlash} "$ubootEnvFile" $ubootEnvAddr 0
 }
 
-if {$program == "yes"} {
-   puts "-I- === Load the u-boot environment variables ==="
-   send_file {NandFlash} "$ubootEnvFile" $ubootEnvAddr 0
 
-   puts "-I- === Load the Kernel image and device tree database ==="
-   send_file {NandFlash} "$dtbFile" $dtbAddr 0
-   send_file {NandFlash} "$kernelFile" $kernelAddr 0
+puts "-I- === Load the Kernel image and device tree database ==="
+#send_file {NandFlash} "$dtbFile" $dtbAddr 0
+send_file {NandFlash} "$kernelFile" $kernelAddr 0
 
-   if {$pmeccConfig != "none"} {
-      puts "-I- === Enable trimffs ==="
-      NANDFLASH::NandSetTrimffs 1
-   }
-
-   puts "-I- === Load the linux file system ==="
-   send_file {NandFlash} "$rootfsFile" $rootfsAddr 0
-
-   puts "-I- === DONE. ==="
+if {$pmeccConfig != "none"} {
+    puts "-I- === Enable trimffs ==="
+    NANDFLASH::NandSetTrimffs 1
 }
+
+puts "-I- === Load the linux file system ==="
+send_file {NandFlash} "$rootfsFile" $rootfsAddr 0
+
+puts "-I- === DONE. ==="
+

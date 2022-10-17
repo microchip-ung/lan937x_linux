@@ -1,0 +1,54 @@
+From ae6d5bef8d09b15fa5801fb0bf77742c313e5959 Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Fri, 23 Sep 2022 16:30:49 +0530
+Subject: [PATCH 08/15] led interface added for link status
+
+link status detection enabled using led-t1-sel parameter
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/dsa/microchip/lan937x_main.c | 14 ++++++++++++++
+ drivers/net/dsa/microchip/lan937x_reg.h  |  2 ++
+ 2 files changed, 16 insertions(+)
+
+diff --git a/drivers/net/dsa/microchip/lan937x_main.c b/drivers/net/dsa/microchip/lan937x_main.c
+index 4d219e1d5ccf..5bd5e511c98b 100644
+--- a/drivers/net/dsa/microchip/lan937x_main.c
++++ b/drivers/net/dsa/microchip/lan937x_main.c
+@@ -859,6 +859,20 @@ int lan937x_setup(struct dsa_switch *ds)
+ 		return ret;
+ 	}
+ 
++	/* Look into the device tree for some configuration values. */
++	/* If we have valid pointers to get into the device tree, ... */
++	if (dev->dev && dev->dev->of_node) {
++		const int *val;
++
++		val = of_get_property(dev->dev->of_node, "led-t1-sel", NULL);
++		/* if an entry was found for led-t1-sel, use it. */
++		if (val) {
++			pr_info("led-t1-sel: 0x%x", be32_to_cpu(*val));
++			ksz_write32(dev, REG32_SW_GLOBAL_LED_T1_SEL,
++				    be32_to_cpu(*val));
++		}
++	}
++
+ 	if (dev->irq > 0) {
+ 		ret = lan937x_girq_setup(dev);
+ 		if (ret)
+diff --git a/drivers/net/dsa/microchip/lan937x_reg.h b/drivers/net/dsa/microchip/lan937x_reg.h
+index 9ae07af6616e..73e9c499c27d 100644
+--- a/drivers/net/dsa/microchip/lan937x_reg.h
++++ b/drivers/net/dsa/microchip/lan937x_reg.h
+@@ -48,6 +48,8 @@
+ #define LED_SRC_PTP_GPIO_1              BIT(3)
+ #define LED_SRC_PTP_GPIO_2              BIT(2)
+ 
++#define REG32_SW_GLOBAL_LED_T1_SEL     0x013C
++
+ /* 3 - Operation Control */
+ #define REG_SW_OPERATION		0x0300
+ 
+-- 
+2.34.1
+
