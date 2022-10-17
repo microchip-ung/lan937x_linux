@@ -10,10 +10,17 @@ The buildroot source can be built for NAND flash or SD card configuration.
 	  and loaded as submodule.
 
 Buildroot as a submodule (For DSA v4.0.0 or greater):
--------------------------
+-----------------------------------------------------
 	* git submodule init
 	* git submodule update
-	
+
+Setting Linux path for device tree overlay (For DSA v4.1.0 or greater):
+-----------------------------------------------------------------------
+	* Update following parameters in Atmel_SOC_SAMA5D3/buildroot_external_lan937x/package/
+	  dt-overlay-mchp/dtbos/Makefile (Required only if separate custom net-next used)
+	  * "KERNEL_DIR" with path to linux net-next used.
+	  * "KERNEL_BUILD_DIR" with linux build path.
+
 Generating NAND Flash Image
 ---------------------------
 	* make atmel_sama5d3_xplained_lan937x_defconfig
@@ -50,7 +57,8 @@ output/images will have the following file
 |zImage				| Linux image and rootfs files for Nand Flash		 |	
 |rootfs.tar			|							 |							
 |rootfs.ubi			|							 |							
-|rootfs.ubifs			|							 |							
+|rootfs.ubifs			|							 |
+|sama5d3_eds.itb		| (sama5d3_eds.itb will be generated for DSA > v4.1.0)	 |
 |----------------------------------------------------------------------------------------|
 |ubootEnvtFileNandFlash.bin 	| uBoot Environment configuration binary for Nand flash  |
 |----------------------------------------------------------------------------------------|
