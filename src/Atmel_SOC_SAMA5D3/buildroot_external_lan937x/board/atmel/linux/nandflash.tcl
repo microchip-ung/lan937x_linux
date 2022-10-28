@@ -299,7 +299,7 @@ set rootfsAddr		0x00800000
 set chip "_chip=lan9370";
 set kernelSize	[format "0x%08X" [expr (([file size $kernelFile] + 1023) / 1024) * 1024]]
 set loadDts "load_dts=nand read 0x21000000 0x00180000 0x680000";
-set bootChip "boot_chip=bootm 0x21000000#kernel_dtb#lan9321";
+set bootChip "boot_chip=bootm 0x21000000#kernel_dtb#lan9370";
 set bootCmd "bootcmd=run prep_boot; run load_dts; run boot_chip";
 set rootfsSize	[format "0x%08X" [file size $rootfsFile]]
 

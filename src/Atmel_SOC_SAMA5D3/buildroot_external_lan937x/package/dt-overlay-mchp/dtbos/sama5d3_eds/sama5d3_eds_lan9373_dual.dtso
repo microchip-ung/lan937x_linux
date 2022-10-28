@@ -74,7 +74,7 @@
 				label = "dsa";
 				link = <&switch1port2>;
 				fixed-link {
-					speed = <100>;
+					speed = <1000>;
 					full-duplex;
 				};
 			};
@@ -93,7 +93,7 @@
 				phy-mode = "mii";
 				label = "lan6";
 				fixed-link {
-					speed = <1000>;
+					speed = <100>;
 					full-duplex;
 				};
 			};
@@ -172,7 +172,7 @@
 				label = "dsa";
 				link = <&switch0port2>;
 				fixed-link {
-					speed = <100>;
+					speed = <1000>;
 					full-duplex;
 				};
 			};
@@ -182,7 +182,7 @@
 				label = "lan12";
 				status = "okay";
 				fixed-link {
-					speed = <1000>;
+					speed = <100>;
 					full-duplex;
 				};
 			};
