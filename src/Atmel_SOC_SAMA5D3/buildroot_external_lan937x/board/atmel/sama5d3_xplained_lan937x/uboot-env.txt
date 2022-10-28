@@ -1,8 +1,7 @@
-at91_prepare_overlays_config=test -n ${_chip} && setenv at91_overlays_config '#'${_chip}
-_chip=lan9370
 bootargs=console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,768k(uboot)ro,256k(env_redundant),256k(env),6656k(itb)ro,-(rootfs) root=/dev/mmcblk0p2 rw rootwait rootfstype=ext4 phymode=0x1E
-bootcmd=run at91_prepare_overlays_config; run bootcmd_boot;
-bootcmd_boot=fatload mmc 0:1 0x21000000 sama5d3_eds.itb; bootm 0x21000000#kernel_dtb${at91_overlays_config};
+bootcmd=run bootcmd_boot;
+bootcmd_boot=fatload mmc 0:1 0x21000000 sama5d3_eds.itb; run boot_chip;
+boot_chip=bootm 0x21000000#kernel_dtb#lan9370
 bootdelay=1
 ethact=gmac0
 stderr=serial
