@@ -1,0 +1,30 @@
+From 37a4bc42a41670d753272a38cbd9e2c9764dd543 Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Tue, 6 Dec 2022 16:42:00 +0530
+Subject: [PATCH 17/20] cascade switch vlan untag not working
+
+Cleared vlan untag bit for cascaded port along with cpu port.
+
+Fix Trafford Jira: TL-127
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/dsa/microchip/ksz9477.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/dsa/microchip/ksz9477.c b/drivers/net/dsa/microchip/ksz9477.c
+index 4fda96a7f970..471014b9a5e9 100644
+--- a/drivers/net/dsa/microchip/ksz9477.c
++++ b/drivers/net/dsa/microchip/ksz9477.c
+@@ -407,7 +407,7 @@ int ksz9477_port_vlan_add(struct ksz_device *dev, int port,
+ 		vlan_table[1] |= BIT(port);
+ 	else
+ 		vlan_table[1] &= ~BIT(port);
+-	vlan_table[1] &= ~(BIT(dev->cpu_port));
++	vlan_table[1] &= ~(BIT(dev->cpu_port) | BIT(dev->dsa_port));
+ 
+ 	vlan_table[2] |= BIT(port) | BIT(dev->cpu_port);
+ 
+-- 
+2.34.1
+

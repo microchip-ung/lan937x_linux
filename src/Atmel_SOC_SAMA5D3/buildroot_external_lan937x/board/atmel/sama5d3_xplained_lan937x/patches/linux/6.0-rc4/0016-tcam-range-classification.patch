@@ -1,0 +1,484 @@
+From 1bc973c5892fc0ecee91f77806a50af5afd70a9b Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Fri, 18 Nov 2022 12:34:23 +0530
+Subject: [PATCH 16/20] tcam range classification
+
+add tcam range classificatopm for source and destination port parameters.
+Currently supported only one rule per parameter.
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/dsa/microchip/ksz_common.h     |  23 ++-
+ drivers/net/dsa/microchip/lan937x_acl.c    | 160 +++++++++++++++++++--
+ drivers/net/dsa/microchip/lan937x_acl.h    |  63 ++++----
+ drivers/net/dsa/microchip/lan937x_flower.c |  22 ++-
+ drivers/net/dsa/microchip/lan937x_flower.h |   7 +
+ 5 files changed, 227 insertions(+), 48 deletions(-)
+
+diff --git a/drivers/net/dsa/microchip/ksz_common.h b/drivers/net/dsa/microchip/ksz_common.h
+index 55d411c42c0f..3f82bdbb6429 100644
+--- a/drivers/net/dsa/microchip/ksz_common.h
++++ b/drivers/net/dsa/microchip/ksz_common.h
+@@ -17,6 +17,8 @@
+ #include <net/dsa.h>
+ #include <linux/irq.h>
+ 
++#include "lan937x_acl.h"
++
+ enum ksz_ptp_tou_mode {
+        KSZ_PTP_TOU_IDLE,
+        KSZ_PTP_TOU_PPS
+@@ -105,6 +107,7 @@ struct ksz_port {
+ 	u8 num;
+ 
+ 	void * priv;
++	struct lan937x_acl_rng acl_rng;
+ 	char acl_dev_name[16];
+ 	char qci_dev_name[16];
+ #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_LAN937X_PTP)
+@@ -485,9 +488,15 @@ static inline int ksz_write64(struct ksz_device *dev, u32 reg, u64 value)
+ }
+ 
+ static inline int ksz_write8_bulk(struct ksz_device *dev, u32 reg, u8 *value,
+-                                  u8 n)
++				  u8 cnt)
++{
++	return regmap_bulk_write(dev->regmap[0], reg, value, cnt);
++}
++
++static inline int ksz_write16_bulk(struct ksz_device *dev, u32 reg, u16 *value,
++				   u16 cnt)
+ {
+-       return regmap_bulk_write(dev->regmap[0], reg, value, n);
++	return regmap_bulk_write(dev->regmap[1], reg, value, cnt);
+ }
+ 
+ static inline int ksz_pread8(struct ksz_device *dev, int port, int offset,
+@@ -529,9 +538,15 @@ static inline int ksz_pwrite32(struct ksz_device *dev, int port, int offset,
+ }
+ 
+ static inline int ksz_pwrite8_bulk(struct ksz_device *dev, int port, int offset,
+-				   u8 *data, u8 n)
++				   u8 *data, u8 cnt)
++{
++	return ksz_write8_bulk(dev, dev->dev_ops->get_port_addr(port, offset), data, cnt);
++}
++
++static inline int ksz_pwrite16_bulk(struct ksz_device *dev, int port, int offset,
++				    u16 *data, u16 cnt)
+ {
+-	return ksz_write8_bulk(dev, dev->dev_ops->get_port_addr(port, offset), data, n);
++	return ksz_write16_bulk(dev, dev->dev_ops->get_port_addr(port, offset), data, cnt);
+ }
+ 
+ static inline void ksz_prmw8(struct ksz_device *dev, int port, int offset,
+diff --git a/drivers/net/dsa/microchip/lan937x_acl.c b/drivers/net/dsa/microchip/lan937x_acl.c
+index ca6170c17eee..7ff5ded4daac 100644
+--- a/drivers/net/dsa/microchip/lan937x_acl.c
++++ b/drivers/net/dsa/microchip/lan937x_acl.c
+@@ -11,6 +11,9 @@
+ #include "lan937x_flower.h"
+ #include "lan937x_acl.h"
+ 
++#define ACL_MASK_UB GENMASK(15, 8)
++#define ACL_MASK_LB GENMASK(7, 0)
++
+ static const u8 parser_key_format[MAX_ACL_PARSER] = {
+ 	[PARSER_IDX_0] = PARSER_MULTI_KEY_FORMAT,
+ 	[PARSER_IDX_1] = PARSER_UNIVERSAL_FORMAT,
+@@ -71,18 +74,22 @@ static const struct lan937x_acl_rfr acl_rfrs_table[MAX_ACL_PARSER][MAX_RFR] = {
+ 			.rng_match_en = false,
+ 		},
+ 		[RFR_IDX_7] = {
+-			.dissectors_covered = (L4_SRC_PORT_DISSECTOR_PRESENT),
++			.dissectors_covered = (L4_SRC_PORT_DISSECTOR_PRESENT |
++					       L4_SRC_PORT_RNG_DISSECTOR_PRESENT),
+ 			.layer = l4,
+ 			.ofst = 0,
+ 			.len = 2,
+-			.rng_match_en = false,
++			.rng_ofst = 0,
++			.rng_match_en = true,
+ 		},
+ 		[RFR_IDX_8] = {
+-			.dissectors_covered = (L4_DST_PORT_DISSECTOR_PRESENT),
++			.dissectors_covered = (L4_DST_PORT_DISSECTOR_PRESENT |
++					       L4_DST_PORT_RNG_DISSECTOR_PRESENT),
+ 			.layer = l4,
+ 			.ofst = 2,
+ 			.len = 2,
+-			.rng_match_en = false,
++			.rng_ofst = 0,
++			.rng_match_en = true,
+ 		},
+ 		[RFR_IDX_9] = {
+ 			.dissectors_covered = 0,
+@@ -196,18 +203,22 @@ static const struct lan937x_acl_rfr acl_rfrs_table[MAX_ACL_PARSER][MAX_RFR] = {
+ 			.rng_match_en = false,
+ 		},
+ 		[RFR_IDX_8] = {
+-			.dissectors_covered = (L4_SRC_PORT_DISSECTOR_PRESENT),
++			.dissectors_covered = (L4_SRC_PORT_DISSECTOR_PRESENT |
++					       L4_SRC_PORT_RNG_DISSECTOR_PRESENT),
+ 			.layer = l4,
+ 			.ofst = 0 + sizeof(struct vlan_tag),
+ 			.len = 2,
+-			.rng_match_en = false,
++			.rng_ofst = 0,
++			.rng_match_en = true,
+ 		},
+ 		[RFR_IDX_9] = {
+-			.dissectors_covered = (L4_DST_PORT_DISSECTOR_PRESENT),
++			.dissectors_covered = (L4_DST_PORT_DISSECTOR_PRESENT |
++					       L4_DST_PORT_RNG_DISSECTOR_PRESENT),
+ 			.layer = l4,
+ 			.ofst = 2 + sizeof(struct vlan_tag),
+ 			.len = 2,
+-			.rng_match_en = false,
++			.rng_ofst = 0,
++			.rng_match_en = true,
+ 		},
+ 	},
+ 	[PARSER_IDX_3] = {
+@@ -313,6 +324,70 @@ static int lan937x_set_acl_access_ctl(struct ksz_device *dev,
+ 	return ret;
+ }
+ 
++static int lan937x_acl_range_reg_write(struct ksz_device *dev,
++				       u8 port, struct lan937x_acl_rng *acl_entry)
++{
++	struct lan937x_acl_access_ctl access_ctl;
++	int ret;
++
++	ret = lan937x_wait_tcam_busy(dev, port);
++	if (ret)
++		return ret;
++
++	/* Write ARUBR */
++	ret = ksz_pwrite16_bulk(dev, port, REG_ACL_PORT_ADR,
++				&acl_entry->rng_upper_bound[0], MAX_RNG_IDX);
++	if (ret)
++		return ret;
++
++	/* Write ARLBR */
++	ret = ksz_pwrite16_bulk(dev, port, (REG_ACL_PORT_ADR + 32),
++				&acl_entry->rng_lower_bound[0], MAX_RNG_IDX);
++	if (ret)
++		return ret;
++
++	/* Write ARBMR */
++	ret = ksz_pwrite32(dev, port, (REG_ACL_PORT_ADR + 64),
++			   acl_entry->rng_bound_mask);
++	if (ret)
++		return ret;
++
++	/* Clear data in access_ctl */
++	clr_data(access_ctl);
++
++	set_tcam_addr(access_ctl, TCAM_RC_ULM);
++	set_tcam_req(access_ctl, TCAM_REQ_TYPE_WRITE_RFR);
++
++	/* Write ACL register */
++	return lan937x_set_acl_access_ctl(dev, port, &access_ctl);
++}
++
++static int lan937x_acl_range_cmp_write(struct ksz_device *dev,
++				       u8 port, struct lan937x_acl_rng *acl_entry)
++{
++	struct lan937x_acl_access_ctl access_ctl;
++	int ret;
++
++	ret = lan937x_wait_tcam_busy(dev, port);
++	if (ret)
++		return ret;
++
++	/* Write ARCSR */
++	ret = ksz_pwrite16_bulk(dev, port, REG_ACL_PORT_ADR,
++				&acl_entry->rng_cmp[0], 40);
++	if (ret)
++		return ret;
++
++	/* Clear data in access_ctl */
++	clr_data(access_ctl);
++
++	set_tcam_addr(access_ctl, TCAM_RC_CMP);
++	set_tcam_req(access_ctl, TCAM_REQ_TYPE_WRITE_RFR);
++
++	/* Write ACL register */
++	return lan937x_set_acl_access_ctl(dev, port, &access_ctl);
++}
++
+ static int lan937x_acl_entry_write(struct ksz_device *dev,
+ 				   u8 port, u8 entry_idx,
+ 				   struct lan937x_acl_entry *acl_entry)
+@@ -451,6 +526,51 @@ static void lan937x_cpy_u8_to_entry(struct lan937x_val_mask_u8 *field,
+ 	acl_entry->acl_data[offset] |= (tdata);
+ }
+ 
++static void lan937x_cpy_rng_to_entry(struct ksz_device *dev,
++				     struct lan937x_val_port_rng *field,
++				     struct lan937x_acl_entry *acl_entry,
++				     u8 offset, u8 rfr_idx)
++{
++	struct ksz_port *port = dev->ports;
++	struct lan937x_acl_rng *acl_rng;
++	u16 cv_data;
++	u16 cv_mask;
++
++	acl_rng = &port->acl_rng;
++
++	/**
++	 * No need to process further if max value and
++	 * min value are both zero. Check is added to
++	 * avoid processing zero and write into valid
++	 * range, clearing existing item. For src port
++	 * request, dst port invokes this api with zero
++	 * range values.
++	 */
++	if (!field->max.value && !field->max.value)
++		return;
++
++	if (acl_rng->idx >= MAX_RNG_IDX) {
++		dev_err(dev->dev,
++			"Rule limit exceeded for range classification");
++		return;
++	}
++
++	cv_data = BIT(15 - acl_rng->idx);
++	cv_mask = ~cv_data;
++
++	acl_rng->rng_cmp[rfr_idx] |= BIT(15 - acl_rng->idx);
++
++	acl_rng->rng_upper_bound[acl_rng->idx] = field->max.value;
++	acl_rng->rng_lower_bound[acl_rng->idx] = field->min.value;
++
++	acl_entry->acl_mask[46] |= FIELD_GET(ACL_MASK_UB, cv_mask);
++	acl_entry->acl_mask[47] |= FIELD_GET(ACL_MASK_LB, cv_mask);
++	acl_entry->acl_data[46] |= FIELD_GET(ACL_MASK_UB, cv_data);
++	acl_entry->acl_data[47] |= FIELD_GET(ACL_MASK_LB, cv_data);
++
++	acl_rng->idx++;
++}
++
+ static void lan937x_cpy_u16_to_entry(struct lan937x_val_mask_u16 *field,
+ 				     struct lan937x_acl_entry *acl_entry,
+ 				     u8 offset)
+@@ -469,10 +589,10 @@ static void lan937x_cpy_u16_to_entry(struct lan937x_val_mask_u16 *field,
+ 	 */
+ 	tmask &= (~tdata);
+ 
+-	acl_entry->acl_mask[offset + 1] |= ((tmask & 0xFF00) >> 8);
+-	acl_entry->acl_mask[offset] |= (tmask & 0x00FF);
+-	acl_entry->acl_data[offset + 1] |= (tdata & 0xFF00) >> 8;
+-	acl_entry->acl_data[offset] |= (tdata & 0x00FF);
++	acl_entry->acl_mask[offset + 1] |= FIELD_GET(ACL_MASK_UB, tmask);
++	acl_entry->acl_mask[offset] |= FIELD_GET(ACL_MASK_LB, tmask);
++	acl_entry->acl_data[offset + 1] |= FIELD_GET(ACL_MASK_UB, tdata);
++	acl_entry->acl_data[offset] |= FIELD_GET(ACL_MASK_LB, tdata);
+ }
+ 
+ static int lan937x_acl_fill_entry(struct ksz_device *dev,
+@@ -637,6 +757,18 @@ static int lan937x_acl_fill_entry(struct ksz_device *dev,
+ 						 ofst);
+ 			break;
+ 		}
++		case acl_l4_src_port_rng_dissector: {
++			lan937x_cpy_rng_to_entry(dev, &key->src_rng,
++						 acl_entry, ofst,
++						 ((parser_idx * MAX_RFR) + i));
++			break;
++		}
++		case acl_l4_dst_port_rng_dissector: {
++			lan937x_cpy_rng_to_entry(dev, &key->dst_rng,
++						 acl_entry, ofst,
++						 ((parser_idx * MAX_RFR) + i));
++			break;
++		}
+ 		default:
+ 			break;
+ 		} /* switch ends */
+@@ -658,6 +790,7 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
+ 	u8 n_entries = resrc->type.tcam.n_entries;
+ 	u8 parser = resrc->type.tcam.parser;
+ 	struct lan937x_acl_entry *acl_entry;
++	struct ksz_port *prt = dev->ports;
+ 	int ret = EINVAL;
+ 	u8 *acl_action;
+ 	u8 i, j;
+@@ -732,6 +865,9 @@ int lan937x_acl_program_entry(struct ksz_device *dev, int port,
+ 		acl_entry[0].acl_data[0] |= (parser << 6);
+ 	}
+ 
++	lan937x_acl_range_reg_write(dev, port, &prt->acl_rng);
++	lan937x_acl_range_cmp_write(dev, port, &prt->acl_rng);
++
+ 	for (j = 0; j < n_entries; j++) {
+ 		ret = lan937x_acl_entry_write(dev, port,
+ 					      resrc->type.tcam.index + j,
+diff --git a/drivers/net/dsa/microchip/lan937x_acl.h b/drivers/net/dsa/microchip/lan937x_acl.h
+index bd32ac2b180a..1456de27c875 100644
+--- a/drivers/net/dsa/microchip/lan937x_acl.h
++++ b/drivers/net/dsa/microchip/lan937x_acl.h
+@@ -245,9 +245,8 @@
+ #define MAX_RFR_PER_PARSER		10
+ #define MAX_RFR				MAX_RFR_PER_PARSER
+ #define MAX_ACL_PARSER		4
+-#define MAX_RNG_CMP_PER_PARSER		10
+-#define MAX_RNG_LB			16
+-#define MAX_RNG_UB			16
++#define MAX_RNG_CMP_IDX			40
++#define MAX_RNG_IDX			16
+ 
+ #define PARSER_IDX_0			0
+ #define PARSER_IDX_1			1
+@@ -291,27 +290,31 @@ enum lan937x_acl_dissector_type {
+ 	acl_ipv6_dst_ip_dissector,
+ 	acl_l4_src_port_dissector,
+ 	acl_l4_dst_port_dissector,
++	acl_l4_src_port_rng_dissector,
++	acl_l4_dst_port_rng_dissector,
+ 
+ 	acl_num_dissectors_supported,
+ };
+ 
+-#define DST_MAC_DISSECTOR_PRESENT	BIT(acl_dst_mac_dissector)
+-#define SRC_MAC_DISSECTOR_PRESENT	BIT(acl_src_mac_dissector)
+-#define VLAN_ID_DISSECTOR_PRESENT	BIT(acl_vlan_id_dissector)
+-#define VLAN_PCP_DISSECTOR_PRESENT	BIT(acl_vlan_pcp_dissector)
+-#define ETHTYPE_DISSECTOR_PRESENT	BIT(acl_ethtype_dissector)
+-#define IPV4_TOS_DISSECTOR_PRESENT	BIT(acl_ipv4_tos_dissector)
+-#define IPV4_TTL_DISSECTOR_PRESENT	BIT(acl_ipv4_ttl_dissector)
+-#define IPV4_PROTO_DISSECTOR_PRESENT	BIT(acl_ipv4_protocol_dissector)
+-#define IPV4_SRC_IP_DISSECTOR_PRESENT	BIT(acl_ipv4_src_ip_dissector)
+-#define IPV4_DST_IP_DISSECTOR_PRESENT	BIT(acl_ipv4_dst_ip_dissector)
+-#define IPV6_TC_DISSECTOR_PRESENT	BIT(acl_ipv6_tc_dissector)
+-#define IPV6_HOP_DISSECTOR_PRESENT	BIT(acl_ipv6_hop_dissector)
+-#define IPV6_NXTHDR_DISSECTOR_PRESENT	BIT(acl_ipv6_nxt_hdr_dissector)
+-#define IPV6_SRC_IP_DISSECTOR_PRESENT	BIT(acl_ipv6_src_ip_dissector)
+-#define IPV6_DST_IP_DISSECTOR_PRESENT	BIT(acl_ipv6_dst_ip_dissector)
+-#define L4_SRC_PORT_DISSECTOR_PRESENT	BIT(acl_l4_src_port_dissector)
+-#define L4_DST_PORT_DISSECTOR_PRESENT	BIT(acl_l4_dst_port_dissector)
++#define DST_MAC_DISSECTOR_PRESENT		BIT(acl_dst_mac_dissector)
++#define SRC_MAC_DISSECTOR_PRESENT		BIT(acl_src_mac_dissector)
++#define VLAN_ID_DISSECTOR_PRESENT		BIT(acl_vlan_id_dissector)
++#define VLAN_PCP_DISSECTOR_PRESENT		BIT(acl_vlan_pcp_dissector)
++#define ETHTYPE_DISSECTOR_PRESENT		BIT(acl_ethtype_dissector)
++#define IPV4_TOS_DISSECTOR_PRESENT		BIT(acl_ipv4_tos_dissector)
++#define IPV4_TTL_DISSECTOR_PRESENT		BIT(acl_ipv4_ttl_dissector)
++#define IPV4_PROTO_DISSECTOR_PRESENT		BIT(acl_ipv4_protocol_dissector)
++#define IPV4_SRC_IP_DISSECTOR_PRESENT		BIT(acl_ipv4_src_ip_dissector)
++#define IPV4_DST_IP_DISSECTOR_PRESENT		BIT(acl_ipv4_dst_ip_dissector)
++#define IPV6_TC_DISSECTOR_PRESENT		BIT(acl_ipv6_tc_dissector)
++#define IPV6_HOP_DISSECTOR_PRESENT		BIT(acl_ipv6_hop_dissector)
++#define IPV6_NXTHDR_DISSECTOR_PRESENT		BIT(acl_ipv6_nxt_hdr_dissector)
++#define IPV6_SRC_IP_DISSECTOR_PRESENT		BIT(acl_ipv6_src_ip_dissector)
++#define IPV6_DST_IP_DISSECTOR_PRESENT		BIT(acl_ipv6_dst_ip_dissector)
++#define L4_SRC_PORT_DISSECTOR_PRESENT		BIT(acl_l4_src_port_dissector)
++#define L4_DST_PORT_DISSECTOR_PRESENT		BIT(acl_l4_dst_port_dissector)
++#define L4_SRC_PORT_RNG_DISSECTOR_PRESENT	BIT(acl_l4_src_port_rng_dissector)
++#define L4_DST_PORT_RNG_DISSECTOR_PRESENT	BIT(acl_l4_dst_port_rng_dissector)
+ 
+ #define VLAN_TAG_DISSECTORS_PRESENT	(VLAN_ID_DISSECTOR_PRESENT | \
+ 					VLAN_PCP_DISSECTOR_PRESENT)
+@@ -346,7 +349,15 @@ struct lan937x_acl_entry {
+ 	u8 acl_action[MAX_ACL_ACTION_SIZE];
+ };
+ 
+-/* Defines to help filling the action RAM contents */
++struct lan937x_acl_rng {
++	u16 rng_upper_bound[MAX_RNG_IDX];
++	u16 rng_lower_bound[MAX_RNG_IDX];
++	u16 rng_cmp[MAX_RNG_CMP_IDX];
++	u32 rng_bound_mask;
++	u8 idx;
++};
++
++/* DEFINES to help filling the action RAM contents */
+ static inline void set_que_en(u8 *act)
+ {
+ 	act[2] |= (0x03 >> TCAM_AAR_QUE_EN_POS);
+@@ -421,16 +432,6 @@ struct lan937x_rfr_reg_type {
+ 	};
+ };
+ 
+-struct lan937x_acl_range_cfg {
+-	u16 rng_upper_bound[MAX_RNG_UB];
+-	u16 rng_lower_bound[MAX_RNG_LB];
+-	u32 rng_bound_msk;
+-};
+-
+-struct lan937x_acl_range_comparator {
+-	u16 rng_cmp[MAX_ACL_PARSER][MAX_RNG_CMP_PER_PARSER];
+-};
+-
+ struct lan937x_acl_kivr {
+ 	u8 kivr[MAX_PARSER_PER_ENTRY][MAX_KIVR_SIZE];
+ };
+diff --git a/drivers/net/dsa/microchip/lan937x_flower.c b/drivers/net/dsa/microchip/lan937x_flower.c
+index c616d22d1985..18898c584a3d 100644
+--- a/drivers/net/dsa/microchip/lan937x_flower.c
++++ b/drivers/net/dsa/microchip/lan937x_flower.c
+@@ -138,7 +138,8 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
+ 	      BIT(FLOW_DISSECTOR_KEY_IPV4_ADDRS) |
+ 	      BIT(FLOW_DISSECTOR_KEY_IPV6_ADDRS) |
+ 	      BIT(FLOW_DISSECTOR_KEY_IP) |
+-	      BIT(FLOW_DISSECTOR_KEY_PORTS))) {
++	      BIT(FLOW_DISSECTOR_KEY_PORTS) |
++	      BIT(FLOW_DISSECTOR_KEY_PORTS_RANGE))) {
+ 		NL_SET_ERR_MSG_MOD(extack, "Unsupported keys used");
+ 		return -EOPNOTSUPP;
+ 	}
+@@ -298,6 +299,25 @@ static int lan937x_flower_parse_key(struct netlink_ext_ack *extack,
+ 					   L4_DST_PORT_DISSECTOR_PRESENT);
+ 	}
+ 
++	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_PORTS_RANGE)) {
++		struct flow_match_ports_range match;
++
++		flow_rule_match_ports_range(rule, &match);
++
++		key->src_rng.min.value = ntohs(match.key->tp_min.src);
++		key->src_rng.max.value = ntohs(match.key->tp_max.src);
++		key->dst_rng.min.value = ntohs(match.key->tp_min.dst);
++		key->dst_rng.max.value = ntohs(match.key->tp_max.dst);
++
++		key->src_rng.min.mask = ntohs(match.mask->tp_min.src);
++		key->src_rng.max.mask = ntohs(match.mask->tp_max.src);
++		key->dst_rng.min.mask = ntohs(match.mask->tp_min.dst);
++		key->dst_rng.max.mask = ntohs(match.mask->tp_max.dst);
++
++		key->acl_dissector_map |= (L4_SRC_PORT_RNG_DISSECTOR_PRESENT |
++					   L4_DST_PORT_RNG_DISSECTOR_PRESENT);
++	}
++
+ 	if (key->acl_dissector_map == DST_MAC_DISSECTOR_PRESENT &&
+ 	    is_bcast_dmac) {
+ 		filter->type = LAN937x_BCAST_FILTER;
+diff --git a/drivers/net/dsa/microchip/lan937x_flower.h b/drivers/net/dsa/microchip/lan937x_flower.h
+index 0dc4f4073855..0647dd4c5bdb 100644
+--- a/drivers/net/dsa/microchip/lan937x_flower.h
++++ b/drivers/net/dsa/microchip/lan937x_flower.h
+@@ -104,6 +104,11 @@ struct	lan937x_ipv6 {
+ 	struct lan937x_val_mask_u8 next_hdr;
+ };
+ 
++struct lan937x_val_port_rng {
++	struct lan937x_val_mask_u16 min;
++	struct lan937x_val_mask_u16 max;
++};
++
+ struct lan937x_key {
+ 	/*Bits follow lan937x_dissector_id order.*/
+ 	u32 acl_dissector_map;
+@@ -120,6 +125,8 @@ struct lan937x_key {
+ 		};
+ 		struct lan937x_val_mask_u16 src_port;
+ 		struct lan937x_val_mask_u16 dst_port;
++		struct lan937x_val_port_rng src_rng;
++		struct lan937x_val_port_rng dst_rng;
+ 	};
+ };
+ 
+-- 
+2.34.1
+
