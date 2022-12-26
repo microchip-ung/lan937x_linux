@@ -1,4 +1,4 @@
-bootargs=console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,768k(uboot)ro,256k(env_redundant),256k(env),6656k(itb)ro,-(rootfs) root=/dev/mmcblk0p2 rw rootwait rootfstype=ext4 phymode=0x1E
+bootargs=console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,768k(uboot)ro,256k(env_redundant),256k(env),6656k(itb)ro,-(rootfs) root=/dev/mmcblk0p2 rw rootwait rootfstype=ext4 phymode=0x3FFF
 bootcmd=run bootcmd_boot;
 bootcmd_boot=fatload mmc 0:1 0x21000000 sama5d3_eds.itb; run boot_chip;
 boot_chip=bootm 0x21000000#kernel_dtb#lan9370
