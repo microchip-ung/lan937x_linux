@@ -1,8 +1,7 @@
-From bc8dc6e991ed431704c237fa30bba0ae17823fa3 Mon Sep 17 00:00:00 2001
+From a596ebfa44369c490569c7d13495d0730686b869 Mon Sep 17 00:00:00 2001
 From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 Date: Fri, 30 Sep 2022 12:22:19 +0530
-Subject: [PATCH 14/15] [bug-fix] cascade mode not receiving packets from
- switch 1 to cpu
+Subject: [PATCH 14/20] cascade mode not receiving packets from switch 1 to cpu
 
 dev->dsa_port in port_setup was not ready by-the time of cpu port
 membership assignment. check for dsa port is not possible in port_setup

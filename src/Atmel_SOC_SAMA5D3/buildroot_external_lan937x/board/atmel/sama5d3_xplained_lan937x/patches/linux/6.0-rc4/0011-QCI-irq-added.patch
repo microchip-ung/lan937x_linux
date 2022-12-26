@@ -1,7 +1,7 @@
-From fd4e75443980a286358d4475d0de9b29a9198106 Mon Sep 17 00:00:00 2001
+From 45cbe3dcb84bb838e24a8b63fa91b817d6edb135 Mon Sep 17 00:00:00 2001
 From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 Date: Mon, 26 Sep 2022 17:15:14 +0530
-Subject: [PATCH 11/15] QCI irq added
+Subject: [PATCH 11/20] QCI irq added
 
 added qci irq based on latest trafford implementation.
 

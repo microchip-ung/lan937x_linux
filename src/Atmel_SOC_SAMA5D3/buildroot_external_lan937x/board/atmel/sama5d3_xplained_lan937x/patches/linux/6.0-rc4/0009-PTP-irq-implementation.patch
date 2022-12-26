@@ -1,7 +1,7 @@
-From f0dfb03346297dd8099cf0a8fca21c8bba87ed9e Mon Sep 17 00:00:00 2001
+From f4064330d1a97a8e214f51d6de89877d01394914 Mon Sep 17 00:00:00 2001
 From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 Date: Mon, 26 Sep 2022 15:25:18 +0530
-Subject: [PATCH 09/15] PTP irq implementation
+Subject: [PATCH 09/20] PTP irq implementation
 
 irq added for PTP based new Trafford implementation.
 

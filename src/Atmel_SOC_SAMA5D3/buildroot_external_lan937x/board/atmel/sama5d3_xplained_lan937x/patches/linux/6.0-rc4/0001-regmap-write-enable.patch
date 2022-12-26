@@ -1,7 +1,7 @@
-From 805ea9adf73eee4228d624533714002448b87af9 Mon Sep 17 00:00:00 2001
+From 16c2a8a29db72a5674b497df473ef22fb1ae1e1f Mon Sep 17 00:00:00 2001
 From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 Date: Sat, 17 Sep 2022 10:55:00 +0530
-Subject: [PATCH 01/15] regmap write enable
+Subject: [PATCH 01/20] regmap write enable
 
 enabled write in debugfs regmap
 

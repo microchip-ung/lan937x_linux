@@ -1,7 +1,7 @@
-From d7c6062cfef0091d4145d0ffc367ff869322f4ca Mon Sep 17 00:00:00 2001
+From 16f3961c5cd74737b0d45253a6437d0af4c24a08 Mon Sep 17 00:00:00 2001
 From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 Date: Thu, 6 Oct 2022 15:18:34 +0530
-Subject: [PATCH 15/15] [bug-fix] tc-policing returns invalid arguments
+Subject: [PATCH 15/20] tc-policing returns invalid arguments
 
 Return variable in lan937x_cfg_strm_policer_hw is left un-initialised, hence
 it returns always invalid status. Change injected with latest ksz upgrade,

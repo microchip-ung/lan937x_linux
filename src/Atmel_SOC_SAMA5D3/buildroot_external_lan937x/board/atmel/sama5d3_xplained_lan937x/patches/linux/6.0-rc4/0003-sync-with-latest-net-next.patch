@@ -1,7 +1,7 @@
-From 357f27b8219acd29a608303e98b815c532ad3c1d Mon Sep 17 00:00:00 2001
+From 90e870245bed1121813f1d425ea10b82cb893a65 Mon Sep 17 00:00:00 2001
 From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 Date: Wed, 21 Sep 2022 10:07:08 +0530
-Subject: [PATCH 03/15] sync with latest net-next
+Subject: [PATCH 03/20] sync with latest net-next
 
 copied drivers/net/dsa/microchip and drivers/net/phy/microchip_t1.c into
 current driver.

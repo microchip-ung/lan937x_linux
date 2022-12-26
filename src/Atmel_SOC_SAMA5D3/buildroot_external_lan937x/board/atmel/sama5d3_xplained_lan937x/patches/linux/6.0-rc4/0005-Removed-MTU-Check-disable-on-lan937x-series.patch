@@ -1,7 +1,7 @@
-From 9024bb82c137814f4701a9ebda625ffe2897ca84 Mon Sep 17 00:00:00 2001
+From 21d05a3aeb94fb64da453be47d0c66ee39104985 Mon Sep 17 00:00:00 2001
 From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 Date: Sat, 17 Sep 2022 23:58:55 +0530
-Subject: [PATCH 05/15] Removed MTU Check disable on lan937x series.
+Subject: [PATCH 05/20] Removed MTU Check disable on lan937x series.
 
 MTU Check bit enbled on lan937x by default. Feature previously
 disabled for resolving ptp issue. Packets will not be dropped
