@@ -1,7 +1,7 @@
-From c8332346f488c6434a0a63705a516da6e01587dd Mon Sep 17 00:00:00 2001
+From e2251364a3a4244db06fffc97fcce3ff1aee6ad8 Mon Sep 17 00:00:00 2001
 From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 Date: Sat, 17 Sep 2022 11:00:05 +0530
-Subject: [PATCH 02/15] macb update for mtu
+Subject: [PATCH 02/20] macb update for mtu
 
 mtu fix on lan9374 done.
 

@@ -1,7 +1,7 @@
-From dcf0fb39771becf91314518da1ec2f9d676437be Mon Sep 17 00:00:00 2001
+From ceaa5453096b87fe6d9e080adfd96edac6cc0c54 Mon Sep 17 00:00:00 2001
 From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 Date: Wed, 28 Sep 2022 17:03:49 +0530
-Subject: [PATCH 12/15] IRQ name updated
+Subject: [PATCH 12/20] IRQ name updated
 
 IRQ name updated to include device index for cascading.
 

@@ -1,7 +1,7 @@
-From b25a5c42b4f8d530776c02c50b9317f5ab2043d7 Mon Sep 17 00:00:00 2001
+From c8980b89450c2f99c7911c71022fcdb5a45a80e4 Mon Sep 17 00:00:00 2001
 From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 Date: Wed, 21 Sep 2022 12:43:39 +0530
-Subject: [PATCH 04/15] dsa integration with latest code
+Subject: [PATCH 04/20] dsa integration with latest code
 
 Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 ---

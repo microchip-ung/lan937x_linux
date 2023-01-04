@@ -1,7 +1,7 @@
-From ae6d5bef8d09b15fa5801fb0bf77742c313e5959 Mon Sep 17 00:00:00 2001
+From 27fdf5674d6aea007d73534a85a140c037828cb2 Mon Sep 17 00:00:00 2001
 From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 Date: Fri, 23 Sep 2022 16:30:49 +0530
-Subject: [PATCH 08/15] led interface added for link status
+Subject: [PATCH 08/20] led interface added for link status
 
 link status detection enabled using led-t1-sel parameter
 

@@ -1,7 +1,7 @@
-From 978180428da0cd7f97b4ece0e988c4e4efaa8695 Mon Sep 17 00:00:00 2001
+From 7711c3dd7b704c8fd064abd3a507a4bbe87794d4 Mon Sep 17 00:00:00 2001
 From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 Date: Fri, 23 Sep 2022 12:30:38 +0530
-Subject: [PATCH 07/15] PHY simulation
+Subject: [PATCH 07/20] PHY simulation
 
 PHY simulation added for lan9374 external phy link detection
 

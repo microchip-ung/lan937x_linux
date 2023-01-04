@@ -1,7 +1,7 @@
-From 79e7a8ec46585a4ee2971068274bb57199a8e1ae Mon Sep 17 00:00:00 2001
+From 4c9f208632fc7a79401c03d2879d824f6acebed5 Mon Sep 17 00:00:00 2001
 From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 Date: Fri, 23 Sep 2022 09:42:16 +0530
-Subject: [PATCH 06/15] LAN9373 Dual-t cascade
+Subject: [PATCH 06/20] LAN9373 Dual-t cascade
 
 Integrated source files required for lan9373 dual-t cascade mode.
 

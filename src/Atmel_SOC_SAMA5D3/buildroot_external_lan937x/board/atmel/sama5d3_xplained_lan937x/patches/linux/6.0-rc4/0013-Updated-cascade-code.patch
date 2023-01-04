@@ -1,7 +1,7 @@
-From b81cf174874f16ff5ef179695fc64d3f0638fdb5 Mon Sep 17 00:00:00 2001
+From faa042ccb7597b1ed272716c9812d91ae3f25d85 Mon Sep 17 00:00:00 2001
 From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 Date: Thu, 29 Sep 2022 16:49:26 +0530
-Subject: [PATCH 13/15] Updated cascade code
+Subject: [PATCH 13/20] Updated cascade code
 
 Added port membership for cascading.
 

@@ -1,7 +1,7 @@
-From 4ff83263bdb8ae13512e9444513773557c8cd41c Mon Sep 17 00:00:00 2001
+From 5c9ba06244f010945d0602176ab85b7343e4cb2a Mon Sep 17 00:00:00 2001
 From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
 Date: Mon, 26 Sep 2022 16:21:10 +0530
-Subject: [PATCH 10/15] ACL irq implementation
+Subject: [PATCH 10/20] ACL irq implementation
 
 Added acl irq based on updated trafford implementation.
 

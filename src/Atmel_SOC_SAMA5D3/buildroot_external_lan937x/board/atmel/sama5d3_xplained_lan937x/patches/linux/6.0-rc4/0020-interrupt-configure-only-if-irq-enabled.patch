@@ -1,0 +1,47 @@
+From 255565e86d41a3238f493336a4704b1e205af6d9 Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Wed, 21 Dec 2022 20:35:38 +0530
+Subject: [PATCH 20/20] interrupt configure only if irq enabled
+
+mdio register updated to have irq configuration only if interrupts
+defined in device tree. This is change is added to avoid reporting
+error on PHY init if the device tree is configured for POLLING mode.
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/dsa/microchip/lan937x_main.c | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/net/dsa/microchip/lan937x_main.c b/drivers/net/dsa/microchip/lan937x_main.c
+index 705cb4105b39..21a3c86a57ae 100644
+--- a/drivers/net/dsa/microchip/lan937x_main.c
++++ b/drivers/net/dsa/microchip/lan937x_main.c
+@@ -509,17 +509,20 @@ static int lan937x_mdio_register(struct ksz_device *dev)
+ 
+ 	ds->slave_mii_bus = bus;
+ 
+-	ret = lan937x_irq_phy_setup(dev);
+-	if (ret) {
+-		of_node_put(mdio_np);
+-		return ret;
++	if (dev->irq > 0) {
++		ret = lan937x_irq_phy_setup(dev);
++		if (ret) {
++			of_node_put(mdio_np);
++			return ret;
++		}
+ 	}
+ 
+ 	ret = devm_of_mdiobus_register(ds->dev, bus, mdio_np);
+ 	if (ret) {
+ 		dev_err(ds->dev, "unable to register MDIO bus %s\n",
+ 			bus->id);
+-		lan937x_irq_phy_free(dev);
++		if (dev->irq > 0)
++			lan937x_irq_phy_free(dev);
+ 	}
+ 
+ 	of_node_put(mdio_np);
+-- 
+2.34.1
+

@@ -1,0 +1,36 @@
+From 6d6091629212fb71b8db4a6906baf4e3d4664a7a Mon Sep 17 00:00:00 2001
+From: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+Date: Thu, 8 Dec 2022 12:36:06 +0530
+Subject: [PATCH 18/20] alu table correction for fdb delete
+
+Wrong alu table parsed for port mapping inside fdb delete API. This issue
+was resolved in earler code base with TL-8, but injected again with ksz
+restructuring.
+
+Fix Traffod Jira: TL-126
+
+Signed-off-by: Rakesh Sankaranarayanan <rakesh.sankaranarayanan@microchip.com>
+---
+ drivers/net/dsa/microchip/ksz9477.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/dsa/microchip/ksz9477.c b/drivers/net/dsa/microchip/ksz9477.c
+index 471014b9a5e9..10dae86dc152 100644
+--- a/drivers/net/dsa/microchip/ksz9477.c
++++ b/drivers/net/dsa/microchip/ksz9477.c
+@@ -548,10 +548,10 @@ int ksz9477_fdb_del(struct ksz_device *dev, int port,
+ 		ksz_read32(dev, REG_SW_ALU_VAL_D, &alu_table[3]);
+ 
+ 		/* clear forwarding port */
+-		alu_table[2] &= ~BIT(port);
++		alu_table[1] &= ~BIT(port);
+ 
+ 		/* if there is no port to forward, clear table */
+-		if ((alu_table[2] & ALU_V_PORT_MAP) == 0) {
++		if ((alu_table[1] & ALU_V_PORT_MAP) == 0) {
+ 			alu_table[0] = 0;
+ 			alu_table[1] = 0;
+ 			alu_table[2] = 0;
+-- 
+2.34.1
+
